@@ -95,11 +95,26 @@ OS Y", not "starts".
 
 ## Adapters (what each one has to know)
 
-| Agent | Context knobs | Known login leaks | Containment | Probe |
+First four, in this order: Claude Code, Codex, Pi, Copilot CLI. All four were sealed and run
+end to end on 2026-10-04 (WSL2); the notes below are measured unless marked otherwise.
+
+| Agent | Context knobs | Login-carried leaks | Tools off | Context visible to a probe |
 |---|---|---|---|---|
-| Claude Code | `CLAUDE_CONFIG_DIR`, `HOME`, `--strict-mcp-config`, `--setting-sources project,local` | connectors, account skills, email | bwrap (works), Seatbelt (untested) | fake-model blank via `ANTHROPIC_BASE_URL` (to test) |
-| Codex | `CODEX_HOME`, `HOME`, disabled account plugins | `~/.agents/skills` outside `CODEX_HOME` | bwrap, Seatbelt | base URL of a custom provider (to test) |
-| Gemini CLI, Antigravity, Pi | to be mapped | to be mapped | bwrap, Seatbelt | to be mapped |
+| Claude Code | `CLAUDE_CONFIG_DIR`, `HOME`, `--strict-mcp-config`, `--setting-sources project,local` | connectors, account skills, email | `--tools ""` | stream-json `system/init` lists tools, MCP servers, skills |
+| Codex | `CODEX_HOME`, `HOME` (copy only `auth.json`), `--disable remote_plugin` | `~/.agents/skills` outside `CODEX_HOME`, account plugins | `-s read-only`, `-c web_search="disabled"` | `--json` events (messages, web searches, usage) |
+| Pi | `PI_CODING_AGENT_DIR`, `HOME` (copy `auth.json`, `models.json`, a minimal `settings.json`), `--no-extensions --no-skills --no-context-files --no-session` | extensions and packages listed in `settings.json` | `--no-tools` | `--mode json` includes the system prompt, sectioned: a free context probe |
+| Copilot CLI | `HOME` with a `.copilot/config.json` holding only the login keys, `--no-custom-instructions --disable-builtin-mcps --no-remote` | the real config also carries installed plugins and trusted folders | `--available-tools <a name that is no tool>` | `--output-format json` events |
+
+Traps found while sealing them:
+
+- **Copilot:** an empty `--available-tools` is ignored without a warning; the model kept every
+  tool and used `bash` and `curl`. An allowlist naming no real tool works. Checked with a
+  command that must fail to write a file, because the model's own list of its tools was wrong.
+- **Pi:** with stdin left open it waits for piped input and never answers. Close stdin.
+- **Claude Code:** relocating the config is not enough (connectors and account skills come
+  with the login, see layer 1).
+- **Long prompts:** Linux caps a single argument near 128 KiB; Pi takes `@file`, Copilot takes
+  piped stdin.
 
 ## Prior art (checked 2026-10-04)
 
