@@ -259,7 +259,13 @@ Tare is meant to sit underneath such frameworks: their exam, Tare's clean room.
       directories are their own class now. Claude Code's print mode, which the probe uses, did
       not load `~/AGENTS.md`; Pi loaded it. So the probe vouches for print mode only. A room
       has no parent directories, so the class cannot leak into one.
-11. Gemini CLI (epic #34).
+11. Gemini CLI (epic #34), paused until the machine's Google login is renewed.
+12. ~~Calibrate before you search~~. Done 2026-10-05 (epic #52).
+    - `tare calibrate` gives fresh-start pass rates per side.
+    - Cliff samples the baseline until a model gap is clear (upper bound below 0.2).
+    - Swap reports a tie as a tie.
+    - **Measured** on the migration task: Haiku passed 0/4 and Codex with gpt-6.1-sol passed
+      4/4. Across all runs so far, Haiku passed about 1 in 14.
 
 ## Name
 

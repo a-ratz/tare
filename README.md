@@ -177,6 +177,19 @@ Cliff works with Claude Code, Codex and Pi (`tare cliff pi ...`). All three resu
 sessions natively; an agent that cannot is continued by handoff. Each tail is a real agent
 run, so a search costs what its tails cost.
 
+### Calibrate first
+
+```bash
+tare calibrate "fix the failing test" --check "uv run pytest -q" \
+  --side "claude --model haiku" --side "codex -m gpt-6.1-sol" --runs 10
+```
+
+Before Cliff or Swap spend tails on a task, calibrate tells you how often each side passes
+it from a fresh start, with intervals. Cliff and Swap need a task where the original fails but
+a fresh start sometimes passes, or where one side mostly fails and the other mostly passes.
+Cliff now declares a model gap only when the baseline's upper bound is below `--gap-below`
+(default 0.2), so 0 of 3 is no longer read as "never".
+
 ### Watch it live, repeat it exactly
 
 `tare cliff` and `tare swap` start a live dashboard and print its URL
