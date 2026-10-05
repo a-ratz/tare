@@ -172,8 +172,9 @@ scripted model whose cliff is known: step 4 writes the wrong answer into a note.
   tails     18 of a budget of 30
 ```
 
-Cliff works with Claude Code for now. Each tail is a real agent run, so a search costs what
-its tails cost.
+Cliff works with Claude Code and Codex (`tare cliff codex ...`). Both resume their own
+sessions natively; an agent that cannot is continued by handoff. Each tail is a real agent
+run, so a search costs what its tails cost.
 
 ### Swap: the room or the model
 
@@ -187,7 +188,7 @@ neutral account of the steps so far, rendered the same way for every agent. The 
 effect* says how much better the tails do in room a than in room b. The *model effect* says
 how much better agent a does than agent b. At cut 0 both rooms are your untouched project,
 so the state effect there must be zero: that is the null check. Where an agent can resume its
-own session (Claude Code), a native cell prices what the handoff itself costs.
+own session (Claude Code and Codex), a native cell prices what the handoff itself costs.
 
 This report comes from the real machinery against two scripted models whose truth is
 known: a is competent but trusts a note in the workspace, b is weak, and run b poisoned
@@ -226,8 +227,12 @@ looks for your files and inherited secrets.
 
 ## Roadmap
 
-No epic is open. Ideas, not yet planned: Cliff for Codex (by handoff), adapters for Gemini
-CLI and Pi (the trail keeps each one small), and a room for macOS.
+Next: [Pi][epic-pi] and [Gemini CLI][epic-gemini], each with its own dirty-twin measurement,
+room and probe. The trail keeps their Cliff and Swap part small. A room for macOS is an idea,
+not yet planned.
+
+[epic-pi]: https://github.com/AndreRatzenberger/tare/issues/30
+[epic-gemini]: https://github.com/AndreRatzenberger/tare/issues/34
 
 ## Contributing
 
