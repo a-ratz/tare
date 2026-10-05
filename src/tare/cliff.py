@@ -45,7 +45,7 @@ class Search:
         return wilson(sum(self.results[step]), len(self.results[step]))
 
 
-def search(probe, last: int, tails: int, budget: int) -> Search:
+def search(probe, last: int, tails: int, budget: int, gap_below: float = 0.2) -> Search:
     """probe(step, n) runs n tails from a capsule and returns whether each passed."""
     s = Search()
 
@@ -59,8 +59,16 @@ def search(probe, last: int, tails: int, budget: int) -> Search:
         return True
 
     run(0, tails)
+    # 0/3 still allows a rate of 0.56: sample the baseline until a gap is clear, or it passes once
+    while s.rate(0) == 0 and s.interval(0)[1] >= gap_below and run(0, tails):
+        pass
     if s.rate(0) == 0:
-        s.verdict = "A fresh start fails too: a model gap, not a moment. There is no cliff to find."
+        n, hi = len(s.results[0]), s.interval(0)[1]
+        clear = hi < gap_below
+        s.verdict = (f"A fresh start fails too ({n} of {n}, so at most {hi:.2f}): a model gap, not a moment. "
+                     "There is no cliff to find." if clear else
+                     f"No fresh start passed in {n} tails (at most {hi:.2f}); the budget ran out before a model gap "
+                     "was clear.")
         return s
     run(last, tails)
     unlucky = ("Resumed at the last step, the run still passes about as often as a fresh start: "
@@ -99,7 +107,7 @@ def search(probe, last: int, tails: int, budget: int) -> Search:
 
 def cliff(agent, real, project: Path, prompt: str, check: str, out: Path, *, tails: int = 3, budget: int = 30,
           jobs: int = 3, claude_args: list[str] | None = None, env: dict[str, str] | None = None,
-          journal: Journal | None = None) -> str:
+          journal: Journal | None = None, gap_below: float = 0.2) -> str:
     """The whole move: original run, capsules, baseline, search, report. Returns the report."""
     claude_args = claude_args or []
     journal = journal or Journal(None)
@@ -140,7 +148,7 @@ def cliff(agent, real, project: Path, prompt: str, check: str, out: Path, *, tai
         with ThreadPoolExecutor(max_workers=jobs) as pool:
             return [t.passed for t in pool.map(lambda i: tail(step, i), range(start, start + n))]
 
-    s = search(probe, len(steps) - 1, tails, budget)
+    s = search(probe, len(steps) - 1, tails, budget, gap_below)
     return _write(out, header + report(s, steps, budget), journal)
 
 
