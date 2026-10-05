@@ -116,10 +116,10 @@ def cliff(agent, real, project: Path, prompt: str, check: str, out: Path, *, tai
             sides={"a": {"agent": agent.name, "args": claude_args, "dir": "."}})
     journal("phase", phase="original run")
     caps.record(agent, real, project, out, prompt, claude_args, env)
-    passed, detail = caps.run_check(check, out / "original" / "work")
+    passed, detail, spent = caps.check_original(agent, out, check)
     header = [f"tare cliff · {agent.name} · {project}", f"  task      {prompt}", f"  check     {check}"]
     steps = caps.capsules(out, agent)
-    journal("original", side="a", passed=passed, detail=detail, steps=[s.tool for s in steps])
+    journal("original", side="a", passed=passed, detail=detail, steps=[s.tool for s in steps], **spent)
     if passed:
         return _write(out, header + [f"  original  passed ({detail}): there is no cliff to find"], journal)
     header.append(f"  original  failed ({detail}) after {len(steps) - 1} steps")
@@ -140,7 +140,8 @@ def cliff(agent, real, project: Path, prompt: str, check: str, out: Path, *, tai
         else:
             result = caps.run_handoff(agent, real, out / "tails" / name, steps[step], events, prompt,
                                       claude_args, check, env)
-        journal("tail", id=name, status="passed" if result.passed else "failed", detail=result.detail)
+        journal("tail", id=name, status="passed" if result.passed else "failed", detail=result.detail,
+                usage=result.usage, check_usage=result.check_usage)
         return result
 
     def probe(step: int, n: int) -> list[bool]:

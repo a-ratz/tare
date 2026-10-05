@@ -31,3 +31,12 @@ def test_noise_flags_a_threshold_inside_a_pages_range_of_scores(monkeypatch, tmp
 def test_check_detail_carries_the_checks_last_line(tmp_path):
     passed, detail = caps.run_check("echo 'score 72 (threshold 60): fine'", tmp_path)
     assert passed and detail == "check exit 0: score 72 (threshold 60): fine"
+
+
+def test_a_check_gets_a_usage_log_and_its_lines_are_summed(tmp_path):
+    from tare import capsule as caps
+    line = '{"input": 100, "cached": 40, "output": 7, "cost_usd": 0.01}'
+    passed, _ = caps.run_check(f"echo '{line}' >> \"$TARE_USAGE_LOG\"; echo '{line}' >> \"$TARE_USAGE_LOG\"", tmp_path,
+                               usage_log=tmp_path / "check-usage.jsonl")
+    total = caps.read_check_usage(tmp_path / "check-usage.jsonl")
+    assert passed and total["input"] == 200 and total["runs"] == 2 and abs(total["cost_usd"] - 0.02) < 1e-9

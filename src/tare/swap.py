@@ -84,11 +84,11 @@ def swap(a: Side, b: Side, project: Path, prompt: str, check: str, out: Path, *,
     with ThreadPoolExecutor(max_workers=2) as pool:
         list(pool.map(lambda s: caps.record(s.agent, s.real, project, s.out, prompt, s.args, env), (a, b)))
     for side in (a, b):
-        passed, detail = caps.run_check(check, side.out / "original" / "work")
+        passed, detail, spent = caps.check_original(side.agent, side.out, check)
         side.steps = caps.capsules(side.out, side.agent)
         side.events = side.agent.trail(caps.session_lines(side.out)).events
         side.original = f"{'passed' if passed else 'failed'} ({detail}) after {len(side.steps) - 1} steps"
-        journal("original", side=side.key, passed=passed, detail=detail, steps=[s.tool for s in side.steps])
+        journal("original", side=side.key, passed=passed, detail=detail, steps=[s.tool for s in side.steps], **spent)
 
     plan = [Cut(f, {k: round(f * (len(s.steps) - 1)) for k, s in sides.items()}) for f in cuts]
     journal("plan", cuts=[{"fraction": c.fraction, "steps": c.steps} for c in plan])
@@ -119,7 +119,8 @@ def swap(a: Side, b: Side, project: Path, prompt: str, check: str, out: Path, *,
             s = sides[agent]
             tail = caps.run_handoff(s.agent, s.real, tail_dir, capsule, sides[room].events, prompt, s.args, check,
                                     env, workspace_only)
-        journal("tail", id=name, status="passed" if tail.passed else "failed", detail=tail.detail)
+        journal("tail", id=name, status="passed" if tail.passed else "failed", detail=tail.detail,
+                usage=tail.usage, check_usage=tail.check_usage)
         return job, tail.passed
 
     with ThreadPoolExecutor(max_workers=jobs) as pool:

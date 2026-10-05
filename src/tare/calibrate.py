@@ -62,7 +62,8 @@ def calibrate(sides: list[Side], project: Path, prompt: str | None, check: str |
         began = time.monotonic()
         tail = caps.run_tail(side.agent, side.real, out, start, side.prompt or prompt, side.args, check, i, env,
                              tail_dir=out / "calibrate" / name, keep=keep)
-        journal("tail", id=name, status="passed" if tail.passed else "failed", detail=tail.detail)
+        journal("tail", id=name, status="passed" if tail.passed else "failed", detail=tail.detail,
+                usage=tail.usage, check_usage=tail.check_usage)
         return side, tail, time.monotonic() - began
 
     with ThreadPoolExecutor(max_workers=jobs) as pool:
