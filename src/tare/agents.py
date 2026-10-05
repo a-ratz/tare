@@ -282,4 +282,54 @@ class Codex:
         return None
 
 
-AGENTS = {agent.name: agent for agent in (Claude(), Codex())}
+class Pi:
+    name = "pi"
+    credentials = "auth.json"
+    room_config = f"{ROOM_HOME}/.pi/agent"
+    room_flags: list[str] = []  # decided by the dirty twin, experiments/dirty-twin-pi
+    yolo: list[str] = []  # Pi has no permission prompts
+    native_resume = False
+
+    def discover(self) -> Real:
+        home = Path.home()
+        custom = os.environ.get("PI_CODING_AGENT_DIR")
+        return Real(home, Path(custom) if custom else home / ".pi" / "agent", _which("pi"))
+
+    def _settings(self, real: Real) -> dict:
+        try:
+            return json.loads((real.config / "settings.json").read_text())
+        except (OSError, ValueError):
+            return {}
+
+    def token_lifetime(self, real: Real) -> float:
+        """Lifetime of the default provider's login; API keys do not expire."""
+        path = real.config / self.credentials
+        try:
+            auth = json.loads(path.read_text())
+        except (OSError, ValueError):
+            raise _lifetime_error(path) from None
+        entry = auth.get(self._settings(real).get("defaultProvider", ""), {})
+        if entry.get("type") != "oauth":
+            return float("inf")
+        return entry["expires"] / 1000 - time.time()
+
+    def seed(self, real: Real, config: Path):
+        # the login, the providers (with their keys) and the default model; nothing else of the setup
+        for name in (self.credentials, "models.json"):
+            if (real.config / name).exists():
+                shutil.copyfile(real.config / name, config / name)
+                (config / name).chmod(0o600)
+        settings = self._settings(real)
+        (config / "settings.json").write_text(json.dumps(
+            {k: settings[k] for k in ("defaultProvider", "defaultModel") if k in settings}))
+
+    def room_env(self) -> dict[str, str]:
+        return {"PI_CODING_AGENT_DIR": self.room_config}
+
+    def binds(self, real: Real) -> tuple[list[str], str]:
+        # the npm package lives in the home directory, which the room does not have: mount it
+        package = real.binary.parents[2]  # <package>/dist/bundle/cli.js
+        return ["--ro-bind", str(package), "/opt/agent/pi"], "/opt/agent/pi/dist/bundle/cli.js"
+
+
+AGENTS = {agent.name: agent for agent in (Claude(), Codex(), Pi())}
