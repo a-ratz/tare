@@ -78,7 +78,7 @@ function recipeCard(s) {
   const sides = Object.entries(s.sides || {}).map(([k, v]) => {
     const version = r.agents && r.agents[k] ? r.agents[k].version : "";
     const own = v.prompt ? `<div class="muted">prompt: ${esc(v.prompt)}</div>` : "";
-    return `<div>agent ${esc(k)}</div><div><b>${esc(v.agent)}</b> ${esc((v.args || []).join(" "))} <span class="muted">${esc(version)}</span>${own}</div>`;
+    return `<div>${s.kind === "calibrate" ? "side" : "agent"} ${esc(k)}</div><div><b>${esc(v.agent)}</b> ${esc((v.args || []).join(" "))} <span class="muted">${esc(version)}</span>${own}</div>`;
   }).join("");
   const p = s.params || {};
   const params = s.kind === "cliff" ? `${esc(p.tails)} tails per step tried · budget ${esc(p.budget)}`
@@ -185,6 +185,7 @@ function runsCard(s) {
 function calibrateCard(s) {
   if (!s.check) return runsCard(s);
   const rates = s.rates || {};
+  const judged = Object.values(rates).some((r) => (r.scores || []).length);
   const rows = Object.entries(s.sides || {}).map(([k, side]) => {
     const r = rates[k] || { passes: 0, n: 0, running: 0 };
     const dots = "<span class='dot pass'></span>".repeat(r.passes) + "<span class='dot fail'></span>".repeat(r.n - r.passes) + "<span class='dot run'></span>".repeat(r.running);
@@ -197,12 +198,11 @@ function calibrateCard(s) {
         ${r.mean != null ? `<line x1="${r.mean * 2}" x2="${r.mean * 2}" y1="2" y2="20" stroke="var(--text)" stroke-width="2"/>` : ""}
       </svg><div class="muted mono">${[...scores].sort((a, b) => a - b).join(" ")} · mean ${r.mean.toFixed(1)}</div>` : `<span class="muted">–</span>`;
     return `<tr><td class="num">${esc(k)}</td><td><b>${esc(side.agent)}</b> ${esc((side.args || []).join(" "))}<div class="dots">${dots}</div></td>
-      <td>${strip}</td>
+      ${judged ? `<td>${strip}</td>` : ""}
       <td class="num">${r.passes}/${r.n}</td><td class="num">${pct(r.rate)}</td><td class="num" style="min-width:160px">${r.n ? `${pct(r.lo)}-${pct(r.hi)}` : "–"}${band}</td></tr>`;
   }).join("");
-  const judged = Object.values(rates).some((r) => (r.scores || []).length);
   const title = judged ? "Judge scores and pass rates" : "Pass rates";
-  return `<section class="panel"><h2>${title}</h2><table><thead><tr><th>side</th><th>agent</th><th>judge scores (0 to 100, line = mean)</th><th>pass</th><th>rate</th><th>95% interval</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+  return `<section class="panel"><h2>${title}</h2><table><thead><tr><th>side</th><th>agent</th>${judged ? "<th>judge scores (0 to 100, line = mean)</th>" : ""}<th>pass</th><th>rate</th><th>95% interval</th></tr></thead><tbody>${rows}</tbody></table></section>`;
 }
 
 function tailsCard(s) {

@@ -173,9 +173,9 @@ def report(sides: dict[str, Side], plan: list[Cut], prompt: str, check: str, pro
         for side in "ab":
             cost = cut.foreignness(side)
             if cost:
-                native = cut.native[side]
-                lines.append(f"    handoff cost {side} {_sign(cost)}  (own session {sum(native)}/{len(native)}, minus "
-                             "its pass rate from the handoff, in its own workspace)")
+                native, (passed, n) = cut.native[side], cut.count(side, side)
+                lines.append(f"    handoff cost {side} {_sign(cost)}  (own session {sum(native)}/{len(native)} against "
+                             f"handoff {passed}/{n}, both in its own workspace)")
         dominant.append(_leader(state, model))
         deciding.append(state if dominant[-1] in ("room", "tie") else model)
     lines.append("")

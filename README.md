@@ -61,7 +61,7 @@ something. tare does the same for an agent before you measure it.
 | reading | The result of a probe, one of three. A clean room reads `tare: 0.00`, the zeroed scale. A room with leaks reads, for example, `tare: 4 leaks`. A probe that could not see your setup reads `tare: not proven (blind)`. There are no values in between. |
 | leak | Something of your personal setup that reaches the room, for example your global instructions. The reading names each leak and the file it came from. |
 | declared | Something of yours that the room holds on purpose, for example the copy of your login. The reading lists it, but it is not a leak and does not stop the run. |
-| dirty twin | The same probe in your real setup, outside the room. It proves that the probe can see your setup at all. |
+| dirty twin | The same agent run in your real setup, outside the room. It is part of the probe and proves that the probe can see your setup at all. |
 
 ## Features
 
@@ -149,7 +149,7 @@ This is the output of a real run, with only the home path shortened. Line by lin
   because they reach the agent as MCP tools. `home path` means that your real home path appears
   in the agent's request, for example in the path of a memory file. `reach` comes from a plain
   script that looks for your files. It finds them outside the room, which shows that the script
-  works, so a clean result inside the room counts.
+  works. So when it finds nothing inside the room, that result can be trusted.
 - `leaks none` says that none of these reached the room. Inside the room, tare starts Claude Code
   with flags that keep connected accounts and account skills out.
 - `declared` lists the two things that the room holds on purpose. With a subscription login, your
@@ -163,8 +163,8 @@ servers start too. The Antigravity CLI writes into its config directory on every
 lets its dirty twin write into a temporary overlay that is discarded after the run. Your
 `~/.gemini` stays unchanged.
 
-`uv run tare claude` then starts Claude Code in that room. `tare codex`, `tare pi` and `tare agy`
-do the same for the other agents.
+`uv run tare claude` then starts Claude Code in that room. `uv run tare codex`, `uv run tare pi`
+and `uv run tare agy` do the same for the other agents.
 
 ## Usage
 
@@ -300,7 +300,7 @@ every agent. Swap then reports two numbers per cut, each with an interval:
 - The **state effect** says how much better the tails do in a's workspace than in b's, which is
   how much the state of the workspace matters.
 - The **model effect** says how much better agent a does than agent b, in the same workspaces.
-  "Model" here means an agent with its model.
+  The model effect covers the agent CLI and its model together.
 
 At cut 0 both workspaces are your untouched project, so the state effect there must be zero. Swap
 checks this and calls it the **null check**. Where an agent can continue its own saved session
@@ -324,8 +324,8 @@ agent a. The report continues with cut 1.00, left out here.
     workspace b 4/4 0.51-1.00    1/4 0.05-0.70
     state effect  +0.00 [-0.35, +0.35]  (positive: workspace a better)
     model effect  +0.75 [+0.28, +0.89]  (positive: agent a better)
-    handoff cost a +0.00 [-0.49, +0.49]  (own session 4/4, minus its pass rate from the handoff, in its own workspace)
-    handoff cost b +0.50 [-0.14, +0.79]  (own session 3/4, minus its pass rate from the handoff, in its own workspace)
+    handoff cost a +0.00 [-0.49, +0.49]  (own session 4/4 against handoff 4/4, both in its own workspace)
+    handoff cost b +0.50 [-0.14, +0.79]  (own session 3/4 against handoff 1/4, both in its own workspace)
 
   cut 0.50: workspace a at step 2, workspace b at step 2
                 agent a          agent b
@@ -333,8 +333,8 @@ agent a. The report continues with cut 1.00, left out here.
     workspace b 0/4 0.00-0.49    2/4 0.15-0.85
     state effect  +0.38 [-0.03, +0.66]  (positive: workspace a better)
     model effect  +0.12 [-0.25, +0.44]  (positive: agent a better)
-    handoff cost a +0.00 [-0.49, +0.49]  (own session 4/4, minus its pass rate from the handoff, in its own workspace)
-    handoff cost b -0.25 [-0.66, +0.32]  (own session 1/4, minus its pass rate from the handoff, in its own workspace)
+    handoff cost a +0.00 [-0.49, +0.49]  (own session 4/4 against handoff 4/4, both in its own workspace)
+    handoff cost b -0.25 [-0.66, +0.32]  (own session 1/4 against handoff 2/4, both in its own workspace)
 
   null check   passed: no state effect at cut 0, where both workspaces are the untouched project
   verdict      Blame passes from the model to the workspace between cut 0.00 and cut 0.50. The intervals behind this verdict include zero. More tails would settle it.

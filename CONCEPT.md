@@ -1,8 +1,9 @@
 # tare: concept
 
 tare starts a coding agent in an isolated room without your personal setup, and proves the room
-clean before the run. It prints `tare: 0.00`, or names every leak and where it came from, and
-refuses to start the agent until the reading is `tare: 0.00`. It supports Claude Code, Codex, Pi
+clean before the run. It prints `tare: 0.00`, names every leak and where it came from, or says
+that it could not see your setup (`tare: not proven (blind)`). It refuses to start the agent
+until the reading is `tare: 0.00`, unless you pass `--allow-dirty`. It supports Claude Code, Codex, Pi
 and the Antigravity CLI (`agy`) on Linux and WSL.
 
 This document describes the design and the measurements behind it. The [README](README.md)
@@ -32,8 +33,8 @@ your instructions, memories, plugins, hooks and skills. That is not enough.
   separate config directory, a Claude Code session still had the connected accounts
   (mail, calendar, documents) as live tools, the account's skills and the account email.
   `--strict-mcp-config` and `--setting-sources project,local` removed the connected accounts and
-  the account skills. The email stays with a subscription login. Only an API key login without
-  OAuth removes it.
+  the account skills. The email stays with a subscription login. An API key login without OAuth
+  should remove it, but that has not been tested.
 - Codex: `CODEX_HOME` does not move `~/.agents/skills`, so Codex still reads your real skills
   there. Account plugins can also bring personal skills back after the login. tare starts Codex with `--disable remote_plugin` and an empty
   home directory.
@@ -68,7 +69,7 @@ your instructions, memories, plugins, hooks and skills. That is not enough.
   server keeps the request, which is the context the agent CLI put together, and answers "ok".
   The idea is the blank run from analytical chemistry, which runs the whole procedure without a
   sample to see what the procedure itself brings in.
-- **Control:** the same probe in your real setup, the dirty twin, must show your context. The
+- **Control:** the same agent run in your real setup, the dirty twin, must show your context. The
   risk was that features that come with the login (connected accounts, account skills) would
   not load against a fake server, so the probe would read clean while a real run is not.
   **Measured:** for Claude Code this risk did not occur. Against the fake model server, the
@@ -97,7 +98,7 @@ when it renews, so a room may renew its own copy.
 ### Probe and reading
 
 The probe has the three parts of layer 3: the agent in the room against the fake model server,
-the dirty twin, and the reach script. It compares what it finds against **kinds of context**,
+the dirty twin, and the reach script. It sorts what it finds into **kinds of context**,
 each checked on its own: instructions, memories, home path, MCP servers (connected accounts count
 here), skills, plugins, extensions, instruction files above the project, the account email, and
 reach.
@@ -105,9 +106,10 @@ reach.
 - A kind of context counts only when you have it. tare learns that from your files, for example
   a global instructions file or a skill folder.
 - If you have a kind of context and the dirty twin does not show it, the probe could not see
-  it. tare then runs the dirty twin once more after 10 seconds. **Measured:** with six runs
-  starting together, a dirty twin sent its request before its MCP servers were connected. If the
-  second dirty twin still does not show it, the reading is `tare: not proven (blind)`.
+  it. tare then runs the dirty twin once more after 10 seconds. If the second dirty twin still
+  does not show that kind of context, the reading is `tare: not proven (blind)`. **Measured:**
+  with six runs starting together, a dirty twin sent its request before its MCP servers were
+  connected.
 - Every probe makes no paid model call, because both the room and the dirty twin talk to the
   fake model server.
 
@@ -121,7 +123,7 @@ lines of your own files that the probe looks for in a request.
 | Claude Code | `CLAUDE_CONFIG_DIR` and `HOME` in the room, a copy of `.credentials.json`, `--strict-mcp-config --setting-sources project,local` | `ANTHROPIC_BASE_URL` | instructions, home path, MCP servers, skills, plugins, email, reach |
 | Codex | `CODEX_HOME` and `HOME` in the room, a copy of `auth.json` only, `--disable remote_plugin` | `-c openai_base_url=<server>/v1` keeps the ChatGPT login | instructions, memories, home path, skills, reach |
 | Pi | `PI_CODING_AGENT_DIR` and `HOME` in the room, copies of `auth.json` and `models.json`, a minimal `settings.json`, no flags | a provider of its own (`tare`, api `anthropic-messages`), because Pi has no base-URL variable | instruction files above the project, extensions, home path, reach |
-| Antigravity CLI | `HOME` in the room, a copy of `antigravity-oauth-token` and the chosen model, no flags | `CLOUD_CODE_URL` | home path, reach. Global rules (`~/.gemini/GEMINI.md`) and global skills (`~/.gemini/config/skills/`) showed once copies were placed in the setup for the test, because the measuring machine had none. |
+| Antigravity CLI | `HOME` in the room, a copy of `antigravity-oauth-token` and the chosen model, no flags | `CLOUD_CODE_URL` | home path, reach. Global rules (`~/.gemini/GEMINI.md`) and global skills (`~/.gemini/config/skills/`) showed after copies were placed in the setup for the test, because the measuring machine had none. |
 
 What each agent needed:
 
@@ -148,10 +150,11 @@ What each agent needed:
   its skill list, so the probe compares skill lines without the path. Without that, a skill that
   leaked into the room would not match yours, because its path differs.
 - **Instruction files above the project:** Claude Code's one-shot mode, which the probe uses, did
-  not load `~/AGENTS.md`. Pi loaded it. So for Claude Code the probe proves nothing about
-  interactive sessions in your real setup. A room has no parent directories, so these files
+  not load `~/AGENTS.md`. Pi loaded it. So for Claude Code the probe does not show whether an
+  interactive session in your real setup loads these files. A room has no parent directories, so these files
   cannot reach a room.
-- **Long prompts:** Linux limits a single argument to about 128 KiB. Pi takes `@file` instead.
+- **Long prompts:** Linux limits a single argument to about 128 KiB. tare passes the task to
+  every agent as an argument, so a longer task fails. Pi could read it from a file with `@file`.
 
 ### Capsules, trail and handoff
 
@@ -199,8 +202,8 @@ Swap cuts two runs at several points. At each cut, each agent continues each run
 by handoff. Swap reports a state effect (how much the state of the workspace matters), a model
 effect (which agent does better), and, where an agent can continue its own saved session, the
 handoff cost. At cut 0 both workspaces are the untouched project, so the state effect there must
-be zero. Swap checks this, and the check is called the null check. When the state effect and the model effect are within 0.1 of each other, Swap
-says they explain about the same.
+be zero. Swap checks this, and the check is called the null check. When the state effect and the
+model effect are within 0.1 of each other, Swap says they explain the failure about equally.
 
 **Measured:** against scripted models with a known truth, the null check passed and the blame
 passed from the model to the workspace between cut 0 and cut 0.5, as the scripts were written
@@ -271,10 +274,11 @@ All measurements ran on WSL2 on 2026-10-04 and 2026-10-05.
 Checked on 2026-10-04.
 
 - Multi-agent evaluation frameworks: UiPath/coder_eval (Claude Code, Codex, Antigravity,
-  OpenCode and Pi, in a temporary directory or Docker. Its documentation states that the caller
-  provides a clean environment), google/skill-reach (skill routing across Antigravity, Claude Code, Goose and
-  Pi), mgechev/skillgrade (Docker and graders), `claude plugin eval` (A/B with and without a
-  plugin). None documents removing the agent's own user context or proving that it is gone.
+  OpenCode and Pi, in a temporary directory or Docker), google/skill-reach (skill routing across
+  Antigravity, Claude Code, Goose and Pi), mgechev/skillgrade (Docker and graders),
+  `claude plugin eval` (A/B with and without a plugin). The documentation of coder_eval states
+  that the caller provides a clean environment. None of them documents removing the agent's own
+  user context or proving that it is gone.
 - Isolation by hand inside test suites, for example setting `CODEX_HOME`, `HOME` and
   `CLAUDE_CONFIG_DIR` in a project's tests (hamza-aziz-ai/codex-claude-council PR #11).
 - Fake model servers that could serve as a building block: Aetheria-LabsJP/puppetllm,

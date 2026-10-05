@@ -75,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
         c = sub.add_parser(name, help=f"probe, then start {name} in the room (args after --)")
         c.add_argument("--project", type=Path, default=Path.cwd())
         c.add_argument("--allow-dirty", action="store_true", help="start even if the reading is not tare: 0.00")
-        c.add_argument("--yolo", action="store_true", help="skip the agent's permission prompts and its own sandbox (the room stays)")
+        c.add_argument("--yolo", action="store_true", help="skip the agent's permission prompts (for Codex also its own sandbox). The room stays.")
     k = sub.add_parser("cliff", help="find where a failed run became lost (args after -- go to every agent run)")
     k.add_argument("agent", choices=sorted(AGENTS))
     k.add_argument("prompt", help="the task, as given to the agent")
@@ -97,7 +97,7 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--a-args", default="", help="arguments for every run of agent a, e.g. '--model sonnet'")
     w.add_argument("--b-args", default="", help="arguments for every run of agent b, e.g. '-m MODEL'")
     w.add_argument("--cuts", default="0,0.5,1", help="where to cut each run, as fractions of its steps (default 0,0.5,1)")
-    w.add_argument("--tails", type=int, default=3, help="tails (continuations) per workspace and agent (default 3)")
+    w.add_argument("--tails", type=int, default=3, help="tails (continuations) per cut, workspace and agent (default 3)")
     w.add_argument("--jobs", type=int, default=3, help="tails run at the same time (default 3)")
     w.add_argument("--handoff", choices=["trail", "workspace"], default="trail",
                    help="what a continuing agent gets besides the workspace: a written summary of the steps so far "

@@ -35,7 +35,7 @@ The README explains these words for users. Contributors also meet these terms in
 | `src/tare/recipe.py` | recipes: how to repeat a run, and what has changed since |
 | `src/tare/calibrate.py` | Calibrate: fresh-start pass rates per side |
 | `src/tare/judge.py` | the judge check: render the page in a room, score it in a room without agent or model names (so the judge cannot favour either), measure how far the scores vary |
-| `src/tare/fake.py` | the fake model server (Anthropic Messages for Claude Code and Pi, OpenAI Responses for Codex, Cloud Code for the Antigravity CLI) |
+| `src/tare/fake.py` | the fake model server (Anthropic Messages for Claude Code and Pi, OpenAI Responses for Codex, Google's Cloud Code API for the Antigravity CLI) |
 | `tests/` | pytest. Needs no agent, no login and no network. |
 | `experiments/` | pre-registered measurements (`PLAN.md` before the runs, `RESULTS.md` after) |
 | `prototypes/` | the first bwrap room, kept as the record |
@@ -53,7 +53,7 @@ agent. So before a PR that touches the room or the probe, run these on your mach
    line must show every kind of context your setup has. The dirty twin of the Antigravity CLI
    (`agy`) must leave `~/.gemini` unchanged.
 2. A planted leak must fail the probe. Put known parts of a personal setup (instructions, a
-   skill, an environment variable) into the room's copy of the agent's config, and check that
+   skill, an environment variable) into the room's copy of the agent's config or its environment, and check that
    the reading names each one with its source.
 3. Before a PR that touches Cliff: `uv run experiments/cliff-scripted/world.py` must report
    "The run became lost at step 4". It drives the real Claude Code CLI against a scripted model,
@@ -97,7 +97,7 @@ test, a fix next door) becomes a new issue or a question, not part of the PR.
 - **A new epic while two or more are open:** recommend an order and wait until the maintainer
   confirms it.
 - **A PR ready for review or merge:** say so, with its link. Go on only with epics whose order
-  is already agreed.
+  the maintainer has already confirmed.
 
 ## Measurements
 
@@ -115,7 +115,7 @@ test, a fix next door) becomes a new issue or a question, not part of the PR.
 - The fake model server keeps request bodies, never headers, because the login token travels
   in a header.
 - Never change the user's real configuration (`~/.claude`, `~/.claude.json`, `~/.codex`, `~/.pi`,
-  `~/.gemini`). Plant parts of a setup only into the room's copy, or into the temporary layer
+  `~/.gemini`). Plant parts of a setup only into the room's copy, or into the temporary overlay
   that the Antigravity CLI's dirty twin writes into.
 - The dirty twin starts the real CLI in the real setup, and the user's hooks fire. Run it only
   through `tare probe` or an experiment.
