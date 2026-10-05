@@ -148,16 +148,19 @@ def _run_in(agent, real, home: Path, work: Path, command: list[str], env, timeou
         return f"agent stopped after {int(timeout)} s"
 
 
-def _finish(tail_dir: Path, work: Path, step: int, ran: str, check: str, extra: dict | None = None) -> Tail:
+def _finish(tail_dir: Path, work: Path, step: int, ran: str, check: str, extra: dict | None = None,
+            keep: bool = False) -> Tail:
     passed, detail = run_check(check, work)
     (tail_dir / "result.json").write_text(json.dumps({"step": step, "passed": passed, "agent": ran, "check": detail,
                                                       **(extra or {})}))
-    shutil.rmtree(work, ignore_errors=True)
+    if not keep:
+        shutil.rmtree(work, ignore_errors=True)
     return Tail(step, passed, f"{ran}; {detail}")
 
 
 def run_tail(agent, real, out: Path, capsule: Capsule, prompt: str, args: list[str], check: str,
-             index: int, env: dict[str, str] | None = None, timeout: float = 1800, tail_dir: Path | None = None) -> Tail:
+             index: int, env: dict[str, str] | None = None, timeout: float = 1800, tail_dir: Path | None = None,
+             keep: bool = False) -> Tail:
     """Continue a capsule natively in a fresh room (the agent's own session, cut after the step),
     run it to the end, score the workspace with the check. Step 0 is a fresh start."""
     tail_dir = tail_dir or out / "tails" / f"{capsule.step:04d}-{index}"
@@ -172,7 +175,7 @@ def run_tail(agent, real, out: Path, capsule: Capsule, prompt: str, args: list[s
             agent.place_session(home, sid, session_lines(out)[:capsule.cut])
             command = [agent.name, *agent.room_flags, *agent.resume_args(sid, CONTINUE, args)]
         ran = _run_in(agent, real, home, work, command, env, timeout, tail_dir)
-    return _finish(tail_dir, work, capsule.step, ran, check)
+    return _finish(tail_dir, work, capsule.step, ran, check, keep=keep)
 
 
 def run_handoff(agent, real, tail_dir: Path, capsule: Capsule, events: list[trails.Event], task: str,

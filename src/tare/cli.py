@@ -113,6 +113,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--project", type=Path, default=Path.cwd())
     c.add_argument("--out", type=Path, help="run directory (default ~/.local/state/tare/calibrate/<project>-<time>)")
     c.add_argument("--allow-dirty", action="store_true", help="run even if a probe reading is not zero")
+    c.add_argument("--keep", action="store_true", help="keep every run's finished workspace (e.g. for judge-noise)")
     for parser in (k, w, c):
         parser.add_argument("--port", type=int, default=8777, help="dashboard port on localhost (default 8777)")
     sub.add_parser("watch", help="the live dashboard of a run directory (tare watch DIR)")
@@ -176,7 +177,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "calibrate":
             runs = [calibration.Side(key, agent_, real_, list(extra)) for key, (agent_, real_, extra) in agents.items()]
             print(calibration.calibrate(runs, project, args.prompt, args.check, out, runs=args.runs, jobs=args.jobs,
-                                        journal=journal), end="")
+                                        journal=journal, keep=args.keep), end="")
             print(f"tare calibrate: see it again with  tare watch {out}", file=sys.stderr)
             return 0
         if args.command == "swap":

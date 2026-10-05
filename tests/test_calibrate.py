@@ -19,7 +19,7 @@ def test_calibrate_reports_each_side_with_its_interval_and_journals_every_run(tm
     out.mkdir()
     outcomes = {"claude": iter([True, False, False, False]), "codex": iter([True] * 4)}
 
-    def fake_tail(agent, real, out_, capsule, prompt, args, check, i, env=None, timeout=1800, tail_dir=None):
+    def fake_tail(agent, real, out_, capsule, prompt, args, check, i, env=None, timeout=1800, tail_dir=None, keep=False):
         assert capsule.step == 0 and capsule.archive.exists()
         return caps.Tail(0, next(outcomes[agent.name]), "d")
 
