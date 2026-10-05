@@ -20,7 +20,7 @@
 
 <div align="center">
   <a href="#install">Install</a> &middot;
-  <a href="#quick-start">Quick Start</a> &middot;
+  <a href="#quick-start">Quick start</a> &middot;
   <a href="#features">Features</a> &middot;
   <a href="#how-it-works">How it works</a> &middot;
   <a href="CONCEPT.md">Concept</a> &middot;
@@ -41,8 +41,8 @@ skill.
 A separate config directory (`CLAUDE_CONFIG_DIR` for Claude Code, `CODEX_HOME` for Codex) does not
 fix this. With Claude Code, the login alone brings your connected accounts (mail, calendar,
 documents), your account's skills and your email address into the session. Evaluation frameworks
-that drive agent CLIs, such as UiPath's coder_eval, leave a clean environment to you, and none of
-them checks it.
+that drive agent CLIs, such as UiPath's coder_eval, leave it to you to provide a clean
+environment, and none of them checks it.
 
 tare starts the agent in a clean environment and proves that it is clean before every run. It
 works with four coding agents on Linux and WSL: Claude Code, Codex, Pi
@@ -67,29 +67,32 @@ something. tare does the same for an agent before you measure it.
 
 - **Checks the room before every run.** The agent starts only when the probe reads
   `tare: 0.00`. Otherwise you see every leak with the file it came from.
-- **Measures what the agent receives.** tare does not ask the agent about its context. It records
+- **Measures what the model receives.** tare does not ask the agent about its context. It records
   the request that the agent sends to its model. An agent asked about its own context can refuse
   or be wrong.
 - **Tells you when it cannot see.** tare looks at your files to learn what your setup holds, for
   example a global instructions file or installed skills. If the dirty twin's request lacks one of
   these, the probe could not see it. A clean room would then prove nothing. tare runs the dirty
-  twin once more, and if that part is still missing, the reading is `tare: not proven (blind)`.
+  twin once more, and if that kind of context is still missing, the reading is
+  `tare: not proven (blind)`.
 - **Keeps your files out of reach.** Your home directory, the credentials of your other tools
   and the secret environment variables of your shell do not exist inside the room.
 - **Keeps your own login working.** Each room gets a fresh copy of your login, which tare deletes
   after the run. Claude Code may replace its login token when it renews it, which could log you
-  out outside tare. That has not been tested, so tare plays safe. It refuses to start when the
-  copy would need renewal within the next hour. Start the agent once outside tare, which renews
+  out outside tare. That has not been tested, so tare refuses to start when the copy would need
+  renewal within the next hour. Start the agent once outside tare, which renews
   your login, and try again.
 - **Passes all your arguments to the agent.** Interactive or one-shot, the agent runs as it does
   outside tare.
 - **Compares skills, plugins and models.** `tare calibrate` starts each side (an agent with its
   arguments) several times from scratch, each in its own room. It reports how often each side
   passes a check, a shell command such as your test suite.
-- **Finds out whether the workspace or the agent caused a failure.** `tare swap` lets two agents
+- **Finds out whether the workspace (the run's copy of your project) or the agent caused a
+  failure.** `tare swap` lets two agents
   continue each other's unfinished work and compares the results.
 - **Looks for the step where a failed run went wrong** (experimental). `tare cliff` restarts a
-  failed run from its saved steps and names the step after which it no longer succeeds.
+  failed run from its saved steps (one per tool call) and names the step after which it no
+  longer succeeds.
 
 ## When to use
 
@@ -118,10 +121,10 @@ git clone https://github.com/AndreRatzenberger/tare.git && cd tare
 uv tool install .   # optional
 ```
 
-The examples after Quick Start write `tare` for short. Without `uv tool install .`, write
+The examples after Quick start write `tare` for short. Without `uv tool install .`, write
 `uv run --project <checkout> tare` instead.
 
-## Quick Start
+## Quick start
 
 Run this in the checkout:
 
@@ -157,7 +160,8 @@ This is the output of a real run, with only the home path shortened. Line by lin
 
 For the dirty twin, the probe starts your real agent with your real setup, so your hooks and MCP
 servers start too. The Antigravity CLI writes into its config directory on every run, so tare
-lets its dirty twin write into a temporary layer instead. Your `~/.gemini` stays unchanged.
+lets its dirty twin write into a temporary overlay that is discarded after the run. Your
+`~/.gemini` stays unchanged.
 
 `uv run tare claude` then starts Claude Code in that room. `tare codex`, `tare pi` and `tare agy`
 do the same for the other agents.
@@ -191,8 +195,7 @@ The room starts with the agent's defaults, not with your settings. Codex, for ex
 default model unless you pass `-m`. Set the model explicitly when you compare runs.
 
 When a room is not clean, the reading names each leak and where it came from. The excerpt below
-comes from a real run in a room that was given copies of real settings on purpose. It is shown in
-the current wording, with the home path shortened.
+shows a room that was given copies of real settings on purpose, with the home path shortened.
 
 ```text
   leaks
@@ -254,7 +257,7 @@ The judge is Claude Code with Sonnet unless you choose another agent with `--jud
 Chrome inside a room of its own and takes a screenshot. Without `DIR`, it uses the current
 directory. The judge then gets the screenshot, the page's source and the rubric in a fresh room,
 without any agent or model names, so it cannot favour an agent or a model. `tare judge` exits
-with 0 when the score reaches the threshold, so it works as a check:
+with 0 when the score reaches the `--threshold` value, so it works as a check:
 
 ```bash
 tare calibrate "build the page" --check "tare judge --rubric $PWD/rubric.md --threshold 60" \
@@ -263,7 +266,7 @@ tare calibrate "build the page" --check "tare judge --rubric $PWD/rubric.md --th
 
 A check runs in the finished workspace, so `tare judge` without `DIR` judges the page that the
 agent built. The check does not run where you typed the command. So the rubric needs an absolute
-path, which your shell makes from `$PWD/rubric.md`, and `tare` must be on `PATH`, or written as
+path, which your shell makes from `$PWD/rubric.md`. And `tare` must be on `PATH`, or written as
 `uv run --project <checkout> tare`.
 
 A judge does not give the same page the same score every time. One test page scored 55, 60, 58,
@@ -286,7 +289,7 @@ tare swap "fix the failing test" --check "uv run pytest -q" --a claude --a-args 
 
 Two agents, a and b, each attempt the same task once. When one of them fails, two causes are
 possible. The agent may be the weaker one. Or its workspace may have reached a state that no
-agent can finish. Swap separates the two causes. Here "model" means an agent with its model.
+agent can finish. Swap separates the two causes.
 
 Swap cuts both runs at several points. `--cuts` sets them as fractions of each run's steps,
 where 0 is the start and 1 is the end. The default is `0,0.5,1`. At each cut, each agent continues
@@ -297,6 +300,7 @@ every agent. Swap then reports two numbers per cut, each with an interval:
 - The **state effect** says how much better the tails do in a's workspace than in b's, which is
   how much the state of the workspace matters.
 - The **model effect** says how much better agent a does than agent b, in the same workspaces.
+  "Model" here means an agent with its model.
 
 At cut 0 both workspaces are your untouched project, so the state effect there must be zero. Swap
 checks this and calls it the **null check**. Where an agent can continue its own saved session
@@ -307,7 +311,7 @@ handoff, in its own workspace. A value near zero means that the handoff loses no
 
 The report below comes from tare's own test. It drives the real Claude Code CLI against two
 scripted models: fake models that follow a fixed script, so the right verdict is known. The test
-runs four tails per cell instead of three. Agent a is competent but trusts a note in the
+runs four tails per workspace and agent instead of three. Agent a is competent but trusts a note in the
 workspace. Agent b is weak. Run b wrote a wrong note at step 2.
 
 Each cell shows passes out of tails and their interval. Positive effects favour a's workspace or
@@ -320,8 +324,8 @@ agent a. The report continues with cut 1.00, left out here.
     workspace b 4/4 0.51-1.00    1/4 0.05-0.70
     state effect  +0.00 [-0.35, +0.35]  (positive: workspace a better)
     model effect  +0.75 [+0.28, +0.89]  (positive: agent a better)
-    handoff cost a +0.00 [-0.49, +0.49]  (own session 4/4, minus the handoff, in its own workspace)
-    handoff cost b +0.50 [-0.14, +0.79]  (own session 3/4, minus the handoff, in its own workspace)
+    handoff cost a +0.00 [-0.49, +0.49]  (own session 4/4, minus its pass rate from the handoff, in its own workspace)
+    handoff cost b +0.50 [-0.14, +0.79]  (own session 3/4, minus its pass rate from the handoff, in its own workspace)
 
   cut 0.50: workspace a at step 2, workspace b at step 2
                 agent a          agent b
@@ -329,8 +333,8 @@ agent a. The report continues with cut 1.00, left out here.
     workspace b 0/4 0.00-0.49    2/4 0.15-0.85
     state effect  +0.38 [-0.03, +0.66]  (positive: workspace a better)
     model effect  +0.12 [-0.25, +0.44]  (positive: agent a better)
-    handoff cost a +0.00 [-0.49, +0.49]  (own session 4/4, minus the handoff, in its own workspace)
-    handoff cost b -0.25 [-0.66, +0.32]  (own session 1/4, minus the handoff, in its own workspace)
+    handoff cost a +0.00 [-0.49, +0.49]  (own session 4/4, minus its pass rate from the handoff, in its own workspace)
+    handoff cost b -0.25 [-0.66, +0.32]  (own session 1/4, minus its pass rate from the handoff, in its own workspace)
 
   null check   passed: no state effect at cut 0, where both workspaces are the untouched project
   verdict      Blame passes from the model to the workspace between cut 0.00 and cut 0.50. The intervals behind this verdict include zero. More tails would settle it.
@@ -338,8 +342,7 @@ agent a. The report continues with cut 1.00, left out here.
 
 At the start, the model effect explains the difference. Agent a passes, agent b mostly fails.
 After the wrong note, a's workspace still works and b's does not, even for the competent agent
-a. The verdict says so. Its last two sentences are a caution, because the intervals behind the
-verdict still include zero.
+a. The verdict says so.
 
 ### Cliff: where did a failed run go wrong?
 
@@ -373,7 +376,7 @@ least half as often as the baseline, the run was unlucky, not lost, and Cliff sa
 
 The report below comes from tare's scripted test, with a scripted model that writes the wrong
 answer into a note at step 4. Steps that Cliff did not need are missing from the table, and `<`
-marks the cliff. `monotone yes` says that no step after the cliff passed again.
+marks the cliff. `monotone` says whether a step after the cliff passes again.
 
 ```text
   step  what the step did                                      tails  pass  rate  95% interval
@@ -385,7 +388,7 @@ marks the cliff. `monotone yes` says that no step after the cliff passed again.
   verdict   The run became lost at step 4.
   at step 4: Bash echo answer=41 > notes.txt
   changed   notes.txt
-  monotone  yes
+  monotone  yes: no step after the cliff passes again
   tails     18 of a budget of 30
 ```
 

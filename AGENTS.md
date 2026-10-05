@@ -10,11 +10,13 @@ setup at all. A plain script checks what the room can reach. tare is built for s
 evaluations, where a run that carries the user's own context measures the user's machine
 instead of the skill.
 
-The README explains these words for users. The terms below are the ones contributors meet in
-the code: a **marker** is a line of the user's own files that the probe looks for in a request,
-an **unattended run** is a one-shot run without prompts (Calibrate, Swap and Cliff use them), a
-**capsule** is the archived workspace after one tool call, and the **trail** is the record of a
-run in the same format for every agent.
+The README explains these words for users. Contributors also meet these terms in the code:
+
+- a **marker** is a line of the user's own files that the probe looks for in a request,
+- an **unattended run** is a one-shot run without permission prompts (Calibrate, Swap and
+  Cliff use them),
+- a **capsule** is the archived workspace after one tool call,
+- the **trail** is the record of a run in the same format for every agent.
 
 ## Layout
 
@@ -28,11 +30,11 @@ run in the same format for every agent.
 | `src/tare/cliff.py` | Cliff: baseline, adaptive search with Wilson intervals, the report |
 | `src/tare/trail.py` | the trail: a run record in the same format for every agent, and the handoff written from it |
 | `src/tare/swap.py` | Swap: each agent continues each run's workspace. State effect, model effect, handoff cost, the report |
-| `src/tare/journal.py` | the run journal: one JSON line per event of a calibrate, Cliff or Swap run |
+| `src/tare/journal.py` | the run journal: one JSON line per event of a Calibrate, Cliff or Swap run |
 | `src/tare/dashboard.py`, `dashboard.html` | the live dashboard: state from the run directory, one page |
 | `src/tare/recipe.py` | recipes: how to repeat a run, and what has changed since |
-| `src/tare/calibrate.py` | calibrate: fresh-start pass rates per side |
-| `src/tare/judge.py` | the judge check: render the page in a room, score it in a room without agent or model names, measure how far the scores vary |
+| `src/tare/calibrate.py` | Calibrate: fresh-start pass rates per side |
+| `src/tare/judge.py` | the judge check: render the page in a room, score it in a room without agent or model names (so the judge cannot favour either), measure how far the scores vary |
 | `src/tare/fake.py` | the fake model server (Anthropic Messages for Claude Code and Pi, OpenAI Responses for Codex, Cloud Code for the Antigravity CLI) |
 | `tests/` | pytest. Needs no agent, no login and no network. |
 | `experiments/` | pre-registered measurements (`PLAN.md` before the runs, `RESULTS.md` after) |
@@ -48,7 +50,7 @@ CI cannot run the probe against real agents, because that needs bubblewrap and a
 agent. So before a PR that touches the room or the probe, run these on your machine:
 
 1. `uv run tare probe claude`, `codex`, `pi` and `agy` must read `tare: 0.00`, and the control
-   line must show every kind of context the user has. The dirty twin of the Antigravity CLI
+   line must show every kind of context your setup has. The dirty twin of the Antigravity CLI
    (`agy`) must leave `~/.gemini` unchanged.
 2. A planted leak must fail the probe. Put known parts of a personal setup (instructions, a
    skill, an environment variable) into the room's copy of the agent's config, and check that

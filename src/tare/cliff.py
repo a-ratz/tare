@@ -65,9 +65,9 @@ def search(probe, last: int, tails: int, budget: int, gap_below: float = 0.2) ->
     if s.rate(0) == 0:
         n, hi = len(s.results[0]), s.interval(0)[1]
         clear = hi < gap_below
-        s.verdict = (f"A fresh start fails too: {n} of {n} failed, so the true pass rate is at most {hi:.2f}. The task "
+        s.verdict = (f"A fresh start fails too: {n} of {n} failed, so the upper end of its 95% interval is {hi:.2f}. The task "
                      "is too hard for the model (a model gap), so there is no cliff to find." if clear else
-                     f"No fresh start passed in {n} tails, so the true pass rate is at most {hi:.2f}. The budget ran "
+                     f"No fresh start passed in {n} tails, so the upper end of its 95% interval is {hi:.2f}. The budget ran "
                      "out before a model gap was clear.")
         return s
     run(last, tails)
@@ -167,9 +167,9 @@ def report(s: Search, steps: list, budget: int) -> list[str]:
         lines.append(f"  at step {step.step}: {step.tool}")
         lines.append(f"  changed   {', '.join(changed[:10]) or 'no files (the conversation changed, not the workspace)'}")
     if s.cliff:
-        lines.append("  monotone  " + ("yes" if not s.rebounds else
+        lines.append("  monotone  " + ("yes: no step after the cliff passes again" if not s.rebounds else
                                        f"no: steps {', '.join(map(str, s.rebounds))} pass again after the cliff"))
-    lines.append(f"  tails     {s.spent} of a budget of {budget}" + (" (spent)" if s.exhausted else ""))
+    lines.append(f"  tails     {s.spent} of a budget of {budget}")
     return lines
 
 

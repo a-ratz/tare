@@ -166,6 +166,6 @@ def test_search_samples_the_baseline_before_it_declares_a_model_gap():
 
 def test_search_declares_a_model_gap_only_when_its_bound_is_clear():
     s = search(lambda step, n: [False] * n, last=6, tails=3, budget=60)
-    assert s.interval(0)[1] < 0.2 and "model gap" in s.verdict and "at most" in s.verdict
+    assert s.interval(0)[1] < 0.2 and "model gap" in s.verdict and "upper end of its 95% interval" in s.verdict
     short = search(lambda step, n: [False] * n, last=6, tails=3, budget=6)
     assert "budget ran out before a model gap was clear" in short.verdict

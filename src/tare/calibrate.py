@@ -52,7 +52,7 @@ def calibrate(sides: list[Side], project: Path, prompt: str | None, check: str |
     caps.archive(work, out / "start.tar")
     shutil.rmtree(work)
     start = caps.Capsule(0, None, out / "start.tar", 0, 0, "start")
-    journal("phase", phase="tails")
+    journal("phase", phase="runs")
 
     def run(job: tuple[Side, int]) -> tuple[Side, caps.Tail]:
         side, i = job

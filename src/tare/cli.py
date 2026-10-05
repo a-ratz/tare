@@ -7,7 +7,7 @@
   tare calibrate [PROMPT] [--check CMD] --side "claude --model haiku" --side "codex" [--side-prompt b=TEXT] [--runs N]
   tare judge [DIR] --rubric FILE --threshold N [--judge "claude --model sonnet"]   a check: exit 0 at or above N
   tare judge-noise DIR... --rubric FILE --times K [--threshold N]                  how far the judge's scores vary
-  tare watch DIR... [--port N]   the live dashboard of a run, live or finished (several runs on one page)
+  tare watch DIR... [--port N]   the dashboard of a run, live or finished (several runs on one page)
   tare rerun DIR [--out DIR]     repeat a run from its recipe
 """
 import argparse
@@ -81,15 +81,15 @@ def main(argv: list[str] | None = None) -> int:
     k.add_argument("prompt", help="the task, as given to the agent")
     k.add_argument("--check", required=True, help="shell command run in the finished workspace (exit 0 passes)")
     k.add_argument("--project", type=Path, default=Path.cwd())
-    k.add_argument("--tails", type=int, default=3, help="tails per step tried (default 3)")
+    k.add_argument("--tails", type=int, default=3, help="tails (continuations from a saved step) per step tried (default 3)")
     k.add_argument("--budget", type=int, default=30, help="tails in total, baseline included (default 30)")
     k.add_argument("--jobs", type=int, default=3, help="tails run at the same time (default 3)")
     k.add_argument("--gap-below", type=float, default=0.2,
-                   help="report a model gap only when the upper end of the baseline's 95%% interval is below this "
-                        "(default 0.2)")
+                   help="report a model gap (the task is too hard for the model) only when the upper end of the "
+                        "baseline's 95%% interval is below this (default 0.2)")
     k.add_argument("--out", type=Path, help="run directory (default ~/.local/state/tare/cliff/<project>-<time>)")
     k.add_argument("--allow-dirty", action="store_true", help="run even if the reading is not tare: 0.00")
-    w = sub.add_parser("swap", help="two agents continue each other's workspaces: was it the workspace or the model")
+    w = sub.add_parser("swap", help="each agent continues both workspaces: was it the workspace or the agent")
     w.add_argument("prompt", help="the task, as given to both agents")
     w.add_argument("--check", required=True, help="shell command run in the finished workspace (exit 0 passes)")
     w.add_argument("--a", default="claude", choices=sorted(AGENTS), help="agent a (default claude)")
@@ -97,10 +97,11 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--a-args", default="", help="arguments for every run of agent a, e.g. '--model sonnet'")
     w.add_argument("--b-args", default="", help="arguments for every run of agent b, e.g. '-m MODEL'")
     w.add_argument("--cuts", default="0,0.5,1", help="where to cut each run, as fractions of its steps (default 0,0.5,1)")
-    w.add_argument("--tails", type=int, default=3, help="tails per workspace and agent (default 3)")
+    w.add_argument("--tails", type=int, default=3, help="tails (continuations) per workspace and agent (default 3)")
     w.add_argument("--jobs", type=int, default=3, help="tails run at the same time (default 3)")
     w.add_argument("--handoff", choices=["trail", "workspace"], default="trail",
-                   help="what a continuing agent gets besides the workspace (default: a written summary of the steps so far)")
+                   help="what a continuing agent gets besides the workspace: a written summary of the steps so far "
+                        "(trail, the default) or nothing (workspace)")
     w.add_argument("--project", type=Path, default=Path.cwd())
     w.add_argument("--out", type=Path, help="run directory (default ~/.local/state/tare/swap/<project>-<time>)")
     w.add_argument("--allow-dirty", action="store_true", help="run even if a reading is not tare: 0.00")
@@ -121,7 +122,8 @@ def main(argv: list[str] | None = None) -> int:
     for parser in (k, w, c):
         parser.add_argument("--port", type=int, default=8777, help="dashboard port on localhost (default 8777)")
     sub.add_parser("watch", help="the live dashboard of one or more run directories (tare watch DIR...)")
-    sub.add_parser("judge", help="score a page by a rubric, in a room without agent or model names (usable as --check)")
+    sub.add_parser("judge", help="score a page by a rubric, in a room without agent or model names so the judge cannot tell who "
+                       "built it (usable as --check)")
     sub.add_parser("judge-noise", help="score the same pages repeatedly, to see how far the judge's scores vary")
     sub.add_parser("rerun", help="repeat a run from its recipe (tare rerun DIR)")
     args = ap.parse_args(argv)
@@ -176,8 +178,8 @@ def main(argv: list[str] | None = None) -> int:
                 return 0 if reading.zero else 1
             if not reading.zero:
                 if not args.allow_dirty:
-                    print("tare: not starting, because the room is not proven clean. Fix the leaks, or pass "
-                          "--allow-dirty.", file=sys.stderr)
+                    print("tare: not starting, because the room is not proven clean. Fix what the reading names, "
+                          "or pass --allow-dirty.", file=sys.stderr)
                     return 1
                 print(f"tare: --allow-dirty given, running {name} in a room whose reading is not tare: 0.00",
                       file=sys.stderr)
@@ -254,7 +256,7 @@ def _judge(command: str, argv: list[str]) -> int:
 
 
 def _rerun(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(prog="tare rerun", description="repeat a calibrate, Cliff or Swap run from its recipe")
+    ap = argparse.ArgumentParser(prog="tare rerun", description="repeat a Calibrate, Cliff or Swap run from its recipe")
     ap.add_argument("dir", type=Path)
     ap.add_argument("--out", type=Path, help="run directory for the repeat (default: a new one)")
     args = ap.parse_args(argv)

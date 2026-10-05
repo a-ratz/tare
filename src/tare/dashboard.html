@@ -88,7 +88,7 @@ function recipeCard(s) {
     <div>check</div><div>${s.check ? `<code>${esc(s.check)}</code>` : `<span class="muted">none. A run counts as finished when its agent exits 0. Workspaces are kept.</span>`}</div>
     <div>project</div><div><code>${esc(s.project)}</code> <span class="muted">${esc(r.project_digest ? "fingerprint " + r.project_digest.slice(0, 12) : "")}</span></div>
     ${sides}
-    <div>params</div><div>${params}</div>
+    <div>settings</div><div>${params}</div>
     ${r.command ? `<div>repeat</div><div><code>tare rerun ${esc(r.out || "")}</code></div>` : ""}
   </div></section>`;
 }
