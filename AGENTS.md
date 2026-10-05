@@ -129,5 +129,5 @@ test, a fix next door) becomes a new issue or a question, not part of the PR.
 - A user-visible change updates README.md and CONCEPT.md in the same PR.
 - Linux and WSL only for now, because the room uses bubblewrap. macOS would need its own room,
   built on Seatbelt, the macOS sandbox.
-- Commits use the `a-ratz` identity (`44863088+a-ratz@users.noreply.github.com`). Pushes go through that GitHub
-  account.
+- Commits use the `a-ratz` identity (`44863088+a-ratz@users.noreply.github.com`). Pushes go
+  through that GitHub account.
