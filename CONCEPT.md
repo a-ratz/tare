@@ -273,6 +273,17 @@ Tare is meant to sit underneath such frameworks: their exam, Tare's clean room.
     - **Measured** on a test page with a sonnet judge: six scores from 55 to 66 (sd about 3).
       The judge found a real one-cent rounding bug and an overflow.
     - `tare judge-noise` refuses a threshold inside such a spread.
+14. ~~Real failure, round 2: an HTML task~~. Done 2026-10-05 (epic #59,
+    [results](experiments/html/RESULTS.md)).
+    - `tare calibrate --keep` keeps every workspace; with a judge check the report and the
+      dashboard show each side's scores.
+    - **Measured** (Haiku against Codex with gpt-6.1-sol, Sonnet judge): only the mortgage
+      calculator separated the two (Haiku 62 to 88, Sol 90 to 93). Haiku's pages fill that band
+      without a gap, so no threshold was outside the judge's noise; 86 was taken.
+    - Cliff called a failed Haiku original (85 at threshold 86) "unlucky rather than lost";
+      post-hoc, the same page scored 88 five times.
+    - Swap: model effect -0.83 at cut 0. At cut 1 Sol finished Haiku's page 3/3 and Haiku kept
+      Sol's 3/3: no anchoring on inherited work.
 
 ## Name
 

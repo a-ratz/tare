@@ -187,6 +187,9 @@ tare calibrate "fix the failing test" --check "uv run pytest -q" \
 Before Cliff or Swap spend tails on a task, calibrate tells you how often each side passes
 it from a fresh start, with intervals. Cliff and Swap need a task where the original fails but
 a fresh start sometimes passes, or where one side mostly fails and the other mostly passes.
+With a judge check at threshold 0, every run passes and the scores are what count: the report
+lists them per side and the dashboard draws them on a 0-100 scale. `--keep` keeps every
+finished workspace, for `judge-noise`.
 Cliff now declares a model gap only when the baseline's upper bound is below `--gap-below`
 (default 0.2), so 0 of 3 is no longer read as "never".
 
