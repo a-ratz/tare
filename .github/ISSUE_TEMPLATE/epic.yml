@@ -1,5 +1,5 @@
 name: Epic
-description: A result worth one branch and one PR
+description: A result delivered in one branch and one PR
 labels: ["type:epic"]
 
 body:

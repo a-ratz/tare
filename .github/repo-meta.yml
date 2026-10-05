@@ -1,22 +1,22 @@
 description: >
-  Prove your coding agent starts with nothing of yours before you measure it: a clean room for
-  Claude Code and Codex that starts only when its probe reads tare: 0.00, so your evals measure the skill,
-  not your machine.
+  Prove your coding agent starts without your personal setup before you measure it. tare starts
+  Claude Code, Codex, Pi or the Antigravity CLI in an isolated room and checks the room before
+  every run, so your evals measure the skill, not your machine.
 topics:
-  # Tier 1: big traffic
+  # broad topics with high traffic
   - ai
   - llm
   - ai-agents
   - cli
   - developer-tools
-  # Tier 2: precise track (each topic has 500+ repositories on GitHub)
+  # narrow topics (each has 500+ repositories on GitHub)
   - llm-evaluation
   - agent-evaluation
   - evals
   - sandbox
   - reproducibility
   - benchmarking
-  # Tier 3: ecosystem
+  # the agents tare runs
   - claude-code
   - codex
   - coding-agents
