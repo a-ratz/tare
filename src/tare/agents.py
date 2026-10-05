@@ -452,7 +452,9 @@ class Antigravity:
     room_config = f"{ROOM_HOME}/.gemini/antigravity-cli"
     room_flags: list[str] = []
     yolo = ["--dangerously-skip-permissions"]
-    native_resume = True
+    # agy keeps a conversation as protobuf; a cut after a step cannot be placed, so Cliff and
+    # Swap continue it by handoff
+    native_resume = False
 
     def discover(self) -> Real:
         home = Path.home()
@@ -532,6 +534,41 @@ class Antigravity:
 
     def email(self, real: Real) -> str | None:
         return None  # the account's email and name did not reach the prompt
+
+    # unattended runs (Cliff, Swap)
+    def run_args(self, prompt: str, extra: list[str], hook: str | None = None) -> list[str]:
+        return ["--dangerously-skip-permissions", *extra, "-p", prompt, "--output-format", "stream-json"]
+
+    def prepare_hook(self, config: Path, hook: str):
+        """A global PostToolUse hook in the room's ~/.gemini/config. agy hands it the result's
+        stepIdx, which becomes the snapshot's id; agy expects {} back."""
+        command = f"""sed 's/"stepIdx": *\\([0-9]*\\)/"tool_use_id": "step-\\1"/' | {hook}; echo '{{}}'"""
+        (config.parent / "config").mkdir(parents=True, exist_ok=True)
+        (config.parent / "config" / "hooks.json").write_text(json.dumps({"tare-snapshot": {"PostToolUse": [
+            {"matcher": "", "hooks": [{"type": "command", "command": command, "timeout": 120}]}]}}))
+
+    def resume_args(self, session: str, prompt: str, extra: list[str]) -> list[str] | None:
+        return None
+
+    def session_file(self, home: Path) -> Path | None:
+        logs = sorted((home / ".gemini" / "antigravity-cli" / "brain").glob("*/.system_generated/logs/transcript_full.jsonl"),
+                      key=lambda p: p.stat().st_mtime)
+        return logs[-1] if logs else None
+
+    def trail(self, lines: list[str]) -> trails.Trail:
+        return trails.agy(lines)
+
+    def activity(self, event: dict) -> str | None:
+        """What one line of the live stream (--output-format stream-json) shows, for the dashboard."""
+        if event.get("event") == "result":
+            return "finished"
+        update = event.get("step_update") or {}
+        if update.get("step_type") == "tool" and update.get("state") == "ACTIVE":
+            detail = next(iter(((update.get("tool_info") or {}).get("parameters") or {}).values()), "")
+            return f"{update.get('tool_name')}: {str(detail).splitlines()[0][:90] if detail else ''}"
+        if update.get("step_type") == "agent_response" and (update.get("text_delta") or "").strip():
+            return "says: " + update["text_delta"].strip().splitlines()[0][:90]
+        return None
 
 
 AGENTS = {agent.name: agent for agent in (Claude(), Codex(), Pi(), Antigravity())}
