@@ -185,6 +185,17 @@ def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_
     r.leaks += [Finding("plugin", p["name"], p.get("path", "?"))
                 for p in room.init.get("plugins", []) if p.get("path") != "builtin"]
 
+    # custom agents, where the agent lists them (Codex): "<name>: {" and the description's first
+    # line, so that a built-in agent of the same name is not taken for the user's
+    if hasattr(agent, "custom_agents"):
+        folder, descriptions = agent.custom_agents(real)
+        roles = [re.compile(rf"^{re.escape(name)}: \{{\n{re.escape(line)}", re.M) for name, line in descriptions.items()]
+        if roles:
+            (r.seen if any(role.search(twin.text) for role in roles) else r.blind).append("agents")
+        n = sum(1 for role in roles if role.search(room.text))
+        if n:
+            r.leaks.append(Finding("agents", f"{n} agent{'s' if n != 1 else ''}", str(folder)))
+
     # the account email comes with subscription auth: declared, not a leak
     email = agent.email(real)
     if email and email in twin.text:

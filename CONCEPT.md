@@ -121,7 +121,7 @@ lines of your own files that the probe looks for in a request.
 | Agent | How the room is set up | Way to the fake model server | Kinds of context the dirty twin showed on the measuring machine |
 |---|---|---|---|
 | Claude Code | `CLAUDE_CONFIG_DIR` and `HOME` in the room, a copy of `.credentials.json`, `--strict-mcp-config --setting-sources project,local` | `ANTHROPIC_BASE_URL` | instructions, home path, MCP servers, skills, plugins, email, reach |
-| Codex | `CODEX_HOME` and `HOME` in the room, a copy of `auth.json` only, `--disable remote_plugin` | `-c openai_base_url=<server>/v1` keeps the ChatGPT login | instructions, memories, home path, skills, plugins, reach |
+| Codex | `CODEX_HOME` and `HOME` in the room, a copy of `auth.json` only, `--disable remote_plugin` | `-c openai_base_url=<server>/v1` keeps the ChatGPT login | instructions, memories, home path, skills, plugins, custom agents, reach |
 | Pi | `PI_CODING_AGENT_DIR` and `HOME` in the room, copies of `auth.json` and `models.json`, a minimal `settings.json`, no flags | a provider of its own (`tare`, api `anthropic-messages`), because Pi has no base-URL variable | instruction files above the project, extensions, home path, reach |
 | Antigravity CLI | `HOME` in the room, a copy of `antigravity-oauth-token` and the chosen model, no flags | `CLOUD_CODE_URL` | home path, reach. Global rules (`~/.gemini/GEMINI.md`) and global skills (`~/.gemini/config/skills/`) showed after copies were placed in the setup for the test, because the measuring machine had none. |
 
@@ -138,7 +138,10 @@ What each agent needed:
   group as that server's MCP tools (#109). The room has no `config.toml` or `hooks.json` of
   yours, so neither can come in. Codex reports nothing like Claude Code's init event, so the
   probe finds your plugins in the request's skills listing, where each plugin skill is a line
-  `- <plugin>:<skill>: …`. A fresh `CODEX_HOME` means
+  `- <plugin>:<skill>: …`. Your custom agents (`~/.codex/agents/`, a `.toml` file each) appear
+  as roles of the `spawn_agent` tool, `<name>: {` and the description. The probe matches the
+  name and the description's first line, so a built-in agent of the same name is not taken for
+  yours. A fresh `CODEX_HOME` means
   Codex's default model. Pass `-m` when you compare runs.
 - **Pi:** a fresh agent directory is clean on its own and keeps the project's `AGENTS.md`, so the
   room uses no flags. `--no-context-files` would drop the project's `AGENTS.md`. tare finds Pi's
