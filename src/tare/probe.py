@@ -79,6 +79,12 @@ def _mcp_prefixes(capture: Capture) -> set[str]:
     return set(MCP_TOOL.findall(capture.text + "\n" + "\n".join(capture.tools)))
 
 
+def _without_paths(text: str) -> str:
+    """Skill lines with their "(path)" removed: agy names each skill's file, and the room's
+    path (/home/tare/...) differs from the user's for the same skill."""
+    return re.sub(r" \([^)\n]*\)", "", text)
+
+
 def _server_prefix(name: str) -> str:
     return "mcp__" + re.sub(r"[^A-Za-z0-9_-]", "_", name) + "__"
 
@@ -145,18 +151,19 @@ def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_
     names = {s for s in twin.init.get("skills", []) if ":" in s and s.split(":")[0] not in builtin} | set(own)
     listed = {}
     for name in sorted(names):
-        # the skills listing has one "- name: description" line per skill
-        match = re.search(rf"^- {re.escape(name)}(?::.*)?$", twin.text, re.M)
+        # the skills listing has one "- name: description" line per skill ("- name (path): ..." in agy)
+        match = re.search(rf"^- {re.escape(name)}(?:[:( ].*)?$", twin.text, re.M)
         if match:
             namespace = name.split(":")[0] if ":" in name else None
             source = (str(own[name]) if namespace is None
                       else f"plugin {namespace}" if namespace in user_plugins else "login (account skills)")
-            listed[match.group(0)[:160]] = source
+            listed[_without_paths(match.group(0))[:160]] = source
     if names:
         (r.seen if listed else r.blind).append("skills")
     counts: dict[str, int] = {}
+    room_lines = _without_paths(room.text)
     for line, source in listed.items():
-        if line in room.text:
+        if line in room_lines:
             counts[source] = counts.get(source, 0) + 1
     r.leaks += [Finding("skills", f"{n} skill{'s' if n != 1 else ''}", source) for source, n in sorted(counts.items())]
     if user_plugins:
@@ -210,7 +217,11 @@ def probe(agent, real: Real, project: Path) -> Reading:
         with Fake() as fake:
             args, env = agent.probe(fake.url)
             with agent.twin(real, fake.url) as extra:
-                return _capture(agent, [str(real.binary), *args], twin_env | env | extra, project, fake)
+                env = twin_env | env | extra
+                argv = [str(real.binary), *args]
+                if hasattr(agent, "twin_argv"):  # a twin that must not write into the real setup
+                    argv = agent.twin_argv(argv, env)
+                return _capture(agent, argv, env, project, fake)
 
     def in_room(home: Path, flags: list[str]) -> Capture:
         with Fake() as fake:

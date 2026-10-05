@@ -156,6 +156,35 @@ def pi(lines: list[str]) -> Trail:
     return trail
 
 
+def agy(lines: list[str]) -> Trail:
+    """Antigravity CLI transcript (transcript_full.jsonl) to a trail. A planner response carries the
+    tool calls; each result is a step entry of its own, whose step_index the snapshot hook sees."""
+    trail = Trail()
+    waiting: list[str] = []  # the calls of the last planner response without a result yet
+    ids: list[str] = []
+    done: list[str] = []
+    for line in lines:
+        entry = json.loads(line)
+        kind = entry.get("type")
+        if kind == "PLANNER_RESPONSE":
+            if (entry.get("content") or "").strip():
+                trail.events.append(Event("say", entry["content"].strip()))
+            for call in entry.get("tool_calls") or []:
+                arguments = call.get("args") or {}
+                detail = str(arguments.get("CommandLine") or arguments.get("TargetFile") or arguments.get("AbsolutePath")
+                             or json.dumps(arguments))
+                trail.events.append(Event("call", _short(detail), call.get("name", "?")))
+                waiting.append(f"{call.get('name', '?')} {detail.splitlines()[0][:70] if detail else ''}".strip())
+        elif waiting and kind != "USER_INPUT":
+            trail.events.append(Event("result", _short(_text(entry.get("content")))))
+            ids.append(f"step-{entry.get('step_index')}")
+            done.append(waiting.pop(0))
+            if not waiting:  # every call of the planner response has its result: the step ends here
+                trail.steps.append(Step(ids, len(trail.events), None, " + ".join(done)))
+                ids, done = [], []
+    return trail
+
+
 def render(task: str, events: list[Event], workspace_only: bool = False) -> str:
     """The handoff prompt: the task and what happened so far, the same for every agent."""
     head = ("You are taking over a task in /work. The workspace is exactly as the previous session "

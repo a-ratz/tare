@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import trail as trails
+from .fake import FAKE_MODEL
 from .room import ROOM_HOME, ROOM_PROJECT, TareError
 
 PROMPT = "say ok"
@@ -443,4 +444,133 @@ export default function (pi: any) {{
         return None
 
 
-AGENTS = {agent.name: agent for agent in (Claude(), Codex(), Pi())}
+class Antigravity:
+    """The Antigravity CLI (`agy`). Its context classes come from experiments/dirty-twin-agy:
+    global rules in ~/.gemini/GEMINI.md, global skills in ~/.gemini/config/skills/; files above
+    the project, ~/.agents/ and ~/.gemini/skills/ were not read."""
+
+    name = "agy"
+    credentials = "antigravity-oauth-token"
+    room_config = f"{ROOM_HOME}/.gemini/antigravity-cli"
+    room_flags: list[str] = []
+    yolo = ["--dangerously-skip-permissions"]
+    # agy keeps a conversation as protobuf; a cut after a step cannot be placed, so Cliff and
+    # Swap continue it by handoff
+    native_resume = False
+
+    def discover(self) -> Real:
+        home = Path.home()
+        return Real(home, home / ".gemini" / "antigravity-cli", _which("agy"))
+
+    def token_lifetime(self, real: Real) -> float:
+        """A Google OAuth refresh does not rotate the refresh token (measured: digests before and
+        after a refresh in a room), so a room may refresh its own copy without harm."""
+        if not (real.config / self.credentials).exists():
+            raise _lifetime_error(real.config / self.credentials)
+        return float("inf")
+
+    def seed(self, real: Real, config: Path):
+        # the login and the chosen model; nothing else of the setup
+        shutil.copyfile(real.config / self.credentials, config / self.credentials)
+        (config / self.credentials).chmod(0o600)
+        try:
+            model = json.loads((real.config / "settings.json").read_text()).get("model")
+        except (OSError, ValueError):
+            model = None
+        (config / "settings.json").write_text(json.dumps({"model": model} if model else {}))
+
+    def room_env(self) -> dict[str, str]:
+        return {}  # agy finds its setup under HOME
+
+    def binds(self, real: Real) -> tuple[list[str], str]:
+        return ["--ro-bind", str(real.binary), "/opt/agent/agy"], "/opt/agent/agy"
+
+    # the probe: CLOUD_CODE_URL points agy at the fake, which offers one model
+    def probe(self, fake_url: str) -> tuple[list[str], dict[str, str]]:
+        return (["-p", PROMPT, "--output-format", "stream-json", "--model", FAKE_MODEL],
+                {"CLOUD_CODE_URL": fake_url})
+
+    def prepare_probe(self, config: Path, fake_url: str):
+        pass
+
+    @contextmanager
+    def twin(self, real: Real, fake_url: str):
+        """The dirty twin sees the real setup, but agy writes into ~/.gemini on every run (its
+        conversations, caches, onboarding state). So it runs with an overlay over ~/.gemini
+        whose writes go to a tmpfs that dies with the run; see twin_argv."""
+        mount = tempfile.mkdtemp(prefix="tare-agy-twin-")
+        try:
+            yield {"TARE_TWIN_MOUNT": mount}
+        finally:
+            shutil.rmtree(mount, ignore_errors=True)
+
+    def twin_argv(self, argv: list[str], env: dict[str, str], plant: str = "") -> list[str]:
+        """Wrap the twin's command: as mapped root in a user and mount namespace, put a tmpfs on
+        the mount point and an overlay over ~/.gemini, then run agy as the user's own uid.
+        `plant` is shell run inside the overlay first (experiments only)."""
+        mount, gemini = env.pop("TARE_TWIN_MOUNT"), Path.home() / ".gemini"
+        script = (f'mount -t tmpfs tmpfs "{mount}" && mkdir "{mount}/u" "{mount}/w" && '
+                  f'mount -t overlay overlay -o lowerdir="{gemini}",upperdir="{mount}/u",workdir="{mount}/w" "{gemini}" && '
+                  f'{plant + " && " if plant else ""}'
+                  f'exec unshare --user --map-user={os.getuid()} --map-group={os.getgid()} -- "$@"')
+        return ["unshare", "--user", "--map-root-user", "--mount", "/bin/sh", "-c", script, "sh", *argv]
+
+    def capture(self, stdout: str, requests: list[dict]) -> Capture | None:
+        main = next((r for r in requests if (r.get("request") or {}).get("tools")), None)
+        if main is None:
+            return None
+        request = main["request"]
+        text = "\n".join(strings({k: request.get(k) for k in ("systemInstruction", "contents", "tools")}))
+        tools = {d["name"] for t in request["tools"] for d in t.get("functionDeclarations", [])}
+        init = next((e.get("init", {}) for e in events(stdout) if e.get("event") == "init"), {})
+        return Capture(text, tools, init)
+
+    def instructions(self, real: Real) -> Path:
+        return real.home / ".gemini" / "GEMINI.md"  # arrives as <RULE[user_global]>
+
+    def skill_dirs(self, real: Real) -> list[Path]:
+        return [real.home / ".gemini" / "config" / "skills"]
+
+    def extra_markers(self, real: Real) -> list[tuple[str, Path]]:
+        return []
+
+    def email(self, real: Real) -> str | None:
+        return None  # the account's email and name did not reach the prompt
+
+    # unattended runs (Cliff, Swap)
+    def run_args(self, prompt: str, extra: list[str], hook: str | None = None) -> list[str]:
+        return ["--dangerously-skip-permissions", *extra, "-p", prompt, "--output-format", "stream-json"]
+
+    def prepare_hook(self, config: Path, hook: str):
+        """A global PostToolUse hook in the room's ~/.gemini/config. agy hands it the result's
+        stepIdx, which becomes the snapshot's id; agy expects {} back."""
+        command = f"""sed 's/"stepIdx": *\\([0-9]*\\)/"tool_use_id": "step-\\1"/' | {hook}; echo '{{}}'"""
+        (config.parent / "config").mkdir(parents=True, exist_ok=True)
+        (config.parent / "config" / "hooks.json").write_text(json.dumps({"tare-snapshot": {"PostToolUse": [
+            {"matcher": "", "hooks": [{"type": "command", "command": command, "timeout": 120}]}]}}))
+
+    def resume_args(self, session: str, prompt: str, extra: list[str]) -> list[str] | None:
+        return None
+
+    def session_file(self, home: Path) -> Path | None:
+        logs = sorted((home / ".gemini" / "antigravity-cli" / "brain").glob("*/.system_generated/logs/transcript_full.jsonl"),
+                      key=lambda p: p.stat().st_mtime)
+        return logs[-1] if logs else None
+
+    def trail(self, lines: list[str]) -> trails.Trail:
+        return trails.agy(lines)
+
+    def activity(self, event: dict) -> str | None:
+        """What one line of the live stream (--output-format stream-json) shows, for the dashboard."""
+        if event.get("event") == "result":
+            return "finished"
+        update = event.get("step_update") or {}
+        if update.get("step_type") == "tool" and update.get("state") == "ACTIVE":
+            detail = next(iter(((update.get("tool_info") or {}).get("parameters") or {}).values()), "")
+            return f"{update.get('tool_name')}: {str(detail).splitlines()[0][:90] if detail else ''}"
+        if update.get("step_type") == "agent_response" and (update.get("text_delta") or "").strip():
+            return "says: " + update["text_delta"].strip().splitlines()[0][:90]
+        return None
+
+
+AGENTS = {agent.name: agent for agent in (Claude(), Codex(), Pi(), Antigravity())}

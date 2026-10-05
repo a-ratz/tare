@@ -1,7 +1,8 @@
 """A fake model endpoint that keeps what the CLI sends.
 
 The CLI under test is pointed at it: Claude Code with ANTHROPIC_BASE_URL (Anthropic
-Messages API), Codex with `-c openai_base_url=...` (OpenAI Responses API). Every request
+Messages API), Codex with `-c openai_base_url=...` (OpenAI Responses API), the Antigravity
+CLI with CLOUD_CODE_URL (Google's Cloud Code `v1internal` API). Every request
 body is kept in memory; headers are never stored, so the login token never leaves the
 request. By default each turn is answered with the text "ok", so the CLI ends its loop at
 once; a `respond` policy can script tool calls instead (Anthropic Messages only).
@@ -13,6 +14,25 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 OK = [{"type": "text", "text": "ok"}]
+
+# Cloud Code (Antigravity CLI): the model the fake offers, and the answers to the calls
+# around a turn. The eligibility check needs a tier and a project; a model must be listed
+# to be selectable. Everything else is answered with {}.
+FAKE_MODEL = "tare-fake"
+_GEMINI_OK = {"candidates": [{"content": {"role": "model", "parts": [{"text": "ok"}]}, "finishReason": "STOP"}],
+              "usageMetadata": {"promptTokenCount": 1, "candidatesTokenCount": 1, "totalTokenCount": 2}}
+_CLOUD_CODE = {
+    "loadCodeAssist": {"currentTier": {"id": "free-tier", "name": "Free"}, "cloudaicompanionProject": "tare-fake",
+                       "allowedTiers": [{"id": "free-tier", "name": "Free", "isDefault": True}]},
+    "fetchAvailableModels": {
+        "defaultAgentModelId": FAKE_MODEL,
+        "agentModelSorts": [{"displayName": "Recommended", "groups": [{"modelIds": [FAKE_MODEL]}]}],
+        "models": {FAKE_MODEL: {"displayName": "tare fake", "recommended": True, "model": "MODEL_PLACEHOLDER_M318",
+                                "apiProvider": "API_PROVIDER_GOOGLE_GEMINI", "modelProvider": "MODEL_PROVIDER_GOOGLE",
+                                "maxTokens": 1048576, "maxOutputTokens": 65536}}},
+    "countTokens": {"totalTokens": 1},
+    "generateContent": {"response": _GEMINI_OK},
+}
 
 
 def _stop_reason(blocks: list[dict]) -> str:
@@ -106,9 +126,32 @@ class Fake:
             def do_GET(self):
                 self._not_found()
 
+            def _body(self) -> bytes:
+                if "chunked" not in (self.headers.get("transfer-encoding") or ""):
+                    return self.rfile.read(int(self.headers.get("content-length") or 0))
+                parts = []  # the Antigravity CLI sends its model requests chunked
+                while size := int(self.rfile.readline().split(b";")[0].strip() or b"0", 16):
+                    parts.append(self.rfile.read(size))
+                    self.rfile.readline()
+                self.rfile.readline()
+                return b"".join(parts)
+
+            def _cloud_code(self, method: str, raw: bytes):
+                if method != "streamGenerateContent":
+                    return self._json(200, _CLOUD_CODE.get(method, {}))
+                fake.requests.append(json.loads(raw))
+                data = f"data: {json.dumps({'response': _GEMINI_OK})}\r\n\r\n".encode()
+                self.send_response(200)
+                self.send_header("content-type", "text/event-stream")
+                self.send_header("content-length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
             def do_POST(self):
-                raw = self.rfile.read(int(self.headers.get("content-length") or 0))
+                raw = self._body()
                 path = self.path.split("?")[0]
+                if path.startswith("/v1internal:"):
+                    return self._cloud_code(path.split(":", 1)[1], raw)
                 if path.endswith("/messages/count_tokens"):
                     return self._json(200, {"input_tokens": 1})
                 if not path.endswith(("/v1/messages", "/responses")):

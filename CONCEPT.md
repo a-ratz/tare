@@ -117,6 +117,7 @@ end to end on 2026-10-04 (WSL2); the notes below are measured unless marked othe
 | Claude Code | `CLAUDE_CONFIG_DIR`, `HOME`, `--strict-mcp-config`, `--setting-sources project,local` | connectors, account skills, email | `--tools ""` | stream-json `system/init` lists tools, MCP servers, skills |
 | Codex | `CODEX_HOME`, `HOME` (copy only `auth.json`), `--disable remote_plugin` | `~/.agents/skills` outside `CODEX_HOME`, account plugins | `-s read-only`, `-c web_search="disabled"` | `--json` events (messages, web searches, usage) |
 | Pi | `PI_CODING_AGENT_DIR`, `HOME` (copy `auth.json`, `models.json`, a minimal `settings.json`), `--no-extensions --no-skills --no-context-files --no-session` | extensions and packages listed in `settings.json` | `--no-tools` | `--mode json` includes the system prompt, sectioned: a free context probe |
+| Antigravity CLI (`agy`) | `HOME` (copy `antigravity-oauth-token` and the chosen model); the probe sets `CLOUD_CODE_URL` | none seen: no account email or name in the prompt | – | stream-json `init` lists the tools; the context only through the fake ([measured](experiments/dirty-twin-agy/RESULTS.md)) |
 | Copilot CLI | `HOME` with a `.copilot/config.json` holding only the login keys, `--no-custom-instructions --disable-builtin-mcps --no-remote` | the real config also carries installed plugins and trusted folders | `--available-tools <a name that is no tool>` | `--output-format json` events |
 
 Traps found while sealing them:
@@ -261,7 +262,21 @@ Tare is meant to sit underneath such frameworks: their exam, Tare's clean room.
       directories are their own class now. Claude Code's print mode, which the probe uses, did
       not load `~/AGENTS.md`; Pi loaded it. So the probe vouches for print mode only. A room
       has no parent directories, so the class cannot leak into one.
-11. Gemini CLI (epic #34), paused until the machine's Google login is renewed.
+11. ~~Antigravity CLI~~ (epic #34, retargeted from the Gemini CLI: Google's official CLI now).
+    Done 2026-10-05, agy 1.2.16 ([dirty twin](experiments/dirty-twin-agy/RESULTS.md)).
+    - `CLOUD_CODE_URL` points agy at the fake, which speaks Cloud Code's `v1internal` API and
+      lists one model in a sort group (agy rejects a model that is not in one).
+    - agy writes into `~/.gemini` on every run, so its dirty twin runs with an overlay over
+      `~/.gemini` (a user namespace mounts it; writes go to a tmpfs that dies with the run).
+      **Measured:** `~/.gemini` kept its fingerprint through every twin.
+    - **Measured classes:** global rules from `~/.gemini/GEMINI.md`, global skills from
+      `~/.gemini/config/skills/`. Not read: `~/.gemini/config/rules/`, `~/.agents/`,
+      `~/.gemini/skills/`, instruction files above the project. A Google OAuth refresh in the
+      room did not rotate the refresh token, so a room may refresh its own copy.
+    - The room needs no flags. A spike read 3 leaks with their sources once skill lines were
+      compared without their paths (agy names each skill's file).
+    - Capsules: a global PostToolUse hook in the room's `~/.gemini/config/hooks.json`; the
+      trail comes from `transcript_full.jsonl`; Cliff and Swap continue agy by handoff.
 12. ~~Calibrate before you search~~. Done 2026-10-05 (epic #52).
     - `tare calibrate` gives fresh-start pass rates per side.
     - Cliff samples the baseline until a model gap is clear (upper bound below 0.2).

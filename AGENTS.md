@@ -1,6 +1,6 @@
 # tare
 
-tare starts a coding agent (Claude Code, Codex or Pi) in a room where nothing of the user's came along, and proves it
+tare starts a coding agent (Claude Code, Codex, Pi or the Antigravity CLI) in a room where nothing of the user's came along, and proves it
 before the run. The room is a bubblewrap sandbox: an empty home, a fresh copy of the login, a
 cleared environment. The proof is a probe that asks the agent nothing. The real CLI runs in the
 room against a fake model endpoint that keeps the request, which is the context the harness
@@ -26,7 +26,7 @@ machine instead of the skill.
 | `src/tare/recipe.py` | recipes: how to repeat a run, and what has changed since |
 | `src/tare/calibrate.py` | calibrate: fresh-start pass rates per side |
 | `src/tare/judge.py` | the judge check: render in a room, score in a blind room, measure the judge's noise |
-| `src/tare/fake.py` | the fake model endpoint (Anthropic Messages for Claude Code, OpenAI Responses for Codex) |
+| `src/tare/fake.py` | the fake model endpoint (Anthropic Messages for Claude Code and Pi, OpenAI Responses for Codex, Cloud Code for the Antigravity CLI) |
 | `tests/` | pytest; needs no agent, no login and no network |
 | `experiments/` | pre-registered measurements (`PLAN.md` before the runs, `RESULTS.md` after) |
 | `prototypes/` | the first bwrap room, kept as the record |
@@ -40,8 +40,8 @@ on `main`, and a PR merges only when they are green.
 CI cannot run the real thing. It needs bubblewrap and a logged-in agent. So before a PR that
 touches the room or the probe, run it on the machine:
 
-1. `uv run tare probe claude`, `uv run tare probe codex` and `uv run tare probe pi` must read
-   `tare: 0.00` and show every control class.
+1. `uv run tare probe claude`, `codex`, `pi` and `agy` must read `tare: 0.00` and show every
+   control class. agy's dirty twin must leave `~/.gemini` unchanged.
 2. A spike must fail the probe: plant known dirt into a room's own copy (instructions, a skill,
    an environment variable) and check that each piece is named with its source.
 3. Before a PR that touches Cliff: `uv run experiments/cliff-scripted/world.py` must report
@@ -101,8 +101,8 @@ test, a fix next door) becomes a new issue or a question, not part of the PR.
   where the secret is read (`jq -j '.field' file | sha256sum`), compare files directly, and print
   names, not values.
 - The fake endpoint keeps request bodies, never headers: the login token travels in a header.
-- Never change the user's real configuration (`~/.claude`, `~/.claude.json`, `~/.codex`). Plant
-  dirt only into a room's own copy.
+- Never change the user's real configuration (`~/.claude`, `~/.claude.json`, `~/.codex`, `~/.pi`,
+  `~/.gemini`). Plant dirt only into a room's own copy, or into agy's twin overlay.
 - The dirty twin starts the real CLI in the real setup, and the user's hooks fire. Run it only
   through `tare probe` or an experiment.
 

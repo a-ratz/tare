@@ -14,7 +14,7 @@
 [![Version 0.1.0][version-shield]][version-url]
 [![Python 3.11+][python-shield]][python-url]
 [![Linux | WSL][platform-shield]][platform-url]
-[![Claude Code | Codex | Pi][agent-shield]][agent-url]
+[![Claude Code | Codex | Pi | Antigravity][agent-shield]][agent-url]
 
 </div>
 
@@ -39,8 +39,8 @@ with Claude Code, the login alone brings your connectors (mail, calendar, docume
 account's skills and your email into the session. Eval frameworks assume that you provide a
 clean runtime, and nothing checks that you did.
 
-If you run skill evals, A/B comparisons or agent benchmarks with Claude Code, Codex or Pi on
-your own machine, tare is for you.
+If you run skill evals, A/B comparisons or agent benchmarks with Claude Code, Codex, Pi or the
+Antigravity CLI on your own machine, tare is for you.
 
 ## Features
 
@@ -56,7 +56,7 @@ your own machine, tare is for you.
 - **Keeps your own session logged in.** Each run gets a fresh copy of the login, removed
   afterwards. tare refuses to start when that copy would have to refresh, because a refresh
   could log out your real session.
-- **Works like the agent you know.** Claude Code, Codex or Pi, interactive or one-shot: all of
+- **Works like the agent you know.** Claude Code, Codex, Pi or Antigravity, interactive or one-shot: all of
   the agent's arguments pass through, and your project is mounted at `/work`.
 - **Compares skills, plugins or models in one call.** `tare calibrate` runs every side from
   fresh starts in rooms of their own, each with its own prompt if it needs one, and reports pass
@@ -105,7 +105,7 @@ This is the output of a real run, with only the home path shortened. Then
 |---|---|
 | Linux or WSL2 | the room is built with user namespaces |
 | [bubblewrap](https://github.com/containers/bubblewrap) | `sudo apt install bubblewrap` |
-| Claude Code, Codex or Pi | on `PATH`, logged in; Codex installed under `/usr` (`npm install -g @openai/codex`) |
+| Claude Code, Codex, Pi or the Antigravity CLI (`agy`) | on `PATH`, logged in; Codex installed under `/usr` (`npm install -g @openai/codex`) |
 | [uv](https://docs.astral.sh/uv/) | Python 3.11+ |
 
 From a checkout, either run it in place (`uv run tare ...`) or put `tare` on your `PATH`:
@@ -126,6 +126,7 @@ tare claude --project ../other     # another project directory (default: the cur
 
 tare probe codex                   # the same for Codex
 tare probe pi                      # and for Pi
+tare probe agy                     # and for the Antigravity CLI
 tare codex -- exec -m MODEL "..."  # one-shot Codex run; arguments after -- go to codex
 ```
 
@@ -183,8 +184,9 @@ scripted model whose cliff is known: step 4 writes the wrong answer into a note.
   tails     18 of a budget of 30
 ```
 
-Cliff works with Claude Code, Codex and Pi (`tare cliff pi ...`). All three resume their own
-sessions natively; an agent that cannot is continued by handoff. Each tail is a real agent
+Cliff works with Claude Code, Codex, Pi and the Antigravity CLI (`tare cliff pi ...`). The
+first three resume their own sessions natively; the Antigravity CLI keeps its conversations as
+protobuf, so it is continued by handoff. Each tail is a real agent
 run, so a search costs what its tails cost.
 
 ### Calibrate first
@@ -291,14 +293,11 @@ control, so tare knows it can see your context at all. Third, a plain script ins
 looks for your files and inherited secrets.
 
 → [Concept, the three layers and the measurements behind them](CONCEPT.md)
-→ [The dirty-twin experiments that decided the probe design: Claude Code](experiments/dirty-twin/RESULTS.md), [Codex](experiments/dirty-twin-codex/RESULTS.md)
+→ [The dirty-twin experiments that decided the probe design: Claude Code](experiments/dirty-twin/RESULTS.md), [Codex](experiments/dirty-twin-codex/RESULTS.md), [Antigravity CLI](experiments/dirty-twin-agy/RESULTS.md)
 
 ## Roadmap
 
-Next: [Gemini CLI][epic-gemini], with its own dirty-twin measurement, room and probe. A room
-for macOS is an idea, not yet planned.
-
-[epic-gemini]: https://github.com/AndreRatzenberger/tare/issues/34
+A room for macOS is an idea, not yet planned.
 
 ## Contributing
 
@@ -322,5 +321,5 @@ Crafted with [Readme Craft](https://github.com/motiful/readme-craft)
 [python-url]: https://www.python.org/
 [platform-shield]: https://img.shields.io/badge/platform-Linux%20%7C%20WSL-555555.svg
 [platform-url]: #install
-[agent-shield]: https://img.shields.io/badge/agents-Claude%20Code%20%7C%20Codex%20%7C%20Pi-D97757.svg
+[agent-shield]: https://img.shields.io/badge/agents-Claude%20Code%20%7C%20Codex%20%7C%20Pi%20%7C%20Antigravity-D97757.svg
 [agent-url]: #install
