@@ -198,7 +198,8 @@ def run_check(check: str, work: Path, timeout: float = 600) -> tuple[bool, str]:
                               stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired:
         return False, f"check timed out after {int(timeout)} s"
-    return proc.returncode == 0, f"check exit {proc.returncode}"
+    last = next((line.strip() for line in reversed(proc.stdout.splitlines()) if line.strip()), "")
+    return proc.returncode == 0, f"check exit {proc.returncode}" + (f": {last[:120]}" if last else "")
 
 
 def changed_files(before: Path, after: Path) -> list[str]:

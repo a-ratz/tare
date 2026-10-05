@@ -5,6 +5,8 @@
   tare cliff {claude,codex,pi} PROMPT --check CMD [--tails N] [--budget N] [--jobs N] [-- AGENT_ARGS...]
   tare swap PROMPT --check CMD [--a claude] [--b codex] [--a-args ARGS] [--b-args ARGS] [--cuts 0,0.5,1]
   tare calibrate PROMPT --check CMD --side "claude --model haiku" --side "codex" [--runs N]
+  tare judge [DIR] --rubric FILE --threshold N [--judge "claude --model sonnet"]   a check: exit 0 at or above N
+  tare judge-noise DIR... --rubric FILE --times K [--threshold N]                  the judge's own spread
   tare watch DIR [--port N]      the live dashboard of a Cliff or Swap run, also a finished one
   tare rerun DIR [--out DIR]     repeat a run from its recipe
 """
@@ -56,6 +58,8 @@ def main(argv: list[str] | None = None) -> int:
         return _watch(argv[1:])
     if argv[:1] == ["rerun"]:
         return _rerun(argv[1:])
+    if argv[:1] in (["judge"], ["judge-noise"]):
+        return _judge(argv[0], argv[1:])
     passthrough: list[str] = []
     if "--" in argv:
         at = argv.index("--")
@@ -112,6 +116,8 @@ def main(argv: list[str] | None = None) -> int:
     for parser in (k, w, c):
         parser.add_argument("--port", type=int, default=8777, help="dashboard port on localhost (default 8777)")
     sub.add_parser("watch", help="the live dashboard of a run directory (tare watch DIR)")
+    sub.add_parser("judge", help="score a page by a rubric in a blind room; usable as --check")
+    sub.add_parser("judge-noise", help="score the same pages repeatedly: the judge's own spread")
     sub.add_parser("rerun", help="repeat a run from its recipe (tare rerun DIR)")
     args = ap.parse_args(argv)
     if args.command == "swap":
@@ -203,6 +209,31 @@ def _watch(argv: list[str]) -> int:
     except KeyboardInterrupt:
         pass
     return 0
+
+
+def _judge(command: str, argv: list[str]) -> int:
+    from . import judge as judging
+    ap = argparse.ArgumentParser(prog=f"tare {command}")
+    ap.add_argument("dirs", type=Path, nargs="*" if command == "judge" else "+", default=[Path.cwd()])
+    ap.add_argument("--rubric", type=Path, required=True)
+    ap.add_argument("--threshold", type=float, required=command == "judge")
+    ap.add_argument("--times", type=int, default=10, help="scores per page (judge-noise; default 10)")
+    ap.add_argument("--page", default="index.html", help="the page to render (default index.html)")
+    ap.add_argument("--judge", default="claude --model sonnet", help="the judge agent and its arguments")
+    args = ap.parse_args(argv)
+    name, *extra = shlex.split(args.judge)
+    try:
+        if command == "judge":
+            score, reason = judging.judge(args.dirs[0].resolve(), args.rubric.resolve(), args.page, name, extra)
+            print(f"score {score} (threshold {args.threshold:g}): {reason}")
+            return 0 if score >= args.threshold else 1
+        text, clear = judging.noise([d.resolve() for d in args.dirs], args.rubric.resolve(), args.times,
+                                    args.threshold, args.page, name, extra)
+        print(text, end="")
+        return 0 if clear else 1
+    except (RuntimeError, TareError) as err:
+        print(f"tare {command}: {err}")
+        return 2
 
 
 def _rerun(argv: list[str]) -> int:
