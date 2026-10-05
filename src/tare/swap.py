@@ -80,7 +80,7 @@ def swap(a: Side, b: Side, project: Path, prompt: str, check: str, out: Path, *,
     journal = journal or Journal(None)
     journal("start", kind="swap", task=prompt, check=check, project=str(project), tails=tails, cuts=cuts,
             sides={s.key: {"agent": s.agent.name, "args": s.args, "dir": s.out.name} for s in (a, b)})
-    journal("phase", phase="recording")
+    journal("phase", phase="original runs")
     with ThreadPoolExecutor(max_workers=2) as pool:
         list(pool.map(lambda s: caps.record(s.agent, s.real, project, s.out, prompt, s.args, env), (a, b)))
     for side in (a, b):
@@ -155,10 +155,10 @@ def report(sides: dict[str, Side], plan: list[Cut], prompt: str, check: str, pro
     lines = [f"tare swap · a: {who(sides['a'])} · b: {who(sides['b'])} · {project}",
              f"  task      {prompt}", f"  check     {check}",
              f"  run a     {sides['a'].original}", f"  run b     {sides['b'].original}",
-             f"  handoff   {'workspace only' if workspace_only else 'workspace and the rendered trail'}"]
+             f"  handoff   {'workspace only' if workspace_only else 'workspace and a written summary of the steps so far'}"]
     dominant, deciding = [], []
     for cut in plan:
-        lines += ["", f"  cut {cut.fraction:.2f}: room a at step {cut.steps['a']}, room b at step {cut.steps['b']}",
+        lines += ["", f"  cut {cut.fraction:.2f}: workspace a at step {cut.steps['a']}, workspace b at step {cut.steps['b']}",
                   "                agent a          agent b"]
         for room in "ab":
             row = []
@@ -166,48 +166,50 @@ def report(sides: dict[str, Side], plan: list[Cut], prompt: str, check: str, pro
                 x, n = cut.count(room, agent)
                 lo, hi = wilson(x, n)
                 row.append(f"{x}/{n} {lo:.2f}-{hi:.2f}")
-            lines.append(f"    room {room}      {row[0]:<17}{row[1]}")
+            lines.append(f"    workspace {room} {row[0]:<17}{row[1]}")
         state, model = cut.state(), cut.model()
-        lines.append(f"    state effect  {_sign(state)}  (room a better than room b)")
-        lines.append(f"    model effect  {_sign(model)}  (agent a better than agent b)")
+        lines.append(f"    state effect  {_sign(state)}  (positive: workspace a better)")
+        lines.append(f"    model effect  {_sign(model)}  (positive: agent a better)")
         for side in "ab":
             cost = cut.foreignness(side)
             if cost:
                 native = cut.native[side]
-                lines.append(f"    foreignness {side} {_sign(cost)}  (native resume {sum(native)}/{len(native)} "
-                             "against the handoff on its own room)")
+                lines.append(f"    handoff cost {side} {_sign(cost)}  (own session {sum(native)}/{len(native)}, "
+                             "minus the handoff, in its own workspace)")
         dominant.append(_leader(state, model))
         deciding.append(state if dominant[-1] in ("room", "tie") else model)
     lines.append("")
     first = plan[0]
     if first.fraction == 0:
         _, lo, hi = first.state()
-        lines.append("  null check   " + ("passed: no state effect at cut 0, where both rooms are the untouched project"
-                                          if lo <= 0 <= hi else
-                                          f"FAILED: a state effect at cut 0 ({_sign(first.state())}), where both rooms "
-                                          "are the same; the effects above are not to be trusted"))
+        lines.append("  null check   " + ("passed: no state effect at cut 0, where both workspaces are the untouched "
+                                          "project" if lo <= 0 <= hi else
+                                          f"FAILED: a state effect at cut 0 ({_sign(first.state())}), where both "
+                                          "workspaces are the same. Do not trust the effects above."))
     shown = [i for i, d in enumerate(dominant) if d != "neither"]
     late = next((i for i, d in enumerate(dominant) if d in ("room", "tie") and "model" in dominant[:i]), None)
     if late is not None and dominant[late] == "tie" and "room" not in dominant:
-        verdict = (f"the model explains more than the room until cut {plan[late - 1].fraction:.2f}; from cut "
-                   f"{plan[late].fraction:.2f} on, room and model weigh alike")
+        verdict = (f"The model explains more than the workspace until cut {plan[late - 1].fraction:.2f}. From cut "
+                   f"{plan[late].fraction:.2f} on, workspace and model explain about the same.")
     elif "room" in dominant and "model" in dominant[:dominant.index("room")]:
         at = dominant.index("room")
         before = max(i for i in range(at) if dominant[i] == "model")
-        verdict = (f"blame passes from the model to the room between cut {plan[before].fraction:.2f} "
-                   f"and cut {plan[at].fraction:.2f}")
+        verdict = (f"Blame passes from the model to the workspace between cut {plan[before].fraction:.2f} "
+                   f"and cut {plan[at].fraction:.2f}.")
     elif not shown:
-        verdict = "neither the room nor the model makes a difference at any cut"
+        verdict = "Neither the workspace nor the model makes a difference at any cut."
     elif {dominant[i] for i in shown} == {"model"}:
-        verdict = "the model explains more than the room " + ("at every cut" if len(shown) == len(plan)
-                                                               else "wherever there is an effect")
+        verdict = "The model explains more than the workspace " + ("at every cut." if len(shown) == len(plan)
+                                                                    else "wherever there is an effect.")
     elif {dominant[i] for i in shown} == {"room"}:
-        verdict = "the room explains more than the model " + ("at every cut" if len(shown) == len(plan)
-                                                               else "wherever there is an effect")
+        verdict = "The workspace explains more than the model " + ("at every cut." if len(shown) == len(plan)
+                                                                    else "wherever there is an effect.")
     else:
-        verdict = "no clear transfer: " + ", ".join(f"{c.fraction:.2f} {d}" for c, d in zip(plan, dominant))
+        names = {"room": "workspace", "model": "model", "tie": "both alike", "neither": "neither"}
+        verdict = "No single pattern. What explains more, per cut: " + ", ".join(
+            f"{c.fraction:.2f} {names[d]}" for c, d in zip(plan, dominant)) + "."
     if any(deciding[i][1] <= 0 <= deciding[i][2] for i in shown):
-        verdict += "; some deciding intervals still include zero, more tails would firm this up"
+        verdict += " The intervals behind this verdict include zero. More tails would settle it."
     lines.append(f"  verdict      {verdict}")
     lines.append(f"  tails        {spent}")
     return lines

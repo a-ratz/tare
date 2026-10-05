@@ -68,8 +68,8 @@ def test_dirty_room_names_every_leak_and_its_source(tmp_path):
     reading = score(Claude(), real, twin, dirty, reach_in, f"path {tmp_path}/.ssh\n")
     found = {(f.kind, f.what, f.source) for f in reading.leaks}
     assert ("instructions", "global instructions", str(real.config / "CLAUDE.md")) in found
-    assert ("home path", f"{tmp_path}/", "the user's files") in found
-    assert ("mcp", "claude_ai_Gmail", "login (claude.ai connector)") in found
+    assert ("home path", f"{tmp_path}/", "your files") in found
+    assert ("mcp", "claude_ai_Gmail", "connected account (login)") in found
     assert ("mcp", "qmd", "MCP server") in found
     assert ("skills", "1 skill", "plugin myplugin") in found
     assert ("skills", "1 skill", "login (account skills)") in found

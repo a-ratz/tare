@@ -74,4 +74,4 @@ def test_extension_tools_and_parent_files_are_named(tmp_path):
     assert clean.zero and "extensions" in clean.seen and "parent files" in clean.seen
     dirty = score(Pi(), r, twin, Capture(f"{rule}", {"bash", "read", "web_search"}, {}), "", "", bare=bare, project=project)
     found = {(f.kind, f.what) for f in dirty.leaks}
-    assert ("extension", "web_search") in found and ("parent file", "instructions above the project") in found
+    assert ("extensions", "web_search") in found and ("parent files", "instructions above the project") in found

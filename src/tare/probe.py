@@ -62,7 +62,8 @@ def _capture(agent, argv: list[str], env: dict[str, str], cwd: Path, fake: Fake)
     capture = agent.capture(proc.stdout, fake.requests)
     if capture is None:
         detail = proc.stderr.strip()[-300:] or proc.stdout.strip()[-300:] or "no output"
-        raise TareError(f"{agent.name} never reached the fake endpoint (exit {proc.returncode}): {detail}")
+        raise TareError(f"{agent.name} never reached tare's fake model server, so the probe could not run "
+                        f"(exit {proc.returncode}): {detail}")
     return capture
 
 
@@ -105,14 +106,14 @@ def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_
             if "parent files" not in r.seen:
                 r.seen.append("parent files")
             if any(line in room.text for line in lines):
-                r.leaks.append(Finding("parent file", "instructions above the project", str(path)))
+                r.leaks.append(Finding("parent files", "instructions above the project", str(path)))
 
     # extensions: tools the dirty twin offers that a run without extensions does not
     if bare is not None:
         extension_tools = twin.tools - bare.tools
         if extension_tools:
             r.seen.append("extensions")
-        r.leaks += [Finding("extension", name, "a tool of the user's extensions") for name in sorted(extension_tools & room.tools)]
+        r.leaks += [Finding("extensions", name, "a tool of your extensions") for name in sorted(extension_tools & room.tools)]
 
     # the user's own files: global instructions, and whatever else the agent reads (memories)
     for kind, path in [("instructions", agent.instructions(real)), *agent.extra_markers(real)]:
@@ -127,7 +128,7 @@ def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_
     if home in twin.text:
         r.seen.append("home path")
     if home in room.text:
-        r.leaks.append(Finding("home path", home, "the user's files"))
+        r.leaks.append(Finding("home path", home, "your files"))
 
     # MCP servers and connectors
     twin_servers = _mcp_prefixes(twin)
@@ -137,7 +138,7 @@ def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_
     elif twin_servers:
         r.seen.append("mcp")
     for prefix in sorted(_mcp_prefixes(room)):
-        source = "login (claude.ai connector)" if prefix.startswith("mcp__claude_ai_") else "MCP server"
+        source = "connected account (login)" if prefix.startswith("mcp__claude_ai_") else "MCP server"
         r.leaks.append(Finding("mcp", prefix[5:-2], source))
 
     # skills from plugins, the user's skill directories and the account
@@ -252,10 +253,11 @@ def render(reading: Reading, project: Path) -> str:
     out = [f"tare probe · {reading.agent}{version} · {project}",
            f"  control   dirty twin shows: {', '.join(reading.seen) or 'nothing'}"]
     if reading.retried:
-        out.append(f"  retried   the first dirty twin was blind for {', '.join(reading.retried)}; "
-                   "this reading comes from a second one")
+        out.append(f"  retried   the first dirty twin was blind for {', '.join(reading.retried)}. "
+                   "This reading comes from a second one.")
     for cls in reading.blind:
-        out.append(f"  BLIND     {cls}: the user has it, but the dirty twin did not show it")
+        out.append(f"  BLIND     {cls}: you have it, but the dirty twin did not show it, so the room cannot be "
+                   "proven clean of it")
     if reading.leaks:
         out += ["  leaks", *rows(reading.leaks)]
     else:

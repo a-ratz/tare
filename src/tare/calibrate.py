@@ -77,7 +77,7 @@ def calibrate(sides: list[Side], project: Path, prompt: str | None, check: str |
     if prompt and not all(s.prompt for s in sides):
         lines.append(f"  task      {prompt}")
     lines += [f"  task {s.key:<4} {s.prompt}" for s in sides if s.prompt]
-    lines += [f"  check     {check or 'none: every run that ends counts, its workspace is kept for scoring elsewhere'}",
+    lines += [f"  check     {check or 'none. A run counts as finished when its agent exits 0. Its workspace is kept for scoring elsewhere.'}",
               "", f"  side  {'agent':<{width}}" + ("pass  rate  95% interval" if check else "finished  time (median, range)")]
     for s in sides:
         x, n = sum(s.results), len(s.results)
