@@ -59,3 +59,15 @@ passes when the CSV is gone and the database holds all 200 orders with every fie
 
 **It does not hold up** if Cliff only reports a range wider than half the run, if Swap's null
 check fails, or if a reader needs the raw tails to understand either report.
+
+## Amendment 1 (2026-10-05, after three Sonnet originals, before any Haiku run)
+
+All three Cliff originals with `--model sonnet` passed the check. Each time Sonnet read the file
+as cp1252, so there was no failure for Cliff to search. The recipes and reports of these attempts
+are kept as results.
+
+After seeing that, and before running it, the plan changes. **Claude Code runs with
+`--model haiku`** in both Cliff (at most three attempts until an original fails) and Swap (a =
+Claude Code with Haiku, b = Codex with its default model). Task, check, cuts, tails and budget stay
+as they are, and the predictions C1 to C3 and S1 to S3 apply unchanged to Haiku. If a fresh Haiku
+start never passes, Cliff reports a model gap, and that will be reported as such.
