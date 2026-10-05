@@ -225,9 +225,15 @@ Tare is meant to sit underneath such frameworks: their exam, Tare's clean room.
        to the room between cut 0 and cut 0.5, as built.
      - Real Claude Code (haiku) against real Codex on a small task: both ran, and each
        continued the other's room. Every cell passed, so there was no effect to find.
-   - **Open:**
-     - Codex has no native cell yet, so its foreignness is not priced.
-     - Codex's code-mode calls are verbose in a handoff.
+   - **Open:** Codex's code-mode calls are verbose in a handoff.
+8. ~~Every agent in Cliff and Swap~~. Done 2026-10-05.
+   - Cliff continues by handoff where an agent has no native resume.
+   - Codex resumes natively: a rollout cut after a step, placed under the room's
+     `sessions/` with the session id at the end of its file name, continues with
+     `codex exec resume <id>`.
+   - **Measured:** the resumed thread kept the original id, and from step 1 it finished the
+     remaining plan. Swap now has native cells for both agents.
+9. Pi (epic #30) and Gemini CLI (epic #34).
 
 ## Name
 

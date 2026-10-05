@@ -2,7 +2,7 @@
 
   tare probe {claude,codex} [--project DIR]
   tare {claude,codex} [--project DIR] [--allow-dirty] [--yolo] [-- AGENT_ARGS...]
-  tare cliff claude PROMPT --check CMD [--tails N] [--budget N] [--jobs N] [-- CLAUDE_ARGS...]
+  tare cliff {claude,codex} PROMPT --check CMD [--tails N] [--budget N] [--jobs N] [-- AGENT_ARGS...]
   tare swap PROMPT --check CMD [--a claude] [--b codex] [--a-args ARGS] [--b-args ARGS] [--cuts 0,0.5,1]
 """
 import argparse
@@ -54,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
         c.add_argument("--allow-dirty", action="store_true", help="start even if the reading is not zero")
         c.add_argument("--yolo", action="store_true", help="skip the agent's permission prompts and sandbox")
     k = sub.add_parser("cliff", help="find where a failed run became lost (args after -- go to every agent run)")
-    k.add_argument("agent", choices=["claude"])
+    k.add_argument("agent", choices=sorted(AGENTS))
     k.add_argument("prompt", help="the task, as given to the agent")
     k.add_argument("--check", required=True, help="shell command run in the finished workspace; exit 0 passes")
     k.add_argument("--project", type=Path, default=Path.cwd())

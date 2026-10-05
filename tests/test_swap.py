@@ -38,7 +38,7 @@ def test_codex_rollout_becomes_a_trail_and_a_step_carries_its_inner_commands():
     assert [e.kind for e in t.events] == ["say", "call", "result"]
     assert t.events[1].tool == "exec" and t.events[2].text == "a.txt"
     assert t.steps[0].ids == ["call_1", "exec-1", "exec-2"]
-    assert t.steps[0].trail_cut == 3 and t.steps[0].native_cut is None
+    assert t.steps[0].trail_cut == 3 and t.steps[0].native_cut == 7
 
 
 def test_handoff_renders_the_task_and_the_trail_the_same_for_every_agent():

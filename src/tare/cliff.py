@@ -111,14 +111,19 @@ def cliff(agent, real, project: Path, prompt: str, check: str, out: Path, *, tai
         return _write(out, header + ["  The run made no tool calls; there is nothing to resume."])
 
     counts: dict[int, int] = {}
+    events = agent.trail(caps.session_lines(out)).events
+
+    def tail(step: int, i: int) -> caps.Tail:
+        if step == 0 or agent.native_resume:
+            return caps.run_tail(agent, real, out, steps[step], prompt, claude_args, check, i, env)
+        return caps.run_handoff(agent, real, out / "tails" / f"{step:04d}-{i}", steps[step], events, prompt,
+                                claude_args, check, env)
 
     def probe(step: int, n: int) -> list[bool]:
         start = counts.get(step, 0)
         counts[step] = start + n
         with ThreadPoolExecutor(max_workers=jobs) as pool:
-            done = pool.map(lambda i: caps.run_tail(agent, real, out, steps[step], prompt, claude_args, check, i, env),
-                            range(start, start + n))
-            return [tail.passed for tail in done]
+            return [t.passed for t in pool.map(lambda i: tail(step, i), range(start, start + n))]
 
     s = search(probe, len(steps) - 1, tails, budget)
     return _write(out, header + report(s, steps, budget))
