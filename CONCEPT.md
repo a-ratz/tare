@@ -299,10 +299,10 @@ macOS 27.0 (arm64) on 2026-10-05 and 2026-10-06.
 - **Codex handoffs:** Codex can run several commands in one tool call, which makes its handoffs
   long.
 - **Cost:** every tail is a full agent run, so a Cliff search or a Swap costs as much as its tails.
-- **macOS:** the room is built on Seatbelt. Not done yet: the probe's markers and reach targets
-  for macOS; Calibrate, Swap, Cliff and the judge on macOS; and the Antigravity CLI, whose dirty
-  twin needs Linux's overlay. Not tested: whether a program started through launchd or XPC runs
-  outside the room's profile.
+- **macOS:** the room is built on Seatbelt, in progress (epic #85) and not in a release yet.
+  Not done: the probe's markers and reach targets for macOS; Calibrate, Swap, Cliff and the
+  judge on macOS; and the Antigravity CLI, whose dirty twin needs Linux's overlay. Not tested:
+  whether a program started through launchd or XPC runs outside the room's profile.
 - **Other probes, not built:** weighing the first request's input tokens before and after adding
   junk to the real setup, and file tripwires that report which secret files a run opened.
 - **Docker:** could contain files where bubblewrap is missing, but does nothing against context

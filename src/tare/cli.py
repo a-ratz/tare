@@ -72,6 +72,7 @@ def main(argv: list[str] | None = None) -> int:
 
     ap = argparse.ArgumentParser(prog="tare", description="Start a coding agent in an isolated room without your "
                                  "personal setup, and prove the room clean before the run.")
+    ap.add_argument("--version", action="version", version=f"tare {recipe.tare_version()}")
     sub = ap.add_subparsers(dest="command", required=True)
     p = sub.add_parser("probe", help="probe the room: tare: 0.00, the leaks and their sources, or not proven (blind)")
     p.add_argument("agent", choices=sorted(AGENTS))

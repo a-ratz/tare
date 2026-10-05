@@ -70,6 +70,18 @@ def _which(name: str) -> Path:
     return Path(found).resolve()
 
 
+def _absolute_links(original: Path, copy: Path):
+    """A relative symlink copied elsewhere points nowhere (a skill linked as ../../../.agents/skills/x).
+    Point each one in the copy at what the original link reaches."""
+    for root, dirs, files in os.walk(copy):
+        for name in dirs + files:
+            link = Path(root) / name
+            if link.is_symlink() and not os.path.isabs(target := os.readlink(link)):
+                reached = os.path.normpath((original / link.relative_to(copy)).parent / target)
+                link.unlink()
+                link.symlink_to(reached)
+
+
 def _json(path: Path) -> dict | None:
     """A JSON file of the agent's setup, read for its field names and flags, never printed."""
     try:
@@ -479,6 +491,7 @@ class Pi:
         with tempfile.TemporaryDirectory(prefix="tare-pi-twin-") as copy:
             agent_dir = Path(copy) / "agent"
             shutil.copytree(real.config, agent_dir, symlinks=True, ignore=shutil.ignore_patterns("sessions"))
+            _absolute_links(real.config, agent_dir)
             self._provider(agent_dir / "models.json", fake_url)
             yield {"PI_CODING_AGENT_DIR": str(agent_dir)}
 

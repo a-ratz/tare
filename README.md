@@ -1,8 +1,8 @@
 <div align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset=".github/logo-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset=".github/logo-light.svg">
-    <img alt="tare" src=".github/logo-light.svg" width="260">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/a-ratz/tare/main/.github/logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/a-ratz/tare/main/.github/logo-light.svg">
+    <img alt="tare" src="https://raw.githubusercontent.com/a-ratz/tare/main/.github/logo-light.svg" width="260">
   </picture>
 
   <p>Prove your coding agent starts without your personal setup before you measure it.</p>
@@ -11,7 +11,7 @@
 <div align="center">
 
 [![License: MIT][license-shield]][license-url]
-[![Version 0.1.0][version-shield]][version-url]
+[![PyPI][version-shield]][version-url]
 [![Python 3.11+][python-shield]][python-url]
 [![Linux | WSL][platform-shield]][platform-url]
 [![Claude Code | Codex | Pi | Antigravity][agent-shield]][agent-url]
@@ -19,12 +19,12 @@
 </div>
 
 <div align="center">
-  <a href="#install">Install</a> &middot;
+  <a href="https://github.com/a-ratz/tare#install">Install</a> &middot;
   <a href="#quick-start">Quick start</a> &middot;
   <a href="#features">Features</a> &middot;
   <a href="#how-it-works">How it works</a> &middot;
-  <a href="CONCEPT.md">Concept</a> &middot;
-  <a href="https://github.com/AndreRatzenberger/tare/issues/new?template=bug_report.md">Report Bug</a>
+  <a href="https://github.com/a-ratz/tare/blob/main/CONCEPT.md">Concept</a> &middot;
+  <a href="https://github.com/a-ratz/tare/issues/new?template=bug_report.md">Report Bug</a>
 </div>
 
 <br>
@@ -99,7 +99,7 @@ something. tare does the same for an agent before you measure it.
 | Use tare when | Look elsewhere when |
 |---|---|
 | you compare agent runs with and without a skill, plugin or prompt | you need protection from a hostile agent, because the room has network access and a working login |
-| you benchmark agents on your own machine | you are on macOS (not supported) |
+| you benchmark agents on your own machine | you are on macOS (a room is in progress, not released yet) |
 | you want a fresh-machine run without a fresh machine | you log in with an API key only (untested) |
 | an agent failed a task and you want to know which step lost it | you want a single run explained without running the agent again, because Cliff runs it many times |
 
@@ -111,25 +111,27 @@ something. tare does the same for an agent before you measure it.
 | [bubblewrap](https://github.com/containers/bubblewrap) | `sudo apt install bubblewrap` |
 | at least one of the four agents | on `PATH` and logged in. Codex must resolve to a path under `/usr` for now, because tare mounts Codex's npm package and Node.js from there. If `which codex` points elsewhere, for example into nvm, install it with the system's npm (`sudo npm install -g @openai/codex`) and put `/usr/bin` first on `PATH`. The other agents can live anywhere on `PATH`. |
 | Google Chrome, only for `tare judge` | `google-chrome` on `PATH`, installed under `/usr` or `/opt`. `tare judge` scores web pages and takes their screenshots with it. |
-| [uv](https://docs.astral.sh/uv/) | Python 3.11 or newer |
+| [uv](https://docs.astral.sh/uv/) or [pipx](https://pipx.pypa.io/) | Python 3.11 or newer |
 
-Clone the repository, then run tare from the checkout with `uv run tare ...`, or put `tare` on
-your `PATH` with `uv tool install .`:
+Install tare from PyPI. The package is `tare-cli`, the command is `tare`:
 
 ```bash
-git clone https://github.com/AndreRatzenberger/tare.git && cd tare
-uv tool install .   # optional
+uv tool install tare-cli   # or: pipx install tare-cli
 ```
 
-The examples after Quick start write `tare` for short. Without `uv tool install .`, write
-`uv run --project <checkout> tare` instead.
+To work on tare itself, clone the repository and run it from the checkout with `uv run tare ...`:
+
+```bash
+git clone https://github.com/a-ratz/tare.git && cd tare
+uv run tare --version
+```
 
 ## Quick start
 
-Run this in the checkout:
+With tare installed:
 
 ```bash
-uv run tare probe claude
+tare probe claude
 ```
 
 ```text
@@ -163,8 +165,8 @@ servers start too. The Antigravity CLI writes into its config directory on every
 lets its dirty twin write into a temporary overlay that is discarded after the run. Your
 `~/.gemini` stays unchanged.
 
-`uv run tare claude` then starts Claude Code in that room. `uv run tare codex`, `uv run tare pi`
-and `uv run tare agy` do the same for the other agents.
+`tare claude` then starts Claude Code in that room. `tare codex`, `tare pi` and `tare agy` do
+the same for the other agents.
 
 ## Usage
 
@@ -358,7 +360,7 @@ succeed, after it the run no longer does.
 > **Experimental.** Cliff finds the known step in tare's scripted test. On real runs it has
 > never blamed a step that was not the cause. But it has not yet found a real cliff either,
 > because neither of two real test rounds had a failure that sat in one step. The rounds were a
-> [data migration](experiments/migration/RESULTS.md) and a [web page](experiments/html/RESULTS.md).
+> [data migration](https://github.com/a-ratz/tare/blob/main/experiments/migration/RESULTS.md) and a [web page](https://github.com/a-ratz/tare/blob/main/experiments/html/RESULTS.md).
 
 tare runs the task once in a room and saves the workspace and the conversation after every step.
 If the check fails, Cliff starts tails from saved steps in fresh rooms. Tails from the beginning
@@ -445,31 +447,32 @@ request is the context the agent was given. Second, the dirty twin runs the same
 real setup, so tare knows that it can see your setup at all. Third, a plain script inside the
 room looks for your files and for secret environment variables.
 
-→ [Concept: the design and the measurements behind it](CONCEPT.md)
-→ [The dirty-twin experiments that decided the probe design: Claude Code](experiments/dirty-twin/RESULTS.md), [Codex](experiments/dirty-twin-codex/RESULTS.md), [Pi](experiments/dirty-twin-pi/RESULTS.md), [Antigravity CLI](experiments/dirty-twin-agy/RESULTS.md)
+→ [Concept: the design and the measurements behind it](https://github.com/a-ratz/tare/blob/main/CONCEPT.md)
+→ [The dirty-twin experiments that decided the probe design: Claude Code](https://github.com/a-ratz/tare/blob/main/experiments/dirty-twin/RESULTS.md), [Codex](https://github.com/a-ratz/tare/blob/main/experiments/dirty-twin-codex/RESULTS.md), [Pi](https://github.com/a-ratz/tare/blob/main/experiments/dirty-twin-pi/RESULTS.md), [Antigravity CLI](https://github.com/a-ratz/tare/blob/main/experiments/dirty-twin-agy/RESULTS.md)
 
 ## Roadmap
 
-macOS is not supported. A room for macOS is an idea, not yet planned.
+A room for macOS, built on Seatbelt, is in progress ([epic #85](https://github.com/a-ratz/tare/issues/85)).
+Until it is released, tare runs on Linux and WSL.
 
 ## Contributing
 
 Every change starts as an issue. Larger work is an epic, split into features, and one epic
-becomes one branch and one pull request. [AGENTS.md](AGENTS.md) describes the process, the checks
+becomes one branch and one pull request. [AGENTS.md](https://github.com/a-ratz/tare/blob/main/AGENTS.md) describes the process, the checks
 and the conventions. Run the tests with `uv run pytest`.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](https://github.com/a-ratz/tare/blob/main/LICENSE).
 
 ---
 
 Crafted with [Readme Craft](https://github.com/motiful/readme-craft)
 
 [license-shield]: https://img.shields.io/badge/license-MIT-blue.svg
-[license-url]: LICENSE
-[version-shield]: https://img.shields.io/badge/version-0.1.0-informational.svg
-[version-url]: pyproject.toml
+[license-url]: https://github.com/a-ratz/tare/blob/main/LICENSE
+[version-shield]: https://img.shields.io/pypi/v/tare-cli.svg
+[version-url]: https://github.com/a-ratz/tare/blob/main/pyproject.toml
 [python-shield]: https://img.shields.io/badge/python-3.11%2B-3776AB.svg
 [python-url]: https://www.python.org/
 [platform-shield]: https://img.shields.io/badge/platform-Linux%20%7C%20WSL-555555.svg
