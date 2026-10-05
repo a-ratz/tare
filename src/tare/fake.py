@@ -24,9 +24,12 @@ _GEMINI_OK = {"candidates": [{"content": {"role": "model", "parts": [{"text": "o
 _CLOUD_CODE = {
     "loadCodeAssist": {"currentTier": {"id": "free-tier", "name": "Free"}, "cloudaicompanionProject": "tare-fake",
                        "allowedTiers": [{"id": "free-tier", "name": "Free", "isDefault": True}]},
-    "fetchAvailableModels": {"defaultAgentModelId": FAKE_MODEL, "models": {FAKE_MODEL: {
-        "displayName": "tare fake", "model": "MODEL_PLACEHOLDER_M318", "apiProvider": "API_PROVIDER_GOOGLE_GEMINI",
-        "modelProvider": "MODEL_PROVIDER_GOOGLE", "maxTokens": 1048576, "maxOutputTokens": 65536}}},
+    "fetchAvailableModels": {
+        "defaultAgentModelId": FAKE_MODEL,
+        "agentModelSorts": [{"displayName": "Recommended", "groups": [{"modelIds": [FAKE_MODEL]}]}],
+        "models": {FAKE_MODEL: {"displayName": "tare fake", "recommended": True, "model": "MODEL_PLACEHOLDER_M318",
+                                "apiProvider": "API_PROVIDER_GOOGLE_GEMINI", "modelProvider": "MODEL_PROVIDER_GOOGLE",
+                                "maxTokens": 1048576, "maxOutputTokens": 65536}}},
     "countTokens": {"totalTokens": 1},
     "generateContent": {"response": _GEMINI_OK},
 }
