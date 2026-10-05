@@ -128,8 +128,7 @@ test, a fix next door) becomes a new issue or a question, not part of the PR.
 - Write like the surrounding code: its naming, its comment density, its idiom.
 - A user-visible change updates README.md and CONCEPT.md in the same PR.
 - The room uses bubblewrap on Linux and WSL and Seatbelt on macOS. The macOS room is in progress
-  (epic #85) and not in a release yet: Calibrate, Swap, Cliff and the judge still assume
-  Linux. Tests describe Linux unless they say otherwise: `tests/conftest.py` pins the
-  platform and keeps the tests away from the Keychain.
+  (epic #85) and not in a release yet. Tests describe Linux unless they say otherwise:
+  `tests/conftest.py` pins the platform and keeps the tests away from the Keychain.
 - Commits use the `a-ratz` identity (`44863088+a-ratz@users.noreply.github.com`). Pushes go
   through that GitHub account.

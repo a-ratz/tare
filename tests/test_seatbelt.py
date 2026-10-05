@@ -113,14 +113,15 @@ def test_seatbelt_argv_clears_the_environment_and_runs_the_clone_in_the_work_clo
     with Seatbelt().open(Claude(), real, project(tmp_path)) as r:
         base = r.home.parent
         argv = Seatbelt().argv(r, Claude(), real, ["claude", "-p", "hi"], {"ANTHROPIC_BASE_URL": "http://fake"})
-    assert argv[:2] == ["/usr/bin/env", "-i"]
-    env = dict(a.split("=", 1) for a in argv[2:argv.index("/usr/bin/sandbox-exec")])
+    assert argv[:4] == ["/bin/sh", "-c", 'cd "$0" && exec "$@"', str(base / "work")]
+    assert argv[4:6] == ["/usr/bin/env", "-i"]
+    env = dict(a.split("=", 1) for a in argv[6:argv.index("/usr/bin/sandbox-exec")])
     assert env["HOME"] == str(base / "home")
     assert env["PATH"] == f"{base}/opt/agent:/usr/bin:/bin"
     assert env["TMPDIR"] == env["CLAUDE_CODE_TMPDIR"] == str(base / "tmp")
     assert env["CLAUDE_CONFIG_DIR"] == str(base / "home/.claude-config")
     assert env["ANTHROPIC_BASE_URL"] == "http://fake"
-    assert argv[-5:] == ['cd "$0" && exec "$@"', str(base / "work"), f"{base}/opt/agent/claude", "-p", "hi"]
+    assert argv[-3:] == [f"{base}/opt/agent/claude", "-p", "hi"]
 
 
 def test_seatbelt_profile_denies_the_home_and_shared_places_and_allows_the_room(tmp_path, mac):
@@ -135,6 +136,13 @@ def test_seatbelt_profile_denies_the_home_and_shared_places_and_allows_the_room(
     allow = lines.index(f'(allow file-read* file-write* (subpath "{base}"))')
     assert lines.index(deny) < allow < lines.index(f'(deny file-write* (subpath "{base}/opt"))')
     assert f'(allow file-read* file-write* (subpath "{tmp_path / "run"}"))' in lines
+
+
+def test_seatbelt_profile_allows_the_runs_store_by_its_resolved_path(tmp_path, mac):
+    (tmp_path / "store").mkdir()
+    (tmp_path / "link").symlink_to(tmp_path / "store")  # as /var/folders is a link to /private/var/folders
+    text = room.profile(Room(tmp_path / "rooms/r/home", tmp_path / "w", tmp_path / "link"))
+    assert f'(subpath "{(tmp_path / "store").resolve()}")' in text and str(tmp_path / "link") not in text
 
 
 def test_codex_and_pi_are_cloned_from_the_home_on_macos(tmp_path, monkeypatch, mac):
@@ -175,18 +183,20 @@ class Tool:
 def test_a_real_seatbelt_room_hides_the_home_and_keeps_the_runs_work(tmp_path, monkeypatch):
     script = tmp_path / "tool.sh"
     script.write_text('#!/bin/sh\nls "$REAL_HOME" >/dev/null 2>&1 && echo "home: listed" || echo "home: denied"\n'
-                      'echo "cwd: $PWD"\necho made > made.txt\nrm gone.txt\n')
+                      'echo "cwd: $(pwd)"\necho made > made.txt\nrm gone.txt\n')
     script.chmod(0o755)
     work = project(tmp_path)
     real = Real(tmp_path, tmp_path, script)
     monkeypatch.setattr(sys, "platform", HOST)  # the fixture pinned linux; this test needs the real one
     with Seatbelt().open(Tool(script), real, work) as r:
         argv = Seatbelt().argv(r, Tool(script), real, ["tool"], {"REAL_HOME": str(Path.home())})
-        out = subprocess.run(argv, capture_output=True, text=True, timeout=60).stdout
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=60, cwd=Path.home())
+        out = proc.stdout
         config = r.config(Tool(script))
         assert (config / "login").exists()
     assert "home: denied" in out
     assert f"cwd: {r.inside_work}" in out
+    assert "getcwd" not in proc.stderr  # started from a directory the room cannot read
     assert (work / "made.txt").read_text() == "made\n" and not (work / "gone.txt").exists()
     assert not config.exists()
 
@@ -209,3 +219,49 @@ def test_a_readable_pasteboard_in_the_room_is_a_leak(tmp_path):
     reading = probe.score(Claude(), real, empty, empty, "path pasteboard\n", "path pasteboard\n")
     assert [(f.kind, f.what) for f in reading.leaks] == [("reach", "pasteboard")]
     assert "reach" in reading.seen
+
+
+def test_the_snapshot_hook_keeps_macos_metadata_out_of_capsules(tmp_path, monkeypatch):
+    from tare.capsule import hook_script
+    r = Room(tmp_path / "home", tmp_path / "w", tmp_path / "run")
+    assert "\ntar -C /work -cf " in hook_script(r) and "COPYFILE_DISABLE" not in hook_script(r)
+    monkeypatch.setattr(sys, "platform", "darwin")
+    assert "\nCOPYFILE_DISABLE=1 tar -C /work -cf " in hook_script(r)
+
+
+def test_the_judge_renders_on_macos_with_a_browser_of_its_own_in_a_seatbelt_room(tmp_path, monkeypatch, mac):
+    from tare import judge
+    monkeypatch.setattr(judge, "APPLICATIONS", tmp_path / "Applications")
+    work = project(tmp_path)
+    shot = tmp_path / "rooms" / "tare-render-x"
+    shot.mkdir()
+    with pytest.raises(RuntimeError, match="none is installed"):
+        judge._render_on_macos(work, "index.html", shot, 2000)
+    edge = tmp_path / "Applications" / judge.MAC_BROWSERS[2]
+    edge.parent.mkdir(parents=True)
+    edge.write_text("")
+    argv = judge._render_on_macos(work, "index.html", shot, 2000)
+    assert (shot / "work" / "src" / "keep.py").exists()  # the page is a clone in the room
+    assert argv[argv.index("/usr/bin/sandbox-exec") + 3] == str(edge)
+    assert f"MAC_CHROMIUM_TMPDIR={shot / 'tmp'}" in argv and "--use-mock-keychain" in argv
+    assert f"--user-data-dir={shot / 'home' / 'browser'}" in argv and argv[-1] == f"file://{shot / 'work' / 'index.html'}"
+
+
+def test_a_browser_that_keeps_running_after_its_screenshot_is_ended(tmp_path):
+    from tare.judge import _run_until_shot
+    png = tmp_path / "page.png"
+    start = time.monotonic()
+    _run_until_shot(["/bin/sh", "-c", f"echo png > {png}; sleep 60 & wait"], png, timeout=30)
+    assert png.read_text() == "png\n" and time.monotonic() - start < 10
+
+
+def test_claude_code_keeps_its_own_sandbox_off_in_a_macos_room(monkeypatch, mac):
+    flags = Claude().room_flags
+    assert flags[-2:] == ["--settings", '{"sandbox": {"enabled": false}}']
+    # one --settings counts, the last: the hook's carries the sandbox switch too
+    args = Claude().run_args("task", [], hook="/bin/sh /run/hook.sh")
+    settings = json.loads(args[args.index("--settings") + 1])
+    assert settings["sandbox"] == {"enabled": False} and settings["hooks"]["PostToolUse"]
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert "--settings" not in Claude().room_flags
+    assert "sandbox" not in Claude().run_args("task", [], hook="/bin/sh /run/hook.sh")[2]

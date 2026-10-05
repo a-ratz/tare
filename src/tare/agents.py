@@ -111,8 +111,15 @@ class Claude:
     name = "claude"
     credentials = ".credentials.json"
     config_dir = ".claude-config"  # under the room's home
-    # Login-carried connectors and account skills arrive unless these are passed (CONCEPT.md, layer 1).
-    room_flags = ["--strict-mcp-config", "--setting-sources", "project,local"]
+    # A Seatbelt room cannot start Claude Code's own sandbox, so a project that turns it on would
+    # fail every Bash call there (measured, #90): macOS rooms turn it off.
+    sandbox_off = {"sandbox": {"enabled": False}}
+
+    @property
+    def room_flags(self) -> list[str]:
+        # Login-carried connectors and account skills arrive unless these are passed (CONCEPT.md, layer 1).
+        flags = ["--strict-mcp-config", "--setting-sources", "project,local"]
+        return flags + ["--settings", json.dumps(self.sandbox_off)] if sys.platform == "darwin" else flags
     yolo = ["--dangerously-skip-permissions"]
     native_resume = True  # Cliff resumes its own session; Swap prices handoffs against it
 
@@ -206,8 +213,11 @@ class Claude:
     def run_args(self, prompt: str, extra: list[str], hook: str | None = None, room=None) -> list[str]:
         args = ["--dangerously-skip-permissions"]
         if hook:
-            args += ["--settings", json.dumps({"hooks": {"PostToolUse": [
-                {"matcher": "", "hooks": [{"type": "command", "command": hook}]}]}})]
+            settings = {"hooks": {"PostToolUse": [{"matcher": "", "hooks": [{"type": "command", "command": hook}]}]}}
+            # Claude Code takes only the last --settings (measured, 2.1.290), and this one comes after the room flags
+            if sys.platform == "darwin":
+                settings |= self.sandbox_off
+            args += ["--settings", json.dumps(settings)]
         return args + extra + ["-p", prompt, "--output-format", "stream-json", "--verbose"]
 
     def prepare_hook(self, config: Path, hook: str):

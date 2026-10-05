@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tarfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,10 +25,12 @@ from .room import Room, backend
 def hook_script(room: Room) -> str:
     """Archives the workspace after every tool call, numbered, named by the call's tool_use_id.
     The hook input is JSON on stdin; its top-level tool_use_id is the first one in it."""
+    # macOS tar stores extended attributes as ._ files, which would read as workspace files
+    tar = "COPYFILE_DISABLE=1 tar" if sys.platform == "darwin" else "tar"
     return f"""#!/bin/sh
 id=$(grep -o '"tool_use_id": *"[^"]*"' | head -1 | sed 's/.*"\\([^"]*\\)"$/\\1/')
 n=$(ls {room.inside_run}/capsules | wc -l)
-tar -C {room.inside_work} -cf "{room.inside_run}/capsules/$(printf %04d "$n")-$id.tar" .
+{tar} -C {room.inside_work} -cf "{room.inside_run}/capsules/$(printf %04d "$n")-$id.tar" .
 """
 
 

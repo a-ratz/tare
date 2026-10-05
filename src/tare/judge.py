@@ -11,15 +11,22 @@ import json
 import os
 import re
 import shutil
+import signal
 import statistics
 import subprocess
+import sys
 import tempfile
+import time
 from pathlib import Path
 
 from . import room as rooms
 from .agents import AGENTS, events, strings
 
 VIEWPORT = "1280,900"
+# macOS: a Chromium-family browser from /Applications (on Linux, google-chrome on the PATH)
+APPLICATIONS = Path("/Applications")
+MAC_BROWSERS = ("Google Chrome.app/Contents/MacOS/Google Chrome", "Chromium.app/Contents/MacOS/Chromium",
+                "Microsoft Edge.app/Contents/MacOS/Microsoft Edge")
 PROMPT = ("You are a strict, careful judge. Read rubric.md. Look at page.png, a screenshot of the page, and at the "
           "source in the source/ directory. Score the page from 0 to 100 exactly as the rubric says. Reply with "
           'nothing but one line of JSON: {"score": <0-100>, "reason": "<one sentence>"}')
@@ -28,23 +35,70 @@ PROMPT = ("You are a strict, careful judge. Read rubric.md. Look at page.png, a 
 def render(work: Path, page: str, target: Path, wait_ms: int = 2000):
     """Screenshot of work/page, rendered headless in a room: the workspace read-only, no home directory."""
     target.parent.mkdir(parents=True, exist_ok=True)
-    shot = Path(tempfile.mkdtemp(prefix="tare-render-"))
+    shot = Path(tempfile.mkdtemp(prefix="tare-render-", dir=rooms.SEATBELT_ROOMS if sys.platform == "darwin" else None))
     try:
-        argv = ["bwrap", "--ro-bind", "/usr", "/usr", "--ro-bind", "/etc", "/etc", "--ro-bind", "/opt", "/opt",
-                "--symlink", "usr/bin", "/bin", "--symlink", "usr/lib", "/lib", "--symlink", "usr/lib64", "/lib64",
-                "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--tmpfs", "/home",
-                "--ro-bind", str(work), "/work", "--bind", str(shot), "/shot",
-                "--unshare-user", "--unshare-pid", "--unshare-ipc", "--unshare-uts", "--die-with-parent",
-                "--clearenv", "--setenv", "HOME", "/tmp", "--setenv", "PATH", "/usr/bin:/bin", "--",
-                "google-chrome", "--headless=new", "--no-sandbox", "--disable-gpu", "--hide-scrollbars",
-                f"--window-size={VIEWPORT}", f"--virtual-time-budget={wait_ms}", "--screenshot=/shot/page.png",
-                f"file:///work/{page}"]
-        subprocess.run(argv, capture_output=True, timeout=120, stdin=subprocess.DEVNULL)
+        if sys.platform == "darwin":
+            argv = _render_on_macos(work, page, shot, wait_ms)
+        else:
+            argv = ["bwrap", "--ro-bind", "/usr", "/usr", "--ro-bind", "/etc", "/etc", "--ro-bind", "/opt", "/opt",
+                    "--symlink", "usr/bin", "/bin", "--symlink", "usr/lib", "/lib", "--symlink", "usr/lib64", "/lib64",
+                    "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--tmpfs", "/home",
+                    "--ro-bind", str(work), "/work", "--bind", str(shot), "/shot",
+                    "--unshare-user", "--unshare-pid", "--unshare-ipc", "--unshare-uts", "--die-with-parent",
+                    "--clearenv", "--setenv", "HOME", "/tmp", "--setenv", "PATH", "/usr/bin:/bin", "--",
+                    "google-chrome", "--headless=new", "--no-sandbox", "--disable-gpu", "--hide-scrollbars",
+                    f"--window-size={VIEWPORT}", f"--virtual-time-budget={wait_ms}", "--screenshot=/shot/page.png",
+                    f"file:///work/{page}"]
+        if sys.platform == "darwin":
+            _run_until_shot(argv, shot / "page.png")
+        else:
+            subprocess.run(argv, capture_output=True, timeout=120, stdin=subprocess.DEVNULL)
         if not (shot / "page.png").exists():
             raise RuntimeError(f"the page {page} did not render")
         shutil.copyfile(shot / "page.png", target)
     finally:
         shutil.rmtree(shot, ignore_errors=True)
+
+
+def _render_on_macos(work: Path, page: str, shot: Path, wait_ms: int) -> list[str]:
+    """macOS: the page cloned into a Seatbelt room. The browser gets a profile of its own and a mock
+    keychain, so neither the user's browser profile nor their Keychain is touched."""
+    browser = next((APPLICATIONS / b for b in MAC_BROWSERS if (APPLICATIONS / b).exists()), None)
+    if browser is None:
+        raise RuntimeError("the judge renders pages with Chrome, Chromium or Edge from /Applications, and none is installed")
+    rooms._clone(work, shot / "work")
+    (shot / "home").mkdir()
+    # the browser's single-instance socket: Chromium takes NSTemporaryDirectory(), the user's temporary
+    # directory, which the room denies, unless MAC_CHROMIUM_TMPDIR names another
+    (shot / "tmp").mkdir()
+    return ["/bin/sh", "-c", 'cd "$0" && exec "$@"', str(shot), "/usr/bin/env", "-i", f"HOME={shot / 'home'}",
+            f"MAC_CHROMIUM_TMPDIR={shot / 'tmp'}", "PATH=/usr/bin:/bin", "/usr/bin/sandbox-exec", "-p", rooms.profile(rooms.Room(shot / "home", work)),
+            str(browser), "--headless=new", "--no-sandbox", "--disable-gpu", "--hide-scrollbars", "--use-mock-keychain",
+            f"--user-data-dir={shot / 'home' / 'browser'}", f"--window-size={VIEWPORT}",
+            f"--virtual-time-budget={wait_ms}", f"--screenshot={shot / 'page.png'}", f"file://{shot / 'work' / page}"]
+
+
+def _run_until_shot(argv: list[str], png: Path, timeout: float = 120):
+    """Run the browser until its screenshot is written. Edge keeps running after it (its updater
+    starts in the room), so once the file stops growing the browser and its helpers are ended."""
+    proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            start_new_session=True)
+    deadline, size = time.monotonic() + timeout, 0
+    try:
+        while proc.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.5)
+            now = png.stat().st_size if png.exists() else 0
+            if now and now == size:
+                break
+            size = now
+    finally:
+        if proc.poll() is None:
+            os.killpg(proc.pid, signal.SIGTERM)
+            try:
+                proc.wait(10)
+            except subprocess.TimeoutExpired:
+                os.killpg(proc.pid, signal.SIGKILL)
+                proc.wait()
 
 
 def _score(stdout: str) -> tuple[int, str]:

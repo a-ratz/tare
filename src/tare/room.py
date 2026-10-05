@@ -150,9 +150,10 @@ class Seatbelt:
             inside = f"{room.home.parent}{executable}" if executable.startswith("/") else executable
             command = [inside, *command[1:]]
         env = [f"{k}={v}" for k, v in room_env(agent, room, extra_env).items()]
-        # sandbox-exec keeps the caller's environment and working directory: clear the one, set the other
-        return ["/usr/bin/env", "-i", *env, "/usr/bin/sandbox-exec", "-p", profile(room),
-                "/bin/sh", "-c", 'cd "$0" && exec "$@"', room.inside_work, *command]
+        # sandbox-exec keeps the caller's working directory and environment: enter the room's work
+        # directory first (from inside, the caller's may be unreadable), then clear the environment
+        return ["/bin/sh", "-c", 'cd "$0" && exec "$@"', room.inside_work,
+                "/usr/bin/env", "-i", *env, "/usr/bin/sandbox-exec", "-p", profile(room), *command]
 
 
 @functools.cache
@@ -178,8 +179,8 @@ def profile(room: Room) -> str:
              f"(deny file-write* (subpath {q(base / 'opt')}))",
              # realpath() of anything in the room lstat()s /private/tmp
              '(allow file-read-metadata (literal "/private/tmp"))']
-    if room.run:
-        rules.append(f"(allow file-read* file-write* (subpath {q(room.run)}))")
+    if room.run:  # Seatbelt matches resolved paths: /var/folders is /private/var/folders
+        rules.append(f"(allow file-read* file-write* (subpath {q(room.run.resolve())}))")
     return "\n".join(rules) + "\n"
 
 
