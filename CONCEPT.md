@@ -5,10 +5,10 @@ Gemini CLI, Antigravity, Pi) in a room where nothing of yours came along, and pr
 it before the run. It prints `tare: 0.00`, or names every leak and where it came from,
 and refuses to start the run until the reading is zero.
 
-Status: concept plus one working prototype (`prototypes/bwrap-room.sh`). Written
-2026-10-04 from a day of measurements; every claim below marked *measured* was
-observed on WSL2 with Claude Code 2.1.289. The fake-model blank was tested on
-2026-10-05 ([experiments/dirty-twin](experiments/dirty-twin/RESULTS.md)).
+Status: `tare probe claude` and `tare claude` work on Linux and WSL (v0.1.0, 2026-10-05;
+see the README). Written 2026-10-04 from a day of measurements; every claim below
+marked *measured* was observed on WSL2 with Claude Code 2.1.289. The fake-model blank
+was tested on 2026-10-05 ([experiments/dirty-twin](experiments/dirty-twin/RESULTS.md)).
 
 ## Why
 
@@ -149,17 +149,37 @@ Tare is meant to sit underneath such frameworks: their exam, Tare's clean room.
 
 1. ~~Dirty-twin test for the fake-model blank~~. Done 2026-10-05: the blank works for
    Claude Code ([results](experiments/dirty-twin/RESULTS.md)).
-2. Turn the bwrap prototype into `tare claude`:
-   - a fresh credential copy at every start;
-   - a cleared environment with an allowlist;
-   - a reach probe that is a script, not an agent;
-   - a context probe through the fake, with the dirty twin as its positive control;
-   - `ENABLE_TOOL_SEARCH=true` in both the probe and the run.
+2. ~~`tare claude`~~. Done 2026-10-05 (v0.1.0).
+   **What it does:**
+   - fresh credential copy per room, refused when the login would need a refresh;
+   - cleared environment with an allowlist;
+   - reach probe as a script;
+   - context probe through the fake, with the dirty twin as control;
+   - `ENABLE_TOOL_SEARCH=true` in both probe and run.
+
+   **Measured on this machine:**
+   - The clean room read `tare: 0.00`, and the control saw all seven classes.
+   - A spike room was given the user's CLAUDE.md, one skill and an environment variable,
+     and was run without the context flags. It read 4 leaks, each with its source.
+   - Dropping only the flags is not enough to make a room dirty: a fresh room loaded
+     no connectors either way.
+   - With the flags, user-level CLAUDE.md and skills that were planted in the room's
+     config are not loaded at all. `--setting-sources project,local` is a second line
+     of defense.
+
+   **Open:**
+   - Yesterday a relocated but reused config did load connectors, while a fresh room
+     does not. Cached account features are the suspected cause; this has not been
+     tested.
+   - The account email reached the first request in 3 of 6 clean-room runs, which
+     points to a race with the profile fetch. It is declared whenever it is seen.
+   - Not tested: whether a refresh inside the room rotates the token family of the
+     real session.
 3. Codex adapter on the same pattern.
 4. Seatbelt profile for macOS.
-5. Bring the `claude-naked` connector fix in as the Claude adapter's context layer. It is
-   committed as `f61aff7` on `fix/remote-plugin-isolation` in `codex-naked`, pushed but
-   not merged.
+5. ~~Bring the `claude-naked` connector fix in~~. `tare claude` carries its own context
+   layer (fresh config plus the flags). The fix stays useful for `claude-naked` itself:
+   `f61aff7` on `fix/remote-plugin-isolation` in `codex-naked`, pushed, not merged.
 
 ## Name
 
