@@ -1,0 +1,1402 @@
+[
+ {
+  "id": 1001,
+  "customer": "Zoë Brühl",
+  "amount_cents": 10525,
+  "ordered_on": "2026-04-28",
+  "note": ""
+ },
+ {
+  "id": 1002,
+  "customer": "Jürgen Müller",
+  "amount_cents": 18123,
+  "ordered_on": "2026-01-21",
+  "note": ""
+ },
+ {
+  "id": 1003,
+  "customer": "Renée Hoß",
+  "amount_cents": 245028,
+  "ordered_on": "2026-12-13",
+  "note": ""
+ },
+ {
+  "id": 1004,
+  "customer": "Maëlle Hoß",
+  "amount_cents": 182623,
+  "ordered_on": "2026-07-04",
+  "note": "Geschenk – nicht öffnen"
+ },
+ {
+  "id": 1005,
+  "customer": "Björn Weiß",
+  "amount_cents": 155957,
+  "ordered_on": "2026-10-03",
+  "note": "Rabatt 5 €"
+ },
+ {
+  "id": 1006,
+  "customer": "Käthe Weiß",
+  "amount_cents": 152955,
+  "ordered_on": "2026-12-20",
+  "note": "„Abholung“ im Laden"
+ },
+ {
+  "id": 1007,
+  "customer": "Zoë Ångström",
+  "amount_cents": 146877,
+  "ordered_on": "2026-11-17",
+  "note": "Rückruf erbeten; Tel. hinterlegt"
+ },
+ {
+  "id": 1008,
+  "customer": "Ida Straßer",
+  "amount_cents": -49719,
+  "ordered_on": "2026-12-04",
+  "note": ""
+ },
+ {
+  "id": 1009,
+  "customer": "Björn Schäfer",
+  "amount_cents": 105999,
+  "ordered_on": "2026-09-01",
+  "note": ""
+ },
+ {
+  "id": 1010,
+  "customer": "Zoë Weiß",
+  "amount_cents": 102801,
+  "ordered_on": "2026-03-06",
+  "note": "Geschenk – nicht öffnen"
+ },
+ {
+  "id": 1011,
+  "customer": "Ida Krüger",
+  "amount_cents": 123515,
+  "ordered_on": "2026-07-05",
+  "note": "Rabatt 5 €"
+ },
+ {
+  "id": 1012,
+  "customer": "Jürgen Groß",
+  "amount_cents": 31771,
+  "ordered_on": "2026-05-11",
+  "note": "Gutschrift 12,50 €"
+ },
+ {
+  "id": 1013,
+  "customer": "Renée Müller",
+  "amount_cents": 106319,
+  "ordered_on": "2026-08-13",
+  "note": "Geschenk – nicht öffnen"
+ },
+ {
+  "id": 1014,
+  "customer": "Annegret Ångström",
+  "amount_cents": 239243,
+  "ordered_on": "2026-11-28",
+  "note": "Gutschrift 12,50 €"
+ },
+ {
+  "id": 1015,
+  "customer": "Jörg Meyer",
+  "amount_cents": -244908,
+  "ordered_on": "2026-06-25",
+  "note": "Rabatt 5 €"
+ },
+ {
+  "id": 1016,
+  "customer": "Jürgen Weiß",
+  "amount_cents": 37984,
+  "ordered_on": "2026-10-20",
+  "note": ""
+ },
+ {
+  "id": 1017,
+  "customer": "Lukas Müller",
+  "amount_cents": 4880,
+  "ordered_on": "2026-11-24",
+  "note": ""
+ },
+ {
+  "id": 1018,
+  "customer": "Zoë Lindqvist",
+  "amount_cents": 96313,
+  "ordered_on": "2026-07-01",
+  "note": ""
+ },
+ {
+  "id": 1019,
+  "customer": "Ida Meyer",
+  "amount_cents": 66937,
+  "ordered_on": "2026-05-06",
+  "note": ""
+ },
+ {
+  "id": 1020,
+  "customer": "Søren Ångström",
+  "amount_cents": 93864,
+  "ordered_on": "2026-10-28",
+  "note": ""
+ },
+ {
+  "id": 1021,
+  "customer": "Søren Lindqvist",
+  "amount_cents": 62980,
+  "ordered_on": "2026-08-14",
+  "note": "Rabatt 5 €"
+ },
+ {
+  "id": 1022,
+  "customer": "Björn Hoß",
+  "amount_cents": 148593,
+  "ordered_on": "2026-07-08",
+  "note": "„Abholung“ im Laden"
+ },
+ {
+  "id": 1023,
+  "customer": "Renée Lindqvist",
+  "amount_cents": 219476,
+  "ordered_on": "2026-10-07",
+  "note": "Geschenk – nicht öffnen"
+ },
+ {
+  "id": 1024,
+  "customer": "Käthe Schäfer",
+  "amount_cents": 96477,
+  "ordered_on": "2026-07-20",
+  "note": "Größe XL"
+ },
+ {
+  "id": 1025,
+  "customer": "Søren Brühl",
+  "amount_cents": 82656,
+  "ordered_on": "2026-03-07",
+  "note": "„Express“ gewünscht"
+ },
+ {
+  "id": 1026,
+  "customer": "Lukas Hoß",
+  "amount_cents": 213216,
+  "ordered_on": "2026-03-02",
+  "note": ""
+ },
+ {
+  "id": 1027,
+  "customer": "Maëlle Groß",
+  "amount_cents": 5691,
+  "ordered_on": "2026-04-25",
+  "note": ""
+ },
+ {
+  "id": 1028,
+  "customer": "Renée Weiß",
+  "amount_cents": 673,
+  "ordered_on": "2026-05-16",
+  "note": "Rückruf erbeten; Tel. hinterlegt"
+ },
+ {
+  "id": 1029,
+  "customer": "Lukas Schäfer",
+  "amount_cents": 103928,
+  "ordered_on": "2026-06-12",
+  "note": ""
+ },
+ {
+  "id": 1030,
+  "customer": "Zoë Groß",
+  "amount_cents": 245644,
+  "ordered_on": "2026-02-04",
+  "note": "„Abholung“ im Laden"
+ },
+ {
+  "id": 1031,
+  "customer": "Lukas Schäfer",
+  "amount_cents": 91447,
+  "ordered_on": "2026-12-24",
+  "note": ""
+ },
+ {
+  "id": 1032,
+  "customer": "Søren Brühl",
+  "amount_cents": -5174,
+  "ordered_on": "2026-07-23",
+  "note": ""
+ },
+ {
+  "id": 1033,
+  "customer": "Ida Brühl",
+  "amount_cents": 230354,
+  "ordered_on": "2026-09-27",
+  "note": "Rabatt 5 €"
+ },
+ {
+  "id": 1034,
+  "customer": "Søren Schäfer",
+  "amount_cents": -234400,
+  "ordered_on": "2026-01-09",
+  "note": ""
+ },
+ {
+  "id": 1035,
+  "customer": "Jürgen Öztürk",
+  "amount_cents": 80998,
+  "ordered_on": "2026-01-20",
+  "note": ""
+ },
+ {
+  "id": 1036,
+  "customer": "Lukas Ångström",
+  "amount_cents": 95262,
+  "ordered_on": "2026-11-28",
+  "note": "„Abholung“ im Laden"
+ },
+ {
+  "id": 1037,
+  "customer": "Annegret Straßer",
+  "amount_cents": 97343,
+  "ordered_on": "2026-03-17",
+  "note": ""
+ },
+ {
+  "id": 1038,
+  "customer": "Zoë Ångström",
+  "amount_cents": 208366,
+  "ordered_on": "2026-03-24",
+  "note": "Gutschrift 12,50 €"
+ },
+ {
+  "id": 1039,
+  "customer": "Björn Öztürk",
+  "amount_cents": 84449,
+  "ordered_on": "2026-06-28",
+  "note": "Geschenk – nicht öffnen"
+ },
+ {
+  "id": 1040,
+  "customer": "Jörg Brühl",
+  "amount_cents": 51069,
+  "ordered_on": "2026-03-22",
+  "note": ""
+ },
+ {
+  "id": 1041,
+  "customer": "Renée Brühl",
+  "amount_cents": 146633,
+  "ordered_on": "2026-05-04",
+  "note": ""
+ },
+ {
+  "id": 1042,
+  "customer": "Günther Weiß",
+  "amount_cents": 149599,
+  "ordered_on": "2026-02-16",
+  "note": ""
+ },
+ {
+  "id": 1043,
+  "customer": "Günther Meyer",
+  "amount_cents": 149226,
+  "ordered_on": "2026-01-27",
+  "note": "Geschenk – nicht öffnen"
+ },
+ {
+  "id": 1044,
+  "customer": "Björn Groß",
+  "amount_cents": 47940,
+  "ordered_on": "2026-07-07",
+  "note": "Lieferung; bitte klingeln"
+ },
+ {
+  "id": 1045,
+  "customer": "Zoë Straßer",
+  "amount_cents": 132548,
+  "ordered_on": "2026-07-11",
+  "note": "Rückruf erbeten; Tel. hinterlegt"
+ },
+ {
+  "id": 1046,
+  "customer": "Käthe Hoß",
+  "amount_cents": 175192,
+  "ordered_on": "2026-12-11",
+  "note": "Lieferung; bitte klingeln"
+ },
+ {
+  "id": 1047,
+  "customer": "Jörg Groß",
+  "amount_cents": 199625,
+  "ordered_on": "2026-03-28",
+  "note": "Größe XL"
+ },
+ {
+  "id": 1048,
+  "customer": "Maëlle Müller",
+  "amount_cents": 133765,
+  "ordered_on": "2026-11-01",
+  "note": ""
+ },
+ {
+  "id": 1049,
+  "customer": "Jürgen Öztürk",
+  "amount_cents": 213018,
+  "ordered_on": "2026-03-27",
+  "note": "Größe XL"
+ },
+ {
+  "id": 1050,
+  "customer": "Björn Meyer",
+  "amount_cents": 109758,
+  "ordered_on": "2026-05-21",
+  "note": ""
+ },
+ {
+  "id": 1051,
+  "customer": "Zoë Brühl",
+  "amount_cents": 25252,
+  "ordered_on": "2026-05-25",
+  "note": "Geschenk – nicht öffnen"
+ },
+ {
+  "id": 1052,
+  "customer": "Ida Schäfer",
+  "amount_cents": 77753,
+  "ordered_on": "2026-05-18",
+  "note": ""
+ },
+ {
+  "id": 1053,
+  "customer": "Maëlle Straßer",
+  "amount_cents": 55741,
+  "ordered_on": "2026-10-23",
+  "note": "„Express“ gewünscht"
+ },
+ {
+  "id": 1054,
+  "customer": "Ida Weiß",
+  "amount_cents": 236981,
+  "ordered_on": "2026-04-05",
+  "note": "Gutschrift 12,50 €"
+ },
+ {
+  "id": 1055,
+  "customer": "Annegret Weiß",
+  "amount_cents": -42778,
+  "ordered_on": "2026-01-28",
+  "note": "Geschenk – nicht öffnen"
+ },
+ {
+  "id": 1056,
+  "customer": "Maëlle Krüger",
+  "amount_cents": 132199,
+  "ordered_on": "2026-04-21",
+  "note": "Gutschrift 12,50 €"
+ },
+ {
+  "id": 1057,
+  "customer": "Annegret Ångström",
+  "amount_cents": 60541,
+  "ordered_on": "2026-04-28",
+  "note": ""
+ },
+ {
+  "id": 1058,
+  "customer": "Jürgen Weiß",
+  "amount_cents": 18211,
+  "ordered_on": "2026-10-13",
+  "note": "„Express“ gewünscht"
+ },
+ {
+  "id": 1059,
+  "customer": "Renée Groß",
+  "amount_cents": 7297,
+  "ordered_on": "2026-07-26",
+  "note": ""
+ },
+ {
+  "id": 1060,
+  "customer": "Jürgen Schäfer",
+  "amount_cents": 40776,
+  "ordered_on": "2026-03-24",
+  "note": "Lieferung; bitte klingeln"
+ },
+ {
+  "id": 1061,
+  "customer": "Lukas Brühl",
+  "amount_cents": 214037,
+  "ordered_on": "2026-11-16",
+  "note": "Rabatt 5 €"
+ },
+ {
+  "id": 1062,
+  "customer": "Ida Öztürk",
+  "amount_cents": 103185,
+  "ordered_on": "2026-11-09",
+  "note": ""
+ },
+ {
+  "id": 1063,
+  "customer": "Björn Öztürk",
+  "amount_cents": 225213,
+  "ordered_on": "2026-03-10",
+  "note": ""
+ },
+ {
+  "id": 1064,
+  "customer": "Renée Straßer",
+  "amount_cents": -36837,
+  "ordered_on": "2026-11-07",
+  "note": ""
+ },
+ {
+  "id": 1065,
+  "customer": "Lukas Ångström",
+  "amount_cents": 28566,
+  "ordered_on": "2026-04-07",
+  "note": ""
+ },
+ {
+  "id": 1066,
+  "customer": "Jürgen Meyer",
+  "amount_cents": 196054,
+  "ordered_on": "2026-11-11",
+  "note": "Rückruf erbeten; Tel. hinterlegt"
+ },
+ {
+  "id": 1067,
+  "customer": "Ida Krüger",
+  "amount_cents": 55914,
+  "ordered_on": "2026-11-11",
+  "note": "„Express“ gewünscht"
+ },
+ {
+  "id": 1068,
+  "customer": "Günther Ångström",
+  "amount_cents": 183720,
+  "ordered_on": "2026-03-14",
+  "note": ""
+ },
+ {
+  "id": 1069,
+  "customer": "Lukas Krüger",
+  "amount_cents": 201408,
+  "ordered_on": "2026-10-21",
+  "note": "„Express“ gewünscht"
+ },
+ {
+  "id": 1070,
+  "customer": "Jörg Meyer",
+  "amount_cents": 193661,
+  "ordered_on": "2026-10-02",
+  "note": ""
+ },
+ {
+  "id": 1071,
+  "customer": "Søren Krüger",
+  "amount_cents": 101254,
+  "ordered_on": "2026-09-20",
+  "note": "Gutschrift 12,50 €"
+ },
+ {
+  "id": 1072,
+  "customer": "Søren Öztürk",
+  "amount_cents": 151720,
+  "ordered_on": "2026-12-06",
+  "note": "Geschenk – nicht öffnen"
+ },
+ {
+  "id": 1073,
+  "customer": "Björn Krüger",
+  "amount_cents": 229192,
+  "ordered_on": "2026-01-10",
+  "note": ""
+ },
+ {
+  "id": 1074,
+  "customer": "Käthe Groß",
+  "amount_cents": 134266,
+  "ordered_on": "2026-07-21",
+  "note": ""
+ },
+ {
+  "id": 1075,
+  "customer": "Maëlle Weiß",
+  "amount_cents": 106586,
+  "ordered_on": "2026-06-07",
+  "note": ""
+ },
+ {
+  "id": 1076,
+  "customer": "Maëlle Straßer",
+  "amount_cents": 34192,
+  "ordered_on": "2026-08-08",
+  "note": ""
+ },
+ {
+  "id": 1077,
+  "customer": "Renée Brühl",
+  "amount_cents": 148544,
+  "ordered_on": "2026-10-08",
+  "note": ""
+ },
+ {
+  "id": 1078,
+  "customer": "Maëlle Krüger",
+  "amount_cents": 47498,
+  "ordered_on": "2026-09-13",
+  "note": ""
+ },
+ {
+  "id": 1079,
+  "customer": "Jürgen Öztürk",
+  "amount_cents": 214724,
+  "ordered_on": "2026-07-27",
+  "note": "„Express“ gewünscht"
+ },
+ {
+  "id": 1080,
+  "customer": "Björn Hoß",
+  "amount_cents": 8444,
+  "ordered_on": "2026-10-04",
+  "note": ""
+ },
+ {
+  "id": 1081,
+  "customer": "Björn Müller",
+  "amount_cents": 83001,
+  "ordered_on": "2026-12-20",
+  "note": "„Abholung“ im Laden"
+ },
+ {
+  "id": 1082,
+  "customer": "Zoë Groß",
+  "amount_cents": 13381,
+  "ordered_on": "2026-12-11",
+  "note": ""
+ },
+ {
+  "id": 1083,
+  "customer": "Annegret Ångström",
+  "amount_cents": 10617,
+  "ordered_on": "2026-09-09",
+  "note": "„Abholung“ im Laden"
+ },
+ {
+  "id": 1084,
+  "customer": "Annegret Brühl",
+  "amount_cents": 100956,
+  "ordered_on": "2026-12-22",
+  "note": "Größe XL"
+ },
+ {
+  "id": 1085,
+  "customer": "Günther Müller",
+  "amount_cents": 15185,
+  "ordered_on": "2026-11-03",
+  "note": "Rabatt 5 €"
+ },
+ {
+  "id": 1086,
+  "customer": "Jörg Lindqvist",
+  "amount_cents": 103078,
+  "ordered_on": "2026-07-24",
+  "note": "„Abholung“ im Laden"
+ },
+ {
+  "id": 1087,
+  "customer": "Jörg Schäfer",
+  "amount_cents": 89154,
+  "ordered_on": "2026-10-03",
+  "note": "„Express“ gewünscht"
+ },
+ {
+  "id": 1088,
+  "customer": "Günther Öztürk",
+  "amount_cents": 186091,
+  "ordered_on": "2026-04-13",
+  "note": ""
+ },
+ {
+  "id": 1089,
+  "customer": "Günther Öztürk",
+  "amount_cents": -70333,
+  "ordered_on": "2026-12-08",
+  "note": "„Express“ gewünscht"
+ },
+ {
+  "id": 1090,
+  "customer": "Maëlle Brühl",
+  "amount_cents": 165493,
+  "ordered_on": "2026-08-20",
+  "note": ""
+ },
+ {
+  "id": 1091,
+  "customer": "Käthe Lindqvist",
+  "amount_cents": 136501,
+  "ordered_on": "2026-03-23",
+  "note": "Gutschrift 12,50 €"
+ },
+ {
+  "id": 1092,
+  "customer": "Renée Brühl",
+  "amount_cents": 98952,
+  "ordered_on": "2026-04-05",
+  "note": "Größe XL"
+ },
+ {
+  "id": 1093,
+  "customer": "Annegret Groß",
+  "amount_cents": 75226,
+  "ordered_on": "2026-09-25",
+  "note": ""
+ },
+ {
+  "id": 1094,
+  "customer": "Annegret Hoß",
+  "amount_cents": 233606,
+  "ordered_on": "2026-10-18",
+  "note": "Rabatt 5 €"
+ },
+ {
+  "id": 1095,
+  "customer": "Maëlle Öztürk",
+  "amount_cents": 234098,
+  "ordered_on": "2026-09-26",
+  "note": "Geschenk – nicht öffnen"
+ },
+ {
+  "id": 1096,
+  "customer": "Käthe Ångström",
+  "amount_cents": 27731,
+  "ordered_on": "2026-10-14",
+  "note": "„Express“ gewünscht"
+ },
+ {
+  "id": 1097,
+  "customer": "Käthe Hoß",
+  "amount_cents": 162439,
+  "ordered_on": "2026-10-20",
+  "note": "Größe XL"
+ },
+ {
+  "id": 1098,
+  "customer": "Jürgen Müller",
+  "amount_cents": -47882,
+  "ordered_on": "2026-12-17",
+  "note": "„Abholung“ im Laden"
+ },
+ {
+  "id": 1099,
+  "customer": "Renée Ångström",
+  "amount_cents": 231070,
+  "ordered_on": "2026-04-25",
+  "note": "Lieferung; bitte klingeln"
+ },
+ {
+  "id": 1100,
+  "customer": "Søren Groß",
+  "amount_cents": 67987,
+  "ordered_on": "2026-10-25",
+  "note": ""
+ },
+ {
+  "id": 1101,
+  "customer": "Ida Groß",
+  "amount_cents": -126386,
+  "ordered_on": "2026-04-05",
+  "note": ""
+ },
+ {
+  "id": 1102,
+  "customer": "Maëlle Brühl",
+  "amount_cents": 46540,
+  "ordered_on": "2026-09-16",
+  "note": "Lieferung; bitte klingeln"
+ },
+ {
+  "id": 1103,
+  "customer": "Søren Krüger",
+  "amount_cents": 87782,
+  "ordered_on": "2026-11-26",
+  "note": "„Express“ gewünscht"
+ },
+ {
+  "id": 1104,
+  "customer": "Käthe Schäfer",
+  "amount_cents": 198616,
+  "ordered_on": "2026-08-03",
+  "note": "„Abholung“ im Laden"
+ },
+ {
+  "id": 1105,
+  "customer": "Käthe Meyer",
+  "amount_cents": -90731,
+  "ordered_on": "2026-04-10",
+  "note": ""
+ },
+ {
+  "id": 1106,
+  "customer": "Jörg Ångström",
+  "amount_cents": 165391,
+  "ordered_on": "2026-05-04",
+  "note": "Geschenk – nicht öffnen"
+ },
+ {
+  "id": 1107,
+  "customer": "Günther Öztürk",
+  "amount_cents": 181129,
+  "ordered_on": "2026-11-16",
+  "note": "Rabatt 5 €"
+ },
+ {
+  "id": 1108,
+  "customer": "Renée Hoß",
+  "amount_cents": 77903,
+  "ordered_on": "2026-05-28",
+  "note": ""
+ },
+ {
+  "id": 1109,
+  "customer": "Ida Ångström",
+  "amount_cents": -205426,
+  "ordered_on": "2026-04-17",
+  "note": ""
+ },
+ {
+  "id": 1110,
+  "customer": "Günther Müller",
+  "amount_cents": 4314,
+  "ordered_on": "2026-11-25",
+  "note": ""
+ },
+ {
+  "id": 1111,
+  "customer": "Maëlle Weiß",
+  "amount_cents": 33912,
+  "ordered_on": "2026-10-06",
+  "note": ""
+ },
+ {
+  "id": 1112,
+  "customer": "Annegret Weiß",
+  "amount_cents": 137791,
+  "ordered_on": "2026-02-23",
+  "note": ""
+ },
+ {
+  "id": 1113,
+  "customer": "Käthe Straßer",
+  "amount_cents": 237363,
+  "ordered_on": "2026-06-10",
+  "note": "Größe XL"
+ },
+ {
+  "id": 1114,
+  "customer": "Björn Groß",
+  "amount_cents": 117022,
+  "ordered_on": "2026-06-05",
+  "note": ""
+ },
+ {
+  "id": 1115,
+  "customer": "Jörg Öztürk",
+  "amount_cents": 175500,
+  "ordered_on": "2026-08-17",
+  "note": "Rabatt 5 €"
+ },
+ {
+  "id": 1116,
+  "customer": "Käthe Groß",
+  "amount_cents": 203169,
+  "ordered_on": "2026-01-19",
+  "note": ""
+ },
+ {
+  "id": 1117,
+  "customer": "Käthe Weiß",
+  "amount_cents": 14189,
+  "ordered_on": "2026-01-02",
+  "note": ""
+ },
+ {
+  "id": 1118,
+  "customer": "Lukas Brühl",
+  "amount_cents": 80718,
+  "ordered_on": "2026-06-11",
+  "note": ""
+ },
+ {
+  "id": 1119,
+  "customer": "Käthe Öztürk",
+  "amount_cents": 68663,
+  "ordered_on": "2026-01-22",
+  "note": "Lieferung; bitte klingeln"
+ },
+ {
+  "id": 1120,
+  "customer": "Renée Schäfer",
+  "amount_cents": 211080,
+  "ordered_on": "2026-05-22",
+  "note": "„Express“ gewünscht"
+ },
+ {
+  "id": 1121,
+  "customer": "Søren Krüger",
+  "amount_cents": 204462,
+  "ordered_on": "2026-09-02",
+  "note": ""
+ },
+ {
+  "id": 1122,
+  "customer": "Zoë Straßer",
+  "amount_cents": 21275,
+  "ordered_on": "2026-10-25",
+  "note": "Lieferung; bitte klingeln"
+ },
+ {
+  "id": 1123,
+  "customer": "Jörg Hoß",
+  "amount_cents": 34011,
+  "ordered_on": "2026-05-13",
+  "note": "Größe XL"
+ },
+ {
+  "id": 1124,
+  "customer": "Ida Hoß",
+  "amount_cents": 184019,
+  "ordered_on": "2026-10-07",
+  "note": "„Abholung“ im Laden"
+ },
+ {
+  "id": 1125,
+  "customer": "Jörg Ångström",
+  "amount_cents": 205517,
+  "ordered_on": "2026-11-12",
+  "note": "„Express“ gewünscht"
+ },
+ {
+  "id": 1126,
+  "customer": "Jörg Öztürk",
+  "amount_cents": 76339,
+  "ordered_on": "2026-09-25",
+  "note": "Rabatt 5 €"
+ },
+ {
+  "id": 1127,
+  "customer": "Jürgen Groß",
+  "amount_cents": 163707,
+  "ordered_on": "2026-08-27",
+  "note": ""
+ },
+ {
+  "id": 1128,
+  "customer": "Björn Krüger",
+  "amount_cents": 85651,
+  "ordered_on": "2026-03-08",
+  "note": "Geschenk – nicht öffnen"
+ },
+ {
+  "id": 1129,
+  "customer": "Lukas Müller",
+  "amount_cents": 50325,
+  "ordered_on": "2026-01-03",
+  "note": ""
+ },
+ {
+  "id": 1130,
+  "customer": "Zoë Hoß",
+  "amount_cents": 109610,
+  "ordered_on": "2026-11-08",
+  "note": "„Express“ gewünscht"
+ },
+ {
+  "id": 1131,
+  "customer": "Ida Meyer",
+  "amount_cents": 224510,
+  "ordered_on": "2026-05-23",
+  "note": "Rückruf erbeten; Tel. hinterlegt"
+ },
+ {
+  "id": 1132,
+  "customer": "Annegret Meyer",
+  "amount_cents": -136957,
+  "ordered_on": "2026-11-27",
+  "note": "„Express“ gewünscht"
+ },
+ {
+  "id": 1133,
+  "customer": "Jürgen Brühl",
+  "amount_cents": 148990,
+  "ordered_on": "2026-02-16",
+  "note": ""
+ },
+ {
+  "id": 1134,
+  "customer": "Jürgen Ångström",
+  "amount_cents": 146343,
+  "ordered_on": "2026-04-22",
+  "note": "Rückruf erbeten; Tel. hinterlegt"
+ },
+ {
+  "id": 1135,
+  "customer": "Jürgen Müller",
+  "amount_cents": -27075,
+  "ordered_on": "2026-11-25",
+  "note": ""
+ },
+ {
+  "id": 1136,
+  "customer": "Jörg Öztürk",
+  "amount_cents": 1409,
+  "ordered_on": "2026-10-01",
+  "note": "Geschenk – nicht öffnen"
+ },
+ {
+  "id": 1137,
+  "customer": "Lukas Groß",
+  "amount_cents": 200607,
+  "ordered_on": "2026-07-12",
+  "note": "Geschenk – nicht öffnen"
+ },
+ {
+  "id": 1138,
+  "customer": "Zoë Meyer",
+  "amount_cents": 129910,
+  "ordered_on": "2026-12-24",
+  "note": "Geschenk – nicht öffnen"
+ },
+ {
+  "id": 1139,
+  "customer": "Renée Meyer",
+  "amount_cents": 224315,
+  "ordered_on": "2026-10-21",
+  "note": "Lieferung; bitte klingeln"
+ },
+ {
+  "id": 1140,
+  "customer": "Käthe Groß",
+  "amount_cents": 229714,
+  "ordered_on": "2026-09-18",
+  "note": ""
+ },
+ {
+  "id": 1141,
+  "customer": "Ida Straßer",
+  "amount_cents": 9927,
+  "ordered_on": "2026-11-12",
+  "note": "Größe XL"
+ },
+ {
+  "id": 1142,
+  "customer": "Lukas Straßer",
+  "amount_cents": 151354,
+  "ordered_on": "2026-02-13",
+  "note": ""
+ },
+ {
+  "id": 1143,
+  "customer": "Käthe Brühl",
+  "amount_cents": 121492,
+  "ordered_on": "2026-03-24",
+  "note": "Rabatt 5 €"
+ },
+ {
+  "id": 1144,
+  "customer": "Maëlle Brühl",
+  "amount_cents": -232948,
+  "ordered_on": "2026-07-16",
+  "note": "Rückruf erbeten; Tel. hinterlegt"
+ },
+ {
+  "id": 1145,
+  "customer": "Björn Ångström",
+  "amount_cents": 222872,
+  "ordered_on": "2026-04-11",
+  "note": ""
+ },
+ {
+  "id": 1146,
+  "customer": "Käthe Öztürk",
+  "amount_cents": 141382,
+  "ordered_on": "2026-05-25",
+  "note": "Lieferung; bitte klingeln"
+ },
+ {
+  "id": 1147,
+  "customer": "Käthe Krüger",
+  "amount_cents": -84467,
+  "ordered_on": "2026-06-21",
+  "note": ""
+ },
+ {
+  "id": 1148,
+  "customer": "Renée Ångström",
+  "amount_cents": 31772,
+  "ordered_on": "2026-02-06",
+  "note": ""
+ },
+ {
+  "id": 1149,
+  "customer": "Søren Krüger",
+  "amount_cents": 128535,
+  "ordered_on": "2026-10-09",
+  "note": ""
+ },
+ {
+  "id": 1150,
+  "customer": "Lukas Brühl",
+  "amount_cents": 4839,
+  "ordered_on": "2026-02-04",
+  "note": "„Express“ gewünscht"
+ },
+ {
+  "id": 1151,
+  "customer": "Käthe Müller",
+  "amount_cents": 208091,
+  "ordered_on": "2026-01-20",
+  "note": "Rabatt 5 €"
+ },
+ {
+  "id": 1152,
+  "customer": "Renée Müller",
+  "amount_cents": 36294,
+  "ordered_on": "2026-07-02",
+  "note": ""
+ },
+ {
+  "id": 1153,
+  "customer": "Maëlle Schäfer",
+  "amount_cents": 60765,
+  "ordered_on": "2026-04-25",
+  "note": "Größe XL"
+ },
+ {
+  "id": 1154,
+  "customer": "Jörg Straßer",
+  "amount_cents": 65062,
+  "ordered_on": "2026-07-16",
+  "note": "Rabatt 5 €"
+ },
+ {
+  "id": 1155,
+  "customer": "Jörg Hoß",
+  "amount_cents": 146768,
+  "ordered_on": "2026-01-11",
+  "note": ""
+ },
+ {
+  "id": 1156,
+  "customer": "Käthe Brühl",
+  "amount_cents": 194852,
+  "ordered_on": "2026-12-06",
+  "note": "„Express“ gewünscht"
+ },
+ {
+  "id": 1157,
+  "customer": "Günther Schäfer",
+  "amount_cents": 123509,
+  "ordered_on": "2026-09-26",
+  "note": "Lieferung; bitte klingeln"
+ },
+ {
+  "id": 1158,
+  "customer": "Jürgen Hoß",
+  "amount_cents": 22966,
+  "ordered_on": "2026-09-14",
+  "note": ""
+ },
+ {
+  "id": 1159,
+  "customer": "Lukas Öztürk",
+  "amount_cents": 37349,
+  "ordered_on": "2026-05-28",
+  "note": "„Abholung“ im Laden"
+ },
+ {
+  "id": 1160,
+  "customer": "Zoë Weiß",
+  "amount_cents": 152290,
+  "ordered_on": "2026-10-26",
+  "note": "Rabatt 5 €"
+ },
+ {
+  "id": 1161,
+  "customer": "Björn Straßer",
+  "amount_cents": 230940,
+  "ordered_on": "2026-04-17",
+  "note": "Lieferung; bitte klingeln"
+ },
+ {
+  "id": 1162,
+  "customer": "Günther Straßer",
+  "amount_cents": -32756,
+  "ordered_on": "2026-10-09",
+  "note": "„Abholung“ im Laden"
+ },
+ {
+  "id": 1163,
+  "customer": "Annegret Lindqvist",
+  "amount_cents": -229546,
+  "ordered_on": "2026-02-20",
+  "note": ""
+ },
+ {
+  "id": 1164,
+  "customer": "Lukas Schäfer",
+  "amount_cents": 100498,
+  "ordered_on": "2026-12-05",
+  "note": "Größe XL"
+ },
+ {
+  "id": 1165,
+  "customer": "Lukas Meyer",
+  "amount_cents": 19797,
+  "ordered_on": "2026-04-26",
+  "note": "Gutschrift 12,50 €"
+ },
+ {
+  "id": 1166,
+  "customer": "Zoë Krüger",
+  "amount_cents": 72448,
+  "ordered_on": "2026-02-26",
+  "note": "Größe XL"
+ },
+ {
+  "id": 1167,
+  "customer": "Käthe Lindqvist",
+  "amount_cents": 87772,
+  "ordered_on": "2026-05-27",
+  "note": ""
+ },
+ {
+  "id": 1168,
+  "customer": "Maëlle Schäfer",
+  "amount_cents": 138206,
+  "ordered_on": "2026-03-26",
+  "note": ""
+ },
+ {
+  "id": 1169,
+  "customer": "Zoë Groß",
+  "amount_cents": 54079,
+  "ordered_on": "2026-05-12",
+  "note": ""
+ },
+ {
+  "id": 1170,
+  "customer": "Jürgen Ångström",
+  "amount_cents": 99926,
+  "ordered_on": "2026-12-26",
+  "note": ""
+ },
+ {
+  "id": 1171,
+  "customer": "Björn Krüger",
+  "amount_cents": 109758,
+  "ordered_on": "2026-02-17",
+  "note": ""
+ },
+ {
+  "id": 1172,
+  "customer": "Renée Müller",
+  "amount_cents": 92568,
+  "ordered_on": "2026-12-26",
+  "note": "„Abholung“ im Laden"
+ },
+ {
+  "id": 1173,
+  "customer": "Jürgen Öztürk",
+  "amount_cents": 113152,
+  "ordered_on": "2026-12-10",
+  "note": ""
+ },
+ {
+  "id": 1174,
+  "customer": "Annegret Lindqvist",
+  "amount_cents": 73834,
+  "ordered_on": "2026-04-08",
+  "note": ""
+ },
+ {
+  "id": 1175,
+  "customer": "Jörg Weiß",
+  "amount_cents": -217363,
+  "ordered_on": "2026-08-16",
+  "note": ""
+ },
+ {
+  "id": 1176,
+  "customer": "Käthe Groß",
+  "amount_cents": 111474,
+  "ordered_on": "2026-11-17",
+  "note": ""
+ },
+ {
+  "id": 1177,
+  "customer": "Jürgen Krüger",
+  "amount_cents": 244778,
+  "ordered_on": "2026-05-14",
+  "note": "Größe XL"
+ },
+ {
+  "id": 1178,
+  "customer": "Zoë Öztürk",
+  "amount_cents": 234816,
+  "ordered_on": "2026-05-17",
+  "note": ""
+ },
+ {
+  "id": 1179,
+  "customer": "Käthe Groß",
+  "amount_cents": 58225,
+  "ordered_on": "2026-04-11",
+  "note": ""
+ },
+ {
+  "id": 1180,
+  "customer": "Jürgen Groß",
+  "amount_cents": 205036,
+  "ordered_on": "2026-04-04",
+  "note": ""
+ },
+ {
+  "id": 1181,
+  "customer": "Lukas Öztürk",
+  "amount_cents": -164004,
+  "ordered_on": "2026-03-04",
+  "note": "„Express“ gewünscht"
+ },
+ {
+  "id": 1182,
+  "customer": "Jörg Krüger",
+  "amount_cents": 68559,
+  "ordered_on": "2026-02-04",
+  "note": ""
+ },
+ {
+  "id": 1183,
+  "customer": "Annegret Brühl",
+  "amount_cents": 180281,
+  "ordered_on": "2026-02-23",
+  "note": "Rabatt 5 €"
+ },
+ {
+  "id": 1184,
+  "customer": "Lukas Ångström",
+  "amount_cents": 13215,
+  "ordered_on": "2026-05-13",
+  "note": ""
+ },
+ {
+  "id": 1185,
+  "customer": "Jörg Öztürk",
+  "amount_cents": 17926,
+  "ordered_on": "2026-05-12",
+  "note": "„Abholung“ im Laden"
+ },
+ {
+  "id": 1186,
+  "customer": "Zoë Brühl",
+  "amount_cents": 193812,
+  "ordered_on": "2026-11-10",
+  "note": ""
+ },
+ {
+  "id": 1187,
+  "customer": "Jürgen Weiß",
+  "amount_cents": 216299,
+  "ordered_on": "2026-09-18",
+  "note": "Geschenk – nicht öffnen"
+ },
+ {
+  "id": 1188,
+  "customer": "Maëlle Hoß",
+  "amount_cents": 82905,
+  "ordered_on": "2026-09-25",
+  "note": "Lieferung; bitte klingeln"
+ },
+ {
+  "id": 1189,
+  "customer": "Annegret Lindqvist",
+  "amount_cents": 176228,
+  "ordered_on": "2026-10-20",
+  "note": ""
+ },
+ {
+  "id": 1190,
+  "customer": "Jörg Lindqvist",
+  "amount_cents": 169417,
+  "ordered_on": "2026-09-14",
+  "note": "Lieferung; bitte klingeln"
+ },
+ {
+  "id": 1191,
+  "customer": "Günther Weiß",
+  "amount_cents": 200641,
+  "ordered_on": "2026-01-01",
+  "note": "Gutschrift 12,50 €"
+ },
+ {
+  "id": 1192,
+  "customer": "Ida Müller",
+  "amount_cents": 139492,
+  "ordered_on": "2026-01-13",
+  "note": ""
+ },
+ {
+  "id": 1193,
+  "customer": "Käthe Straßer",
+  "amount_cents": 247189,
+  "ordered_on": "2026-03-15",
+  "note": "Größe XL"
+ },
+ {
+  "id": 1194,
+  "customer": "Jörg Hoß",
+  "amount_cents": 124869,
+  "ordered_on": "2026-04-24",
+  "note": "Rabatt 5 €"
+ },
+ {
+  "id": 1195,
+  "customer": "Zoë Straßer",
+  "amount_cents": 249952,
+  "ordered_on": "2026-05-25",
+  "note": "Größe XL"
+ },
+ {
+  "id": 1196,
+  "customer": "Annegret Lindqvist",
+  "amount_cents": 170250,
+  "ordered_on": "2026-07-02",
+  "note": "„Abholung“ im Laden"
+ },
+ {
+  "id": 1197,
+  "customer": "Günther Ångström",
+  "amount_cents": 453,
+  "ordered_on": "2026-04-14",
+  "note": ""
+ },
+ {
+  "id": 1198,
+  "customer": "Ida Krüger",
+  "amount_cents": 109612,
+  "ordered_on": "2026-03-01",
+  "note": "Rückruf erbeten; Tel. hinterlegt"
+ },
+ {
+  "id": 1199,
+  "customer": "Jürgen Müller",
+  "amount_cents": 141703,
+  "ordered_on": "2026-09-04",
+  "note": ""
+ },
+ {
+  "id": 1200,
+  "customer": "Renée Straßer",
+  "amount_cents": 201050,
+  "ordered_on": "2026-06-12",
+  "note": "Gutschrift 12,50 €"
+ }
+]
