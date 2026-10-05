@@ -46,9 +46,10 @@ touches the room or the probe, run it on the machine:
    on the epic whenever knowledge comes up that the issue does not hold yet: a measurement and
    its result, a learning, a problem and the issue it led to. A comment may link features, but
    it states the point itself:
-   - good: "Measuring #7 showed that Codex ignores `OPENAI_BASE_URL` with a ChatGPT login; #8
-     points it at the fake through `model_providers` instead."
-   - bad: "There was an issue in #7, solved in #8."
+   - good: "The dirty-twin run showed that a custom base URL turns Claude Code's tool search
+     off, so the fake saw every tool schema inline instead of deferred; probe and run now set
+     `ENABLE_TOOL_SEARCH=true`."
+   - bad: "The dirty twin had a problem, fixed in the room code."
 4. **One branch per epic, from `main`**, named `<epic number>-<short-slug>` (`6-codex`). Features
    get no branches of their own; each commit names the feature it does (`Refs #7`).
 5. **One PR per epic, when the epic is done.** Its body says `Closes #6` for the epic and for
