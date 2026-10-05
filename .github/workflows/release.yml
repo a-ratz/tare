@@ -1,8 +1,7 @@
-# Release: a tag v<version> builds tare-cli, publishes it to TestPyPI, installs it from there
-# and runs it, then publishes it to PyPI and creates a GitHub release. Publishing uses trusted
-# publishing (OIDC), so no PyPI token is stored anywhere. pypi.org and test.pypi.org each need a
-# trusted publisher for this repository, this workflow file (release.yml) and its environment
-# (pypi or testpypi).
+# Release: a tag v<version> builds tare-cli, installs the built wheel and runs it, publishes it
+# to PyPI, installs it from there and runs it, and creates a GitHub release. Publishing uses
+# trusted publishing (OIDC), so no PyPI token is stored anywhere. pypi.org needs a trusted
+# publisher for this repository and this workflow file (release.yml).
 name: Release
 
 on:
@@ -27,35 +26,15 @@ jobs:
       - name: The packages hold only tare's files
         run: |
           if tar tzf dist/*.tar.gz | grep -E 'experiments/|markers\.local|/runs/'; then exit 1; fi
+      - name: The built wheel installs and runs
+        run: uv tool run --from dist/*.whl tare --version
       - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
 
-  testpypi:
-    needs: build
-    runs-on: ubuntu-latest
-    environment: testpypi
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/download-artifact@v8
-        with:
-          name: dist
-          path: dist/
-      - uses: astral-sh/setup-uv@v10.2.0
-      - run: uv publish --publish-url https://test.pypi.org/legacy/ --trusted-publishing always dist/*
-      - name: Install from TestPyPI and run it
-        run: |
-          for _ in 1 2 3 4 5 6; do
-            uv tool run --default-index https://test.pypi.org/simple/ --from "tare-cli==${GITHUB_REF_NAME#v}" \
-              tare --version && exit 0
-            sleep 20  # a new release takes a moment to appear in the index
-          done
-          exit 1
-
   pypi:
-    needs: testpypi
+    needs: build
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -67,6 +46,13 @@ jobs:
           path: dist/
       - uses: astral-sh/setup-uv@v10.2.0
       - run: uv publish --trusted-publishing always dist/*
+      - name: Install from PyPI and run it
+        run: |
+          for _ in 1 2 3 4 5 6; do
+            uv tool run --from "tare-cli==${GITHUB_REF_NAME#v}" tare --version && exit 0
+            sleep 20  # a new release takes a moment to appear in the index
+          done
+          exit 1
 
   github-release:
     needs: pypi
