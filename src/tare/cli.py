@@ -1,7 +1,7 @@
 """tare: zero the scale before you weigh.
 
-  tare probe claude [--project DIR]
-  tare claude [--project DIR] [--allow-dirty] [--yolo] [-- CLAUDE_ARGS...]
+  tare probe {claude,codex} [--project DIR]
+  tare {claude,codex} [--project DIR] [--allow-dirty] [--yolo] [-- AGENT_ARGS...]
 """
 import argparse
 import signal
@@ -9,8 +9,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+from .agents import AGENTS
 from .probe import probe, render
-from .room import ROOM_FLAGS, Real, TareError, bwrap, room_home
+from .room import TareError, bwrap, room_home
 
 
 def _exit_on(signum, _frame):
@@ -39,20 +40,22 @@ def main(argv: list[str] | None = None) -> int:
                                  "of yours came along, and prove it before the run.")
     sub = ap.add_subparsers(dest="command", required=True)
     p = sub.add_parser("probe", help="measure the room: tare: 0.00, or every leak and its source")
-    p.add_argument("agent", choices=["claude"])
+    p.add_argument("agent", choices=sorted(AGENTS))
     p.add_argument("--project", type=Path, default=Path.cwd())
-    c = sub.add_parser("claude", help="probe, then start Claude Code in the room (args after --)")
-    c.add_argument("--project", type=Path, default=Path.cwd())
-    c.add_argument("--allow-dirty", action="store_true", help="start even if the reading is not zero")
-    c.add_argument("--yolo", action="store_true", help="pass --dangerously-skip-permissions")
+    for name in sorted(AGENTS):
+        c = sub.add_parser(name, help=f"probe, then start {name} in the room (args after --)")
+        c.add_argument("--project", type=Path, default=Path.cwd())
+        c.add_argument("--allow-dirty", action="store_true", help="start even if the reading is not zero")
+        c.add_argument("--yolo", action="store_true", help="skip the agent's permission prompts and sandbox")
     args = ap.parse_args(argv)
+    agent = AGENTS[args.agent if args.command == "probe" else args.command]
     project = args.project.resolve()
     for signum in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(signum, _exit_on)
 
     try:
-        real = Real.discover()
-        reading = probe(real, project)
+        real = agent.discover()
+        reading = probe(agent, real, project)
         print(render(reading, project), file=sys.stderr)
         if args.command == "probe":
             return 0 if reading.zero else 1
@@ -61,9 +64,9 @@ def main(argv: list[str] | None = None) -> int:
                 print("tare: not starting; fix the leaks or pass --allow-dirty", file=sys.stderr)
                 return 1
             print("tare: --allow-dirty given, starting in a room that is not zero", file=sys.stderr)
-        flags = ROOM_FLAGS + (["--dangerously-skip-permissions"] if args.yolo else [])
-        with room_home(real) as home:
-            return _run_attached(bwrap(home, project, real.claude, ["claude", *flags, *passthrough]))
+        flags = agent.room_flags + (agent.yolo if args.yolo else [])
+        with room_home(agent, real) as home:
+            return _run_attached(bwrap(agent, real, home, project, [agent.name, *flags, *passthrough]))
     except TareError as err:
         print(f"tare: {err}", file=sys.stderr)
         return 2

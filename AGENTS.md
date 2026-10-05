@@ -1,6 +1,6 @@
 # tare
 
-tare starts a coding agent in a room where nothing of the user's came along, and proves it
+tare starts a coding agent (Claude Code or Codex) in a room where nothing of the user's came along, and proves it
 before the run. The room is a bubblewrap sandbox: an empty home, a fresh copy of the login, a
 cleared environment. The proof is a probe that asks the agent nothing. The real CLI runs in the
 room against a fake model endpoint that keeps the request, which is the context the harness
@@ -14,9 +14,10 @@ machine instead of the skill.
 | Path | What |
 |---|---|
 | `src/tare/cli.py` | the `tare` command |
+| `src/tare/agents.py` | what tare knows about each agent: its setup, login, probe arguments, request format, markers |
 | `src/tare/room.py` | the room: bwrap arguments, a fresh home with a login copy, the environment allowlist |
 | `src/tare/probe.py` | the probe: context, control, reach, scoring and the printed reading |
-| `src/tare/fake.py` | the fake Anthropic Messages endpoint |
+| `src/tare/fake.py` | the fake model endpoint (Anthropic Messages for Claude Code, OpenAI Responses for Codex) |
 | `tests/` | pytest; needs no agent, no login and no network |
 | `experiments/` | pre-registered measurements (`PLAN.md` before the runs, `RESULTS.md` after) |
 | `prototypes/` | the first bwrap room, kept as the record |
@@ -30,7 +31,8 @@ on `main`, and a PR merges only when they are green.
 CI cannot run the real thing. It needs bubblewrap and a logged-in agent. So before a PR that
 touches the room or the probe, run it on the machine:
 
-1. `uv run tare probe claude` must read `tare: 0.00` and must show every control class.
+1. `uv run tare probe claude` and `uv run tare probe codex` must read `tare: 0.00` and show
+   every control class.
 2. A spike must fail the probe: plant known dirt into a room's own copy (instructions, a skill,
    an environment variable) and check that each piece is named with its source.
 
