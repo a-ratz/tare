@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from conftest import HOST
-from tare import agents, room
+from tare import agents, probe, room
 from tare.agents import Claude, Codex, Pi, Real
 from tare.room import Room, Seatbelt, TareError
 
@@ -19,6 +19,7 @@ def mac(monkeypatch, tmp_path):
     monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.setattr(room, "SEATBELT_ROOMS", str(tmp_path / "rooms"))
     monkeypatch.setattr(room, "_user_dir", lambda: Path("/private/var/folders/xy/user"))
+    monkeypatch.setattr(probe, "_user_dir", room._user_dir)
     (tmp_path / "rooms").mkdir()
     return tmp_path
 
@@ -188,3 +189,23 @@ def test_a_real_seatbelt_room_hides_the_home_and_keeps_the_runs_work(tmp_path, m
     assert f"cwd: {r.inside_work}" in out
     assert (work / "made.txt").read_text() == "made\n" and not (work / "gone.txt").exists()
     assert not config.exists()
+
+
+def test_the_probe_looks_for_the_places_macos_keeps_and_for_the_pasteboard(tmp_path, monkeypatch, mac):
+    real = Real(tmp_path, tmp_path / ".claude", tmp_path / "claude")
+    argv = probe.reach(real)
+    assert "pbpaste" in argv[2]
+    for target in (tmp_path / "Library/Keychains", tmp_path / "Library/Preferences",
+                   tmp_path / "Library/Application Support", "/private/var/folders/xy/user",
+                   f"/private/tmp/claude-{os.getuid()}", "/private/var/tmp", "/Users/Shared"):
+        assert str(target) in argv[4:]
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert "pbpaste" not in probe.reach(real)[2] and "/Users/Shared" not in probe.reach(real)
+
+
+def test_a_readable_pasteboard_in_the_room_is_a_leak(tmp_path):
+    real = Real(tmp_path, tmp_path / ".claude", tmp_path / "claude")
+    empty = agents.Capture("", set(), {})
+    reading = probe.score(Claude(), real, empty, empty, "path pasteboard\n", "path pasteboard\n")
+    assert [(f.kind, f.what) for f in reading.leaks] == [("reach", "pasteboard")]
+    assert "reach" in reading.seen

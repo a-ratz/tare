@@ -64,7 +64,9 @@ your instructions, memories, plugins, hooks and skills. That is not enough.
   credential files, and called it reconnaissance. That is correct behaviour, but useless for a
   probe. The probe must not depend on the agent's cooperation or honesty.
 - **Reach:** a plain script runs inside the room and looks for your files and inherited
-  environment variables.
+  environment variables. On macOS it also looks for `~/Library` (Keychains, Preferences,
+  Application Support), your directory under `/var/folders`, Claude Code's temporary files in
+  `/private/tmp`, and whether the pasteboard can be read.
 - **Context:** tare points the real agent CLI at a fake model server on your machine. The
   server keeps the request, which is the context the agent CLI put together, and answers "ok".
   The idea is the blank run from analytical chemistry, which runs the whole procedure without a
@@ -286,7 +288,8 @@ macOS 27.0 (arm64) on 2026-10-05 and 2026-10-06.
 | Real task 2: a web page judged by Sonnet | Claude Code with Haiku, Codex with gpt-6.1-sol | Swap confirmed all four predictions of the plan written before the runs. Cliff called a failed run unlucky, and a later rescoring of the same page confirmed it | [results](experiments/html/RESULTS.md) |
 | Field test: two ideation skills compared | Claude Code 2.1.289 with Opus 5.5 | all 18 rooms read `tare: 0.00`, including a skill that started `claude -p` inside the room | not published |
 | macOS: what a Seatbelt room has to handle | Claude Code 2.1.289, Codex CLI 0.159.0, Pi 0.99.1 | Claude Code's login is in the Keychain. With only the home directory denied, `/var/folders`, `/private/tmp` and the pasteboard stayed readable. Agents' own sandboxes fail inside a room (`sandbox_apply: Operation not permitted`) | comments on epic #85 |
-| macOS: a Seatbelt room with the real login | same | each agent answered one prompt. The room and its login copy were removed afterwards, and the Keychain item was unchanged (digest before and after). `tare probe` read `tare: 0.00` for Claude Code and Codex | comments on epic #85 |
+| macOS: a Seatbelt room with the real login | same | each agent answered one prompt. The room and its login copy were removed afterwards, and the Keychain item was unchanged (digest before and after). `tare probe` read `tare: 0.00` for all three | comments on epic #85 |
+| macOS: dirty twin, Seatbelt room, and parts of the real setup copied into the room | same | every room read `tare: 0.00`. Each copied part that reached the request was named with its source, and nothing under the home directory, under `/var/folders`, in `/private/tmp` or on the pasteboard was reachable from inside. Two kinds of Codex context are invisible to the probe on any system (#109) | [results](experiments/dirty-twin-macos/RESULTS.md) |
 
 ## Open questions and ideas
 
@@ -300,8 +303,8 @@ macOS 27.0 (arm64) on 2026-10-05 and 2026-10-06.
   long.
 - **Cost:** every tail is a full agent run, so a Cliff search or a Swap costs as much as its tails.
 - **macOS:** the room is built on Seatbelt, in progress (epic #85) and not in a release yet.
-  Not done: the probe's markers and reach targets for macOS; Calibrate, Swap, Cliff and the
-  judge on macOS; and the Antigravity CLI, whose dirty twin needs Linux's overlay. Not tested:
+  Not done: Calibrate, Swap, Cliff and the judge on macOS; and the Antigravity CLI, whose dirty
+  twin needs Linux's overlay. Not tested:
   whether a program started through launchd or XPC runs outside the room's profile.
 - **Other probes, not built:** weighing the first request's input tokens before and after adding
   junk to the real setup, and file tripwires that report which secret files a run opened.

@@ -12,18 +12,21 @@ Three readings, none of which asks the agent anything:
 import os
 import re
 import subprocess
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from .agents import Capture, Real
 from .fake import Fake
-from .room import Room, TareError, backend, room_env
+from .room import Room, TareError, _user_dir, backend, room_env
 
 SECRET_PATHS = (".claude", ".claude.json", ".codex", ".agents", ".config/gh", ".ssh", ".aws", ".netrc",
                 ".git-credentials", ".docker/config.json")
 REACH_SCRIPT = ('for p in "$@"; do if [ -e "$p" ]; then echo "path $p"; fi; done; '
                 'env | cut -d= -f1 | sed "s/^/env /"')
+# macOS: the pasteboard holds whatever the user copied last; it is not a path, but reads like one
+PASTEBOARD = '; if pbpaste >/dev/null 2>&1; then echo "path pasteboard"; fi'
 SHELL_ENV = {"PWD", "OLDPWD", "SHLVL", "_"}
 LABELS = {"instructions": "global instructions", "memories": "memories"}
 # An offered MCP tool: an entry of the tools array, or a whole line of a deferred-tools
@@ -220,11 +223,22 @@ def settle(run_twin, read) -> Reading:
     return reading
 
 
-def probe(agent, real: Real, project: Path) -> Reading:
-    project = project.resolve()
+def reach(real: Real) -> list[str]:
+    """The reach script and the places it looks for."""
     targets = [str(real.home), str(real.config), *(str(real.home / p) for p in SECRET_PATHS)]
+    script = REACH_SCRIPT
     if Path("/mnt/c").is_dir():
         targets.append("/mnt/c")  # WSL: the Windows drive and its user profile
+    if sys.platform == "darwin":
+        # where macOS keeps what a room must not reach (experiments/dirty-twin-macos)
+        targets += [str(real.home / "Library" / p) for p in ("Keychains", "Preferences", "Application Support")]
+        targets += [str(_user_dir()), f"/private/tmp/claude-{os.getuid()}", "/private/var/tmp", "/Users/Shared"]
+        script += PASTEBOARD
+    return ["/bin/sh", "-c", script, "reach", *targets]
+
+
+def probe(agent, real: Real, project: Path) -> Reading:
+    project = project.resolve()
 
     # the dirty twin: the user's real setup, as a plain terminal would start it
     twin_env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE") or k == "CLAUDE_CONFIG_DIR"}
@@ -252,10 +266,9 @@ def probe(agent, real: Real, project: Path) -> Reading:
         inside = in_room(room, agent.room_flags)
         # where an agent loads extensions, a run without them shows which tools are its own
         bare = in_room(room, [*agent.room_flags, *agent.bare_flags]) if getattr(agent, "bare_flags", None) else None
-        reach = ["/bin/sh", "-c", REACH_SCRIPT, "reach", *targets]
-        reach_in = subprocess.run(rooms.argv(room, agent, real, reach), capture_output=True, text=True,
+        reach_in = subprocess.run(rooms.argv(room, agent, real, reach(real)), capture_output=True, text=True,
                                   timeout=60, check=True).stdout
-    reach_out = subprocess.run(reach, capture_output=True, text=True, timeout=60, check=True).stdout
+    reach_out = subprocess.run(reach(real), capture_output=True, text=True, timeout=60, check=True).stdout
     return settle(run_twin, lambda twin: score(agent, real, twin, inside, reach_in, reach_out, bare=bare,
                                                 project=project, built=room))
 

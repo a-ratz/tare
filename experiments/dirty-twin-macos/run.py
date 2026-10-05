@@ -3,6 +3,8 @@
 usage:
   uv run experiments/dirty-twin-macos/run.py markers                     # write markers.local.json, print hashes
   uv run experiments/dirty-twin-macos/run.py run claude|codex|pi t0|t1|t2
+  uv run experiments/dirty-twin-macos/run.py run codex t2b               # post-hoc: T2 with memories switched on
+  uv run experiments/dirty-twin-macos/run.py diff claude|codex|pi        # T0's lines that T1 lacks (read locally)
   uv run experiments/dirty-twin-macos/run.py keychain                    # digest and count of Claude's item
   uv run experiments/dirty-twin-macos/run.py check                       # score every run
 
@@ -64,7 +66,7 @@ def keychain():
     print(f"Claude Keychain item: digest {digest}, items {dump.count('\"svce\"<blob>=\"Claude Code-credentials')}")
 
 
-def plant(name: str, agent, room: Room) -> list[str]:
+def plant(name: str, agent, room: Room, post_hoc: bool = False) -> list[str]:
     """Copy parts of the real setup into the room's own copy. Returns extra CLI flags."""
     config = room.config(agent)
     if name == "claude":
@@ -72,6 +74,9 @@ def plant(name: str, agent, room: Room) -> list[str]:
         _clone(plugin, room.home / "planted-plugin")
         return ["--plugin-dir", str(room.home / "planted-plugin")]  # and no room flags: connectors, account skills
     if name == "codex":
+        if post_hoc:  # Codex reads memories only when config.toml switches them on
+            with (config / "config.toml").open("a") as f:
+                f.write("\n[features]\nmemories = true\n\n[memories]\nuse_memories = true\n")
         (config / "memories").mkdir()
         shutil.copyfile(HOME / ".codex/memories/memory_summary.md", config / "memories/memory_summary.md")
         _clone((HOME / ".agents/skills/agent-browser").resolve(), room.home / ".agents/skills/agent-browser")
@@ -114,8 +119,8 @@ def run(name: str, condition: str):
     with rooms.open(agent, real, REPO) as room:
         flags = agent.room_flags
         env = {}
-        if condition == "t2":
-            extra_flags = plant(name, agent, room)
+        if condition in ("t2", "t2b"):
+            extra_flags = plant(name, agent, room, post_hoc=condition == "t2b")
             flags = [] if name == "claude" else flags
             flags, env = [*flags, *extra_flags], PLANTED_ENV
         runs = [("", flags)] + ([("bare-", [*flags, *agent.bare_flags])] if getattr(agent, "bare_flags", None) else [])
@@ -146,7 +151,7 @@ def check():
         agent = AGENTS[name]
         real: Real = agent.discover()
         print(f"\n===== {name}")
-        caps = {c: capture(name, c) for c in ("t0", "t1", "t2")}
+        caps = {c: capture(name, c) for c in ("t0", "t1", "t2", "t2b") if capture(name, c) or c != "t2b"}
         for c, cap in caps.items():
             if cap is None:
                 print(f"{c}: no capture")
@@ -158,7 +163,7 @@ def check():
         reach_out = (HERE / "runs" / name / "t0" / "reach_out.txt").read_text() if twin else ""
         print("reach outside:", " ".join(line.split(" ", 1)[1].replace(str(HOME), "~")
                                          for line in reach_out.splitlines() if line.startswith("path ")))
-        for c in ("t1", "t2"):
+        for c in [c for c in caps if c != "t0"]:
             out = HERE / "runs" / name / c
             if twin is None or caps[c] is None:
                 continue
@@ -171,5 +176,16 @@ def check():
             print(render(reading, REPO).replace(str(HOME), "~"))
 
 
+def diff(name: str):
+    """The context lines T0 has and T1 lacks, home path shortened: for reading locally, not for committing."""
+    t0, t1 = capture(name, "t0"), capture(name, "t1")
+    room_lines = set(t1.text.splitlines())
+    for line in dict.fromkeys(t0.text.splitlines()):
+        if line.strip() and line not in room_lines:
+            print(line.replace(str(HOME), "~")[:140])
+
+
 if __name__ == "__main__":
+    if sys.argv[1] == "diff":
+        sys.exit(diff(sys.argv[2]))
     {"markers": markers, "keychain": keychain, "check": check}.get(sys.argv[1], lambda: run(sys.argv[2], sys.argv[3]))()
