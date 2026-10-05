@@ -128,3 +128,29 @@ def test_report_names_the_cliff_step_and_its_changes(tmp_path):
     assert "The run became lost at step 1." in text
     assert "at step 1: Bash echo 41 > notes.txt" in text
     assert "changed   notes.txt" in text
+
+
+def test_cliff_continues_by_handoff_when_the_agent_cannot_resume(tmp_path, monkeypatch):
+    from tare import cliff as cliff_module
+    from tare.trail import Trail
+
+    class NoResume:
+        name = "noresume"
+        native_resume = False
+
+        def trail(self, lines):
+            return Trail()
+
+    used = []
+    (tmp_path / "w").mkdir()
+    caps.archive(tmp_path / "w", tmp_path / "empty.tar")
+    steps = [caps.Capsule(i, None, tmp_path / "empty.tar", 0, 0, f"step {i}") for i in range(3)]
+    monkeypatch.setattr(caps, "record", lambda *a, **k: None)
+    monkeypatch.setattr(caps, "run_check", lambda check, work: (False, "check exit 1"))
+    monkeypatch.setattr(caps, "capsules", lambda out, agent: steps)
+    monkeypatch.setattr(caps, "session_lines", lambda out: [])
+    monkeypatch.setattr(caps, "run_tail", lambda *a, **k: used.append(("native", a[3].step)) or caps.Tail(a[3].step, True, ""))
+    monkeypatch.setattr(caps, "run_handoff", lambda *a, **k: used.append(("handoff", a[3].step)) or caps.Tail(a[3].step, False, ""))
+    cliff_module.cliff(NoResume(), None, tmp_path, "task", "check", tmp_path, tails=1, budget=4, jobs=1)
+    assert ("native", 0) in used  # step 0 is a fresh start for every agent
+    assert all(kind == "handoff" for kind, step in used if step > 0)
