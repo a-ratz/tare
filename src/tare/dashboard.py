@@ -5,6 +5,7 @@ original run and tail writes. A finished run looks the same as a live one, so `t
 can show any run directory.
 """
 import json
+import re
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -109,8 +110,12 @@ def _rates(tails, sides) -> dict:
         ts = [t for t in tails if t.get("side") == key]
         done = [t["status"] == "passed" for t in ts if t["status"] != "running"]
         lo, hi = wilson(sum(done), len(done))
+        # a judge check reports "score N" in its detail line
+        scores = [int(m.group(1)) for t in ts if t["status"] != "running"
+                  and (m := re.search(r"score (\d+)", t.get("detail", "")))]
         rates[key] = {"passes": sum(done), "n": len(done), "running": sum(t["status"] == "running" for t in ts),
-                      "rate": sum(done) / len(done) if done else None, "lo": lo, "hi": hi}
+                      "rate": sum(done) / len(done) if done else None, "lo": lo, "hi": hi, "scores": scores,
+                      "mean": sum(scores) / len(scores) if scores else None}
     return rates
 
 
