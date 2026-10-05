@@ -7,7 +7,8 @@ and refuses to start the run until the reading is zero.
 
 Status: concept plus one working prototype (`prototypes/bwrap-room.sh`). Written
 2026-10-04 from a day of measurements; every claim below marked *measured* was
-observed on WSL2 with Claude Code 2.1.289.
+observed on WSL2 with Claude Code 2.1.289. The fake-model blank was tested on
+2026-10-05 ([experiments/dirty-twin](experiments/dirty-twin/RESULTS.md)).
 
 ## Why
 
@@ -47,6 +48,11 @@ assume the caller provides a clean runtime. Nothing checks that the room is clea
   Claude Code starts, logs in and answers inside; the real files do not exist there.
   On WSL the resolver lives behind a symlink into `/mnt/wsl`, which must be mounted
   read-only or DNS fails.
+- **Measured (2026-10-05):** the prototype passes the parent environment into the
+  room: a secret-like variable from the calling shell was visible inside. The room needs
+  `--clearenv` plus an allowlist. It also holds a usable login by construction, the
+  copied credentials. A stale copy fails to refresh (`OAuth session expired`), so the
+  copy must be taken fresh at every start, as `claude-naked` already does.
 - macOS: the same idea with `sandbox-exec` (Seatbelt), which Claude Code and Codex
   already use for their own sandboxes. Untested.
 - Fallback: Docker, where it is installed. It contains files but does nothing
@@ -71,6 +77,13 @@ assume the caller provides a clean runtime. Nothing checks that the room is clea
      **Kill criterion:** login-carried features (connectors, account skills, server-side
      memory) may not load against a fake endpoint, so the probe would report clean
      while the real run is dirty. Test that first with a deliberately dirty twin.
+     **Measured (2026-10-05): for Claude Code the kill criterion does not hold.** Run with
+     the real setup against the fake, the CLI still loaded connectors, account skills,
+     plugin skills, hook output, global instructions, auto-memory and the email. Run
+     inside the room, it loaded none of them except the email. One condition applies:
+     a custom base URL suppresses tool search and inlines every tool schema, so probes
+     set `ENABLE_TOOL_SEARCH=true` to see the context in its real form.
+     [Results](experiments/dirty-twin/RESULTS.md).
   2. **Ballast weighing.** Record the provider-reported first-turn input tokens of a
      fixed prompt in the room. Inflate the real context surfaces with junk plus a
      reply canary, run again. Clean means identical counts and no canary. Needs
@@ -134,15 +147,19 @@ Tare is meant to sit underneath such frameworks: their exam, Tare's clean room.
 
 ## Next steps, in order
 
-1. **Dirty-twin test for the fake-model blank** on Claude Code: real login, fake base
-   URL. Do connectors and account skills appear in the captured request? The answer
-   decides the probe design.
-2. Turn the bwrap prototype into `tare claude` with a reach probe that is a script,
-   not an agent.
+1. ~~Dirty-twin test for the fake-model blank~~. Done 2026-10-05: the blank works for
+   Claude Code ([results](experiments/dirty-twin/RESULTS.md)).
+2. Turn the bwrap prototype into `tare claude`:
+   - a fresh credential copy at every start;
+   - a cleared environment with an allowlist;
+   - a reach probe that is a script, not an agent;
+   - a context probe through the fake, with the dirty twin as its positive control;
+   - `ENABLE_TOOL_SEARCH=true` in both the probe and the run.
 3. Codex adapter on the same pattern.
 4. Seatbelt profile for macOS.
-5. Bring the `claude-naked` connector fix (v0.2.0, uncommitted in the `codex-naked`
-   working tree) in as the Claude adapter's context layer.
+5. Bring the `claude-naked` connector fix in as the Claude adapter's context layer. It is
+   committed as `f61aff7` on `fix/remote-plugin-isolation` in `codex-naked`, pushed but
+   not merged.
 
 ## Name
 
