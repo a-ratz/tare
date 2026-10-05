@@ -14,7 +14,7 @@
 [![Version 0.1.0][version-shield]][version-url]
 [![Python 3.11+][python-shield]][python-url]
 [![Linux | WSL][platform-shield]][platform-url]
-[![Claude Code][agent-shield]][agent-url]
+[![Claude Code | Codex][agent-shield]][agent-url]
 
 </div>
 
@@ -39,8 +39,8 @@ with Claude Code, the login alone brings your connectors (mail, calendar, docume
 account's skills and your email into the session. Eval frameworks assume that you provide a
 clean runtime, and nothing checks that you did.
 
-If you run skill evals, A/B comparisons or agent benchmarks with Claude Code on your own
-machine, tare is for you.
+If you run skill evals, A/B comparisons or agent benchmarks with Claude Code or Codex on your
+own machine, tare is for you.
 
 ## Features
 
@@ -55,15 +55,15 @@ machine, tare is for you.
 - **Keeps your own session logged in.** Each run gets a fresh copy of the login, removed
   afterwards. tare refuses to start when that copy would have to refresh, because a refresh
   could log out your real session.
-- **Works like the agent you know.** You can run it interactively or in print mode, all
-  `claude` arguments pass through, and your project is mounted at `/work`.
+- **Works like the agent you know.** Claude Code or Codex, interactive or one-shot: all of
+  the agent's arguments pass through, and your project is mounted at `/work`.
 
 ## When to use
 
 | Use tare when | Look elsewhere when |
 |---|---|
 | you compare agent runs with and without a skill, plugin or prompt | you need a sandbox against a hostile agent: the room has network access and a usable login |
-| you benchmark agents on your own machine | you are on macOS, or use Codex (both planned, not built) |
+| you benchmark agents on your own machine | you are on macOS (planned, not built) |
 | you want a fresh-machine run without a fresh machine | you log in with an API key only (untested) |
 
 ## Quick Start
@@ -84,7 +84,8 @@ tare: 0.00
 ```
 
 This is the output of a real run, with only the home path shortened. Then
-`uv run tare claude` starts Claude Code in that room.
+`uv run tare claude` starts Claude Code in that room; `uv run tare probe codex` and
+`uv run tare codex` do the same for Codex.
 
 ## Install
 
@@ -92,7 +93,7 @@ This is the output of a real run, with only the home path shortened. Then
 |---|---|
 | Linux or WSL2 | the room is built with user namespaces |
 | [bubblewrap](https://github.com/containers/bubblewrap) | `sudo apt install bubblewrap` |
-| Claude Code | on `PATH`, logged in with a subscription |
+| Claude Code or Codex | on `PATH`, logged in; Codex installed under `/usr` (`npm install -g @openai/codex`) |
 | [uv](https://docs.astral.sh/uv/) | Python 3.11+ |
 
 From a checkout, either run it in place (`uv run tare ...`) or put `tare` on your `PATH`:
@@ -110,7 +111,13 @@ tare claude -- -p "fix the tests"  # arguments after -- go to claude
 tare claude --yolo                 # adds --dangerously-skip-permissions
 tare claude --allow-dirty          # start even though the reading is not zero
 tare claude --project ../other     # another project directory (default: the current one)
+
+tare probe codex                   # the same for Codex
+tare codex -- exec -m MODEL "..."  # one-shot Codex run; arguments after -- go to codex
 ```
+
+The room starts with the agent's defaults, not your settings: Codex runs its default model
+unless you pass `-m`. Set the model explicitly when you compare runs.
 
 A room that is not clean names each leak and where it came from. This is an excerpt of a real
 run in a room with planted dirt, with the home path shortened:
@@ -137,13 +144,12 @@ control, so tare knows it can see your context at all. Third, a plain script ins
 looks for your files and inherited secrets.
 
 → [Concept, the three layers and the measurements behind them](CONCEPT.md)
-→ [The dirty-twin experiment that decided the probe design](experiments/dirty-twin/RESULTS.md)
+→ [The dirty-twin experiments that decided the probe design: Claude Code](experiments/dirty-twin/RESULTS.md), [Codex](experiments/dirty-twin-codex/RESULTS.md)
 
 ## Roadmap
 
-Next, in this order: [Codex support][epic-codex], then
-[Cliff][epic-cliff], which finds the steps after which a failed run became lost, then
-[Swap][epic-swap], which tells whether the room or the model was to blame.
+Next, in this order: [Cliff][epic-cliff], which finds the steps after which a failed run
+became lost, then [Swap][epic-swap], which tells whether the room or the model was to blame.
 
 ## Contributing
 
@@ -167,8 +173,7 @@ Crafted with [Readme Craft](https://github.com/motiful/readme-craft)
 [python-url]: https://www.python.org/
 [platform-shield]: https://img.shields.io/badge/platform-Linux%20%7C%20WSL-555555.svg
 [platform-url]: #install
-[agent-shield]: https://img.shields.io/badge/agent-Claude%20Code-D97757.svg
-[agent-url]: https://docs.claude.com/en/docs/claude-code/overview
-[epic-codex]: https://github.com/AndreRatzenberger/tare/issues/6
+[agent-shield]: https://img.shields.io/badge/agents-Claude%20Code%20%7C%20Codex-D97757.svg
+[agent-url]: #install
 [epic-cliff]: https://github.com/AndreRatzenberger/tare/issues/11
 [epic-swap]: https://github.com/AndreRatzenberger/tare/issues/17

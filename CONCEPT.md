@@ -5,10 +5,11 @@ Gemini CLI, Antigravity, Pi) in a room where nothing of yours came along, and pr
 it before the run. It prints `tare: 0.00`, or names every leak and where it came from,
 and refuses to start the run until the reading is zero.
 
-Status: `tare probe claude` and `tare claude` work on Linux and WSL (v0.1.0, 2026-10-05;
-see the README). Written 2026-10-04 from a day of measurements; every claim below
-marked *measured* was observed on WSL2 with Claude Code 2.1.289. The fake-model blank
-was tested on 2026-10-05 ([experiments/dirty-twin](experiments/dirty-twin/RESULTS.md)).
+Status: `tare probe claude`, `tare claude`, `tare probe codex` and `tare codex` work on Linux
+and WSL (2026-10-05; see the README). Written 2026-10-04 from a day of measurements; every
+claim below marked *measured* was observed on WSL2 with Claude Code 2.1.289 or Codex CLI
+0.160.0. The fake-model blank was tested for both on 2026-10-05
+([Claude Code](experiments/dirty-twin/RESULTS.md), [Codex](experiments/dirty-twin-codex/RESULTS.md)).
 
 ## Why
 
@@ -126,6 +127,20 @@ Traps found while sealing them:
 - **Pi:** with stdin left open it waits for piped input and never answers. Close stdin.
 - **Claude Code:** relocating the config is not enough (connectors and account skills come
   with the login, see layer 1).
+- **Codex as a probe target** (measured 2026-10-05, Codex 0.160.0):
+  - `-c openai_base_url=<fake>/v1` keeps the ChatGPT login and reaches the fake. Without
+    `--disable enable_request_compression` the body arrives compressed with zstd.
+  - Codex tries a websocket five times (about 8 s) before it falls back to HTTPS.
+    Overriding the built-in provider to stop that is refused.
+  - The captured request holds more than `codex debug prompt-input`: the memories are
+    missing from Codex's own rendering.
+  - Memories load only when the user's `config.toml` enables `[features] memories`. The
+    files alone do nothing.
+  - Hooks did not fire in `exec` runs. The first request offered no tools from configured MCP
+    servers. So the probe cannot see either class in the dirty twin. The room has no user
+    `config.toml` or `hooks.json`, so neither can come in.
+  - A fresh `CODEX_HOME` means Codex's defaults, including its default model. Pass `-m`
+    when comparing runs.
 - **Long prompts:** Linux caps a single argument near 128 KiB; Pi takes `@file`, Copilot takes
   piped stdin.
 
@@ -175,7 +190,9 @@ Tare is meant to sit underneath such frameworks: their exam, Tare's clean room.
      points to a race with the profile fetch. It is declared whenever it is seen.
    - Not tested: whether a refresh inside the room rotates the token family of the
      real session.
-3. Codex adapter on the same pattern.
+3. ~~Codex adapter~~. Done 2026-10-05: `tare probe codex` and `tare codex`. The probe reads
+   `tare: 0.00` on a clean room. A planted room (AGENTS.md, memories with the feature on, a
+   skill in each skill directory, an environment variable) read 6 leaks, each with its source.
 4. Seatbelt profile for macOS.
 5. ~~Bring the `claude-naked` connector fix in~~. `tare claude` carries its own context
    layer (fresh config plus the flags). The fix stays useful for `claude-naked` itself:

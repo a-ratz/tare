@@ -1,6 +1,6 @@
 description: >
   Prove your coding agent starts with nothing of yours before you measure it: a clean room for
-  Claude Code that starts only when its probe reads tare: 0.00, so your evals measure the skill,
+  Claude Code and Codex that starts only when its probe reads tare: 0.00, so your evals measure the skill,
   not your machine.
 topics:
   # Tier 1: big traffic
@@ -18,6 +18,7 @@ topics:
   - benchmarking
   # Tier 3: ecosystem
   - claude-code
+  - codex
   - coding-agents
   - ai-tools
 homepage: ""  # fill when a site exists
