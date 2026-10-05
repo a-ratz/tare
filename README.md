@@ -1,30 +1,80 @@
-# tare
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset=".github/logo-light.svg">
+    <img alt="tare" src=".github/logo-light.svg" width="260">
+  </picture>
 
-Zero the scale before you weigh: start a coding agent in a room where nothing of
-yours came along, and prove it before the run.
+  <p>Prove your coding agent starts with nothing of yours before you measure it.</p>
+</div>
 
-Early stage. [CONCEPT.md](CONCEPT.md) has the design, the measurements behind it and
-the next steps.
+<div align="center">
 
-## Use
+[![License: MIT][license-shield]][license-url]
+[![Version 0.1.0][version-shield]][version-url]
+[![Python 3.11+][python-shield]][python-url]
+[![Linux | WSL][platform-shield]][platform-url]
+[![Claude Code][agent-shield]][agent-url]
 
-Linux or WSL, Claude Code with a subscription login, and
-[bubblewrap](https://github.com/containers/bubblewrap) installed. From a checkout:
+</div>
 
+<div align="center">
+  <a href="#quick-start">Quick Start</a> &middot;
+  <a href="#features">Features</a> &middot;
+  <a href="#how-it-works">How it works</a> &middot;
+  <a href="CONCEPT.md">Concept</a> &middot;
+  <a href="https://github.com/AndreRatzenberger/tare/issues/new?template=bug_report.md">Report Bug</a>
+</div>
+
+<br>
+
+---
+
+## Why tare?
+
+Skill and agent evaluations compare runs with a skill against runs without it. If your agent
+brings your own instructions, memory, skills or connected accounts into both runs, the
+comparison measures your machine, not the skill. Moving the config directory is not enough:
+with Claude Code, the login alone brings your connectors (mail, calendar, documents), your
+account's skills and your email into the session. Eval frameworks assume that you provide a
+clean runtime, and nothing checks that you did.
+
+If you run skill evals, A/B comparisons or agent benchmarks with Claude Code on your own
+machine, tare is for you.
+
+## Features
+
+- **Proves the room before the run.** You get `tare: 0.00`, or every leak with its source,
+  and the agent does not start until the reading is zero.
+- **Measures instead of asking.** tare checks what the agent actually receives. An agent asked
+  about its own context can refuse or be wrong.
+- **Tells you when it cannot see.** Every probe also checks your real setup. If tare cannot
+  find a kind of context there, it reports itself blind instead of reporting clean.
+- **Puts nothing of yours within reach.** Your home directory, your other logins and your
+  shell's secrets do not exist inside the room.
+- **Keeps your own session logged in.** Each run gets a fresh copy of the login, removed
+  afterwards. tare refuses to start when that copy would have to refresh, because a refresh
+  could log out your real session.
+- **Works like the agent you know.** You can run it interactively or in print mode, all
+  `claude` arguments pass through, and your project is mounted at `/work`.
+
+## When to use
+
+| Use tare when | Look elsewhere when |
+|---|---|
+| you compare agent runs with and without a skill, plugin or prompt | you need a sandbox against a hostile agent: the room has network access and a usable login |
+| you benchmark agents on your own machine | you are on macOS, or use Codex (both planned, not built) |
+| you want a fresh-machine run without a fresh machine | you log in with an API key only (untested) |
+
+## Quick Start
+
+```bash
+git clone https://github.com/AndreRatzenberger/tare.git && cd tare
+uv run tare probe claude
 ```
-uv run tare probe claude              # measure the room: tare: 0.00, or every leak and its source
-uv run tare claude                    # probe, then start Claude Code in the room (interactive)
-uv run tare claude -- -p "..."        # arguments after -- go to claude
-uv run tare claude --yolo             # adds --dangerously-skip-permissions
-uv run tare claude --allow-dirty      # start even though the reading is not zero
-```
 
-`--project DIR` selects the project directory (default: the current one). Inside the
-room it is `/work`, the home directory is `/home/tare`, and nothing else of yours
-exists there.
-
-```
-tare probe · claude 2.1.289 · /home/me/project
+```text
+tare probe · claude 2.1.289 · /home/me/tare
   control   dirty twin shows: instructions, home path, mcp, skills, plugins, email, reach
   leaks     none
   declared
@@ -33,15 +83,92 @@ tare probe · claude 2.1.289 · /home/me/project
 tare: 0.00
 ```
 
-The probe takes three readings, and none of them asks the agent anything:
+This is the output of a real run, with only the home path shortened. Then
+`uv run tare claude` starts Claude Code in that room.
 
-- **Context.** The real CLI runs inside the room against a local fake model endpoint,
-  which keeps the request: the context the harness actually assembled.
-- **Control.** The same run in your real setup (the dirty twin). The probe has to find
-  your context there, or it reports itself blind.
-- **Reach.** A plain script looks for your files and inherited environment variables
-  inside the room. The same script outside the room is its control.
+## Install
 
-There are two declared residuals; they appear in the reading but do not block the run.
-With subscription auth, the account email arrives with the login. The room also holds
-a fresh copy of the login, because the CLI needs one; the copy is removed afterwards.
+| Requirement | Notes |
+|---|---|
+| Linux or WSL2 | the room is built with user namespaces |
+| [bubblewrap](https://github.com/containers/bubblewrap) | `sudo apt install bubblewrap` |
+| Claude Code | on `PATH`, logged in with a subscription |
+| [uv](https://docs.astral.sh/uv/) | Python 3.11+ |
+
+From a checkout, either run it in place (`uv run tare ...`) or put `tare` on your `PATH`:
+
+```bash
+uv tool install .
+```
+
+## Usage
+
+```bash
+tare probe claude                  # measure the room: tare: 0.00, or every leak and its source
+tare claude                        # probe, then start Claude Code in the room
+tare claude -- -p "fix the tests"  # arguments after -- go to claude
+tare claude --yolo                 # adds --dangerously-skip-permissions
+tare claude --allow-dirty          # start even though the reading is not zero
+tare claude --project ../other     # another project directory (default: the current one)
+```
+
+A room that is not clean names each leak and where it came from. This is an excerpt of a real
+run in a room with planted dirt, with the home path shortened:
+
+```text
+  leaks
+    instructions global instructions     /home/me/.claude/CLAUDE.md
+    home path    /home/me/               the user's files
+    skills       1 skill                 /home/me/.claude/skills
+    env          SPIKE_API_KEY           inherited environment
+tare: 4 leaks
+```
+
+Two residuals are declared: they appear in the reading but do not block the run. With a
+subscription login, your account email arrives with the login. The room also holds a copy of
+your login, because the agent needs one to run.
+
+## How it works
+
+tare takes three readings, and none of them asks the agent anything. First, the real CLI runs
+inside the room against a local fake model endpoint, which keeps the request it receives: that
+request is the context the agent was given. Second, the same run in your real setup is the
+control, so tare knows it can see your context at all. Third, a plain script inside the room
+looks for your files and inherited secrets.
+
+→ [Concept, the three layers and the measurements behind them](CONCEPT.md)
+→ [The dirty-twin experiment that decided the probe design](experiments/dirty-twin/RESULTS.md)
+
+## Roadmap
+
+Next, in this order: [Codex support][epic-codex], then
+[Cliff][epic-cliff], which finds the steps after which a failed run became lost, then
+[Swap][epic-swap], which tells whether the room or the model was to blame.
+
+## Contributing
+
+Work is organised as epics with features; each epic is one branch and one PR. The process,
+the checks and the conventions are in [AGENTS.md](AGENTS.md). Run the tests with
+`uv run pytest`.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
+
+---
+
+Crafted with [Readme Craft](https://github.com/motiful/readme-craft)
+
+[license-shield]: https://img.shields.io/badge/license-MIT-blue.svg
+[license-url]: LICENSE
+[version-shield]: https://img.shields.io/badge/version-0.1.0-informational.svg
+[version-url]: pyproject.toml
+[python-shield]: https://img.shields.io/badge/python-3.11%2B-3776AB.svg
+[python-url]: https://www.python.org/
+[platform-shield]: https://img.shields.io/badge/platform-Linux%20%7C%20WSL-555555.svg
+[platform-url]: #install
+[agent-shield]: https://img.shields.io/badge/agent-Claude%20Code-D97757.svg
+[agent-url]: https://docs.claude.com/en/docs/claude-code/overview
+[epic-codex]: https://github.com/AndreRatzenberger/tare/issues/6
+[epic-cliff]: https://github.com/AndreRatzenberger/tare/issues/11
+[epic-swap]: https://github.com/AndreRatzenberger/tare/issues/17

@@ -1,0 +1,23 @@
+description: >
+  Prove your coding agent starts with nothing of yours before you measure it: a clean room for
+  Claude Code that starts only when its probe reads tare: 0.00, so your evals measure the skill,
+  not your machine.
+topics:
+  # Tier 1: big traffic
+  - ai
+  - llm
+  - ai-agents
+  - cli
+  - developer-tools
+  # Tier 2: precise track (each topic has 500+ repositories on GitHub)
+  - llm-evaluation
+  - agent-evaluation
+  - evals
+  - sandbox
+  - reproducibility
+  - benchmarking
+  # Tier 3: ecosystem
+  - claude-code
+  - coding-agents
+  - ai-tools
+homepage: ""  # fill when a site exists

@@ -1,0 +1,32 @@
+name: Epic
+description: A result worth one branch and one PR
+labels: ["type:epic"]
+
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What should exist when the epic is done? Split it into features (its sub-issues).
+      placeholder: Describe the result and what it is good for.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance criteria
+      description: When is the epic done?
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: technical_notes
+    attributes:
+      label: Technical notes
+      description: Measurements, design notes, dependencies, prior art.
+    validations:
+      required: false

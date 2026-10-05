@@ -1,0 +1,21 @@
+# The checks of AGENTS.md, on every PR and on main.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0  # setup-uv tags full versions only, there is no v10
+        with:
+          python-version: "3.13"
+          enable-cache: true
+      - name: Install
+        run: uv sync --frozen
+      - name: pytest
+        run: uv run pytest
