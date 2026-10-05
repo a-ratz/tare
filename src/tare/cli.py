@@ -4,10 +4,10 @@
   tare {claude,codex,pi} [--project DIR] [--allow-dirty] [--yolo] [-- AGENT_ARGS...]
   tare cliff {claude,codex,pi} PROMPT --check CMD [--tails N] [--budget N] [--jobs N] [-- AGENT_ARGS...]
   tare swap PROMPT --check CMD [--a claude] [--b codex] [--a-args ARGS] [--b-args ARGS] [--cuts 0,0.5,1]
-  tare calibrate PROMPT --check CMD --side "claude --model haiku" --side "codex" [--runs N]
+  tare calibrate [PROMPT] [--check CMD] --side "claude --model haiku" --side "codex" [--side-prompt b=TEXT] [--runs N]
   tare judge [DIR] --rubric FILE --threshold N [--judge "claude --model sonnet"]   a check: exit 0 at or above N
   tare judge-noise DIR... --rubric FILE --times K [--threshold N]                  the judge's own spread
-  tare watch DIR [--port N]      the live dashboard of a Cliff or Swap run, also a finished one
+  tare watch DIR... [--port N]   the live dashboard of a run, also a finished one; several runs on one page
   tare rerun DIR [--out DIR]     repeat a run from its recipe
 """
 import argparse
@@ -44,7 +44,7 @@ def _run_attached(argv: list[str]) -> int:
         signal.signal(signal.SIGINT, previous)
 
 
-def _serve(out: Path, port: int) -> str:
+def _serve(out: Path | list[Path], port: int) -> str:
     try:
         return dashboard.serve(out, port)[1]
     except OSError:
@@ -104,10 +104,13 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--out", type=Path, help="run directory (default ~/.local/state/tare/swap/<project>-<time>)")
     w.add_argument("--allow-dirty", action="store_true", help="run even if a probe reading is not zero")
     c = sub.add_parser("calibrate", help="pass rates of agents on a task, before Cliff or Swap")
-    c.add_argument("prompt", help="the task, as given to every side")
-    c.add_argument("--check", required=True, help="shell command run in the finished workspace; exit 0 passes")
+    c.add_argument("prompt", nargs="?", help="the task, as given to every side without a prompt of its own")
+    c.add_argument("--check", help="shell command run in the finished workspace; exit 0 passes. Without it every "
+                   "run that ends counts, and its workspace is kept for scoring elsewhere")
     c.add_argument("--side", action="append", required=True,
                    help="an agent and its arguments, e.g. 'claude --model haiku' (repeat for each side)")
+    c.add_argument("--side-prompt", action="append", default=[], metavar="KEY=PROMPT",
+                   help="a side's own prompt; sides are a, b, c... in --side order, e.g. 'b=/ce:ideate ...'")
     c.add_argument("--runs", type=int, default=10, help="fresh starts per side (default 10)")
     c.add_argument("--jobs", type=int, default=3, help="runs at the same time (default 3)")
     c.add_argument("--project", type=Path, default=Path.cwd())
@@ -129,6 +132,13 @@ def main(argv: list[str] | None = None) -> int:
         if unknown:
             ap.error(f"unknown agent: {', '.join(unknown)} (known: {', '.join(sorted(AGENTS))})")
         names = [side[0] for side in sides]
+        keys = [chr(97 + i) for i in range(len(sides))]
+        prompts = dict(item.split("=", 1) for item in args.side_prompt if "=" in item)
+        bad = [item for item in args.side_prompt if "=" not in item or item.split("=", 1)[0] not in keys]
+        if bad:
+            ap.error(f"--side-prompt wants KEY=PROMPT with KEY one of {', '.join(keys)}: {', '.join(bad)}")
+        if not args.prompt and len(prompts) < len(keys):
+            ap.error("give a prompt, or a --side-prompt for every side")
     else:
         names = [args.agent if args.command in ("probe", "cliff") else args.command]
     project = args.project.resolve()
@@ -148,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
                 params = {"tails": args.tails, "budget": args.budget, "jobs": args.jobs, "gap_below": args.gap_below}
             elif args.command == "calibrate":
                 agents = {chr(97 + i): (AGENTS[side[0]], reals[side[0]], side[1:]) for i, side in enumerate(sides)}
-                params = {"runs": args.runs, "jobs": args.jobs}
+                params = {"runs": args.runs, "jobs": args.jobs, **({"prompts": prompts} if prompts else {})}
             else:
                 agents = {"a": (AGENTS[args.a], reals[args.a], shlex.split(args.a_args)),
                           "b": (AGENTS[args.b], reals[args.b], shlex.split(args.b_args))}
@@ -175,7 +185,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"tare cliff: see it again with  tare watch {out}", file=sys.stderr)
             return 0
         if args.command == "calibrate":
-            runs = [calibration.Side(key, agent_, real_, list(extra)) for key, (agent_, real_, extra) in agents.items()]
+            runs = [calibration.Side(key, agent_, real_, list(extra), prompts.get(key))
+                    for key, (agent_, real_, extra) in agents.items()]
             print(calibration.calibrate(runs, project, args.prompt, args.check, out, runs=args.runs, jobs=args.jobs,
                                         journal=journal, keep=args.keep), end="")
             print(f"tare calibrate: see it again with  tare watch {out}", file=sys.stderr)
@@ -197,14 +208,16 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _watch(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(prog="tare watch", description="the live dashboard of a Cliff or Swap run")
-    ap.add_argument("dir", type=Path)
+    ap = argparse.ArgumentParser(prog="tare watch", description="the live dashboard of a run; several runs on one page")
+    ap.add_argument("dirs", type=Path, nargs="+")
     ap.add_argument("--port", type=int, default=8777)
     args = ap.parse_args(argv)
-    if not (args.dir / "journal.jsonl").exists():
-        print(f"tare watch: {args.dir} holds no run journal", file=sys.stderr)
+    missing = [str(d) for d in args.dirs if not (d / "journal.jsonl").exists()]
+    if missing:
+        print(f"tare watch: no run journal in {', '.join(missing)}", file=sys.stderr)
         return 2
-    print(f"tare watch: {_serve(args.dir.resolve(), args.port)}  (Ctrl-C to stop)", file=sys.stderr)
+    dirs = [d.resolve() for d in args.dirs]
+    print(f"tare watch: {_serve(dirs[0] if len(dirs) == 1 else dirs, args.port)}  (Ctrl-C to stop)", file=sys.stderr)
     try:
         threading.Event().wait()
     except KeyboardInterrupt:

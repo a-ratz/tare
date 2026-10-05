@@ -58,6 +58,7 @@ svg text { fill: var(--muted); font: 11px var(--mono); }
 <body>
 <main>
   <header>
+    <a id="back" href="../../" style="display:none;color:var(--accent);text-decoration:none">← all runs</a>
     <h1 id="title">tare</h1>
     <span class="chip" id="phase"><span class="dot"></span><span>connecting</span></span>
     <span class="chip" id="elapsed"></span>
@@ -76,14 +77,15 @@ function recipeCard(s) {
   const r = s.recipe || {};
   const sides = Object.entries(s.sides || {}).map(([k, v]) => {
     const version = r.agents && r.agents[k] ? r.agents[k].version : "";
-    return `<div>agent ${esc(k)}</div><div><b>${esc(v.agent)}</b> ${esc((v.args || []).join(" "))} <span class="muted">${esc(version)}</span></div>`;
+    const own = v.prompt ? `<div class="muted">prompt: ${esc(v.prompt)}</div>` : "";
+    return `<div>agent ${esc(k)}</div><div><b>${esc(v.agent)}</b> ${esc((v.args || []).join(" "))} <span class="muted">${esc(version)}</span>${own}</div>`;
   }).join("");
   const p = s.params || {};
   const params = s.kind === "cliff" ? `${esc(p.tails)} tails per probe · budget ${esc(p.budget)}`
     : s.kind === "calibrate" ? `${esc(p.tails)} fresh starts per side` : `cuts ${esc((p.cuts || []).join(", "))} · ${esc(p.tails)} tails per cell`;
   return `<section class="panel"><h2>Recipe</h2><div class="kv">
-    <div>task</div><div>${esc(s.task)}</div>
-    <div>check</div><div><code>${esc(s.check)}</code></div>
+    <div>task</div><div>${s.task ? esc(s.task) : `<span class="muted">a prompt per side</span>`}</div>
+    <div>check</div><div>${s.check ? `<code>${esc(s.check)}</code>` : `<span class="muted">none: every run that ends counts; workspaces kept for scoring elsewhere</span>`}</div>
     <div>project</div><div><code>${esc(s.project)}</code> <span class="muted">${esc(r.project_digest ? "digest " + r.project_digest.slice(0, 12) : "")}</span></div>
     ${sides}
     <div>params</div><div>${params}</div>
@@ -167,7 +169,21 @@ function swapCard(s) {
   }).join("")}</div></section>`;
 }
 
+function runsCard(s) {
+  const rates = s.rates || {};
+  const rows = Object.entries(s.sides || {}).map(([k, side]) => {
+    const r = rates[k] || { passes: 0, n: 0, running: 0, times: [] };
+    const dots = "<span class='dot pass'></span>".repeat(r.passes) + "<span class='dot fail'></span>".repeat(r.n - r.passes) + "<span class='dot run'></span>".repeat(r.running);
+    const times = [...(r.times || [])].sort((a, b) => a - b);
+    const median = times.length ? times[Math.floor((times.length - 1) / 2)] : null;
+    return `<tr><td class="num">${esc(k)}</td><td><b>${esc(side.agent)}</b> ${esc((side.args || []).join(" "))}<div class="dots">${dots}</div></td>
+      <td class="num">${r.passes}/${r.n}</td><td class="num">${median == null ? "–" : `${dur(median)} (${dur(times[0])}–${dur(times[times.length - 1])})`}</td></tr>`;
+  }).join("");
+  return `<section class="panel"><h2>Runs · no check</h2><table><thead><tr><th>side</th><th>agent</th><th>finished</th><th>time (median, range)</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+}
+
 function calibrateCard(s) {
+  if (!s.check) return runsCard(s);
   const rates = s.rates || {};
   const rows = Object.entries(s.sides || {}).map(([k, side]) => {
     const r = rates[k] || { passes: 0, n: 0, running: 0 };
@@ -221,13 +237,14 @@ function render(s) {
 
 async function tick() {
   try {
-    const r = await fetch("/state", { cache: "no-store" });
+    const r = await fetch("state", { cache: "no-store" });  // relative: under run/<i>/ when tare watch shows several runs
     render(await r.json());
   } catch (e) {
     $("#phase").innerHTML = `${dot("failed")}<span>disconnected</span>`;
   }
   setTimeout(tick, 1000);
 }
+if (location.pathname.startsWith("/run/")) $("#back").style.display = "";
 tick();
 </script>
 </body>

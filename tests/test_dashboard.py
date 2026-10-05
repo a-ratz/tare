@@ -1,6 +1,9 @@
 import json
+import urllib.error
 import urllib.request
 from pathlib import Path
+
+import pytest
 
 from tare import dashboard, recipe
 from tare.journal import Journal
@@ -123,3 +126,25 @@ def test_calibrate_rates_carry_the_judge_scores_of_finished_tails(tmp_path):
     j("tail", id="a-2", status="running", side="a", agent="a", agent_name="claude", kind="fresh", dir="calibrate/a-2")
     rate = dashboard.state(tmp_path)["rates"]["a"]
     assert rate["scores"] == [70, 40] and rate["mean"] == 55 and rate["running"] == 1
+
+
+def test_watch_over_several_runs_serves_an_overview_and_each_run_below_it(tmp_path):
+    first, second = tmp_path / "one", tmp_path / "two"
+    first.mkdir()
+    second.mkdir()
+    cliff_run(first)
+    j = Journal(second)
+    j("start", kind="calibrate", task=None, check=None, project="/p", tails=1,
+      sides={"a": {"agent": "claude", "args": [], "dir": ".", "prompt": "/x:ideate"}})
+    server, url = dashboard.serve([first, second])
+    try:
+        assert b"tare runs" in urllib.request.urlopen(url).read()
+        runs = json.loads(urllib.request.urlopen(url + "runs").read())
+        assert [(r["i"], r["kind"]) for r in runs] == [(0, "cliff"), (1, "calibrate")]
+        assert runs[1]["sides"]["a"]["prompt"] == "/x:ideate"
+        assert json.loads(urllib.request.urlopen(url + "run/1/state").read())["kind"] == "calibrate"
+        assert b"tare live" in urllib.request.urlopen(url + "run/0").read()  # redirected to run/0/
+        with pytest.raises(urllib.error.HTTPError):
+            urllib.request.urlopen(url + "run/2/")
+    finally:
+        server.shutdown()
