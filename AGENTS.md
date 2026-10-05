@@ -14,11 +14,13 @@ machine instead of the skill.
 | Path | What |
 |---|---|
 | `src/tare/cli.py` | the `tare` command |
-| `src/tare/agents.py` | what tare knows about each agent: its setup, login, probe arguments, request format, markers |
+| `src/tare/agents.py` | what tare knows about each agent: its setup, login, probe arguments, request format, markers, unattended runs, session file and trail |
 | `src/tare/room.py` | the room: bwrap arguments, a fresh home with a login copy, the environment allowlist |
 | `src/tare/probe.py` | the probe: context, control, reach, scoring and the printed reading |
-| `src/tare/capsule.py` | Cliff's capsules: archive the workspace at every tool call, resume one in a fresh room, run the check |
+| `src/tare/capsule.py` | capsules: archive the workspace at every tool call, continue one natively or by handoff, run the check |
 | `src/tare/cliff.py` | Cliff: baseline, adaptive search with Wilson intervals, the report |
+| `src/tare/trail.py` | the trail: one neutral record of a run for every agent, and the handoff rendered from it |
+| `src/tare/swap.py` | Swap: both rooms crossed with both agents, state, model and foreignness effects, the report |
 | `src/tare/fake.py` | the fake model endpoint (Anthropic Messages for Claude Code, OpenAI Responses for Codex) |
 | `tests/` | pytest; needs no agent, no login and no network |
 | `experiments/` | pre-registered measurements (`PLAN.md` before the runs, `RESULTS.md` after) |
@@ -40,6 +42,9 @@ touches the room or the probe, run it on the machine:
 3. Before a PR that touches Cliff: `uv run experiments/cliff-scripted/world.py` must report
    "The run became lost at step 4". It drives the real Claude Code CLI against a scripted model,
    so it costs no API calls.
+4. Before a PR that touches Swap, the trail or capsules: `uv run experiments/swap-scripted/world.py`
+   must pass the null check and report "blame passes from the model to the room between cut
+   0.00 and cut 0.50".
 
 ## Development process
 
