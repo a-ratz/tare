@@ -80,6 +80,8 @@ def main(argv: list[str] | None = None) -> int:
     k.add_argument("--tails", type=int, default=3, help="tails per probe (default 3)")
     k.add_argument("--budget", type=int, default=30, help="tails in total, baseline included (default 30)")
     k.add_argument("--jobs", type=int, default=3, help="tails run at the same time (default 3)")
+    k.add_argument("--gap-below", type=float, default=0.2,
+                   help="declare a model gap only when the baseline's upper bound is below this (default 0.2)")
     k.add_argument("--out", type=Path, help="run directory (default ~/.local/state/tare/cliff/<project>-<time>)")
     k.add_argument("--allow-dirty", action="store_true", help="run even if the probe reading is not zero")
     w = sub.add_parser("swap", help="cross two runs' rooms with two agents: was it the room or the model")
@@ -136,7 +138,7 @@ def main(argv: list[str] | None = None) -> int:
             journal = Journal(out)
             if args.command == "cliff":
                 agents = {"a": (AGENTS[args.agent], reals[args.agent], passthrough)}
-                params = {"tails": args.tails, "budget": args.budget, "jobs": args.jobs}
+                params = {"tails": args.tails, "budget": args.budget, "jobs": args.jobs, "gap_below": args.gap_below}
             elif args.command == "calibrate":
                 agents = {chr(97 + i): (AGENTS[side[0]], reals[side[0]], side[1:]) for i, side in enumerate(sides)}
                 params = {"runs": args.runs, "jobs": args.jobs}
@@ -162,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:
         agent, real = AGENTS[names[0]], reals[names[0]]
         if args.command == "cliff":
             print(cliff(agent, real, project, args.prompt, args.check, out, tails=args.tails, budget=args.budget,
-                        jobs=args.jobs, claude_args=passthrough, journal=journal), end="")
+                        jobs=args.jobs, claude_args=passthrough, journal=journal, gap_below=args.gap_below), end="")
             print(f"tare cliff: see it again with  tare watch {out}", file=sys.stderr)
             return 0
         if args.command == "calibrate":
