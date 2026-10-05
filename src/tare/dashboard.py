@@ -115,7 +115,8 @@ def _rates(tails, sides) -> dict:
                   and (m := re.search(r"score (\d+)", t.get("detail", "")))]
         rates[key] = {"passes": sum(done), "n": len(done), "running": sum(t["status"] == "running" for t in ts),
                       "rate": sum(done) / len(done) if done else None, "lo": lo, "hi": hi, "scores": scores,
-                      "mean": sum(scores) / len(scores) if scores else None}
+                      "mean": sum(scores) / len(scores) if scores else None,
+                      "times": [t["ended"] - t["started"] for t in ts if "ended" in t]}
     return rates
 
 
