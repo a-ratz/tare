@@ -176,6 +176,22 @@ Cliff works with Claude Code and Codex (`tare cliff codex ...`). Both resume the
 sessions natively; an agent that cannot is continued by handoff. Each tail is a real agent
 run, so a search costs what its tails cost.
 
+### Watch it live, repeat it exactly
+
+`tare cliff` and `tare swap` start a live dashboard and print its URL
+(`http://localhost:8777/`). It shows the recipe, the probes, the original runs step by step,
+every tail as it starts and ends with what its agent is doing right now, the Cliff chart or
+the Swap matrix filling in, and the report.
+
+```bash
+tare watch ~/.local/state/tare/cliff/myproject-20261005-142000   # any run, live or finished
+tare rerun ~/.local/state/tare/cliff/myproject-20261005-142000   # the same run again
+```
+
+Every run directory holds a `recipe.json`: the command, task and check, a digest of the
+project, the agents with their CLI versions and arguments, and the parameters. `tare rerun`
+repeats the run in a new directory and says what has changed since.
+
 ### Swap: the room or the model
 
 ```bash

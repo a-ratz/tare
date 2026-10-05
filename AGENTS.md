@@ -21,6 +21,9 @@ machine instead of the skill.
 | `src/tare/cliff.py` | Cliff: baseline, adaptive search with Wilson intervals, the report |
 | `src/tare/trail.py` | the trail: one neutral record of a run for every agent, and the handoff rendered from it |
 | `src/tare/swap.py` | Swap: both rooms crossed with both agents, state, model and foreignness effects, the report |
+| `src/tare/journal.py` | the run journal: one JSON line per thing a Cliff or Swap run did |
+| `src/tare/dashboard.py`, `dashboard.html` | the live dashboard: state from the run directory, one page |
+| `src/tare/recipe.py` | recipes: how to repeat a run, and what has changed since |
 | `src/tare/fake.py` | the fake model endpoint (Anthropic Messages for Claude Code, OpenAI Responses for Codex) |
 | `tests/` | pytest; needs no agent, no login and no network |
 | `experiments/` | pre-registered measurements (`PLAN.md` before the runs, `RESULTS.md` after) |
