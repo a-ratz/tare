@@ -1,6 +1,6 @@
 # tare
 
-tare starts a coding agent (Claude Code or Codex) in a room where nothing of the user's came along, and proves it
+tare starts a coding agent (Claude Code, Codex or Pi) in a room where nothing of the user's came along, and proves it
 before the run. The room is a bubblewrap sandbox: an empty home, a fresh copy of the login, a
 cleared environment. The proof is a probe that asks the agent nothing. The real CLI runs in the
 room against a fake model endpoint that keeps the request, which is the context the harness
@@ -38,8 +38,8 @@ on `main`, and a PR merges only when they are green.
 CI cannot run the real thing. It needs bubblewrap and a logged-in agent. So before a PR that
 touches the room or the probe, run it on the machine:
 
-1. `uv run tare probe claude` and `uv run tare probe codex` must read `tare: 0.00` and show
-   every control class.
+1. `uv run tare probe claude`, `uv run tare probe codex` and `uv run tare probe pi` must read
+   `tare: 0.00` and show every control class.
 2. A spike must fail the probe: plant known dirt into a room's own copy (instructions, a skill,
    an environment variable) and check that each piece is named with its source.
 3. Before a PR that touches Cliff: `uv run experiments/cliff-scripted/world.py` must report

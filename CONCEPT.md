@@ -238,7 +238,28 @@ Tare is meant to sit underneath such frameworks: their exam, Tare's clean room.
      live output. So `tare watch` shows a finished run the same way as a live one.
    - **Recipes** keep the command, the project digest and the CLI versions. `tare rerun`
      repeats a run and names what changed.
-10. Pi (epic #30) and Gemini CLI (epic #34).
+10. ~~Pi~~. Done 2026-10-05 (`tare probe pi`, `tare pi`, Cliff and Swap).
+    - **Probe:** Pi has no base-URL variable. The fake is reached through a provider of its own
+      (`tare`, api `anthropic-messages`), added to a copy of the agent directory for the dirty
+      twin and to the room's own.
+    - **Room:** no flags, because a fresh agent directory without the user's parent
+      directories is clean and keeps the project's AGENTS.md. `--no-context-files` would drop
+      it ([results](experiments/dirty-twin-pi/RESULTS.md)).
+    - **Extensions:** extension tools are found as the dirty twin's tools that a room run with
+      `--no-extensions` does not offer.
+    - **Capsules:** a small extension hands every top-level tool call to the snapshot hook.
+      Sessions resume with `--session`.
+    - **Measured:**
+      - The clean room read 0.00.
+      - A room planted with the user's extension package and an environment variable read 5
+        leaks, each with its source.
+      - A real run (zai) recorded three capsules and continued from step 1 both natively and
+        by handoff.
+    - **Also measured, for every agent:** instruction files in the project's parent
+      directories are their own class now. Claude Code's print mode, which the probe uses, did
+      not load `~/AGENTS.md`; Pi loaded it. So the probe vouches for print mode only. A room
+      has no parent directories, so the class cannot leak into one.
+11. Gemini CLI (epic #34).
 
 ## Name
 
