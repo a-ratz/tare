@@ -1,8 +1,11 @@
 from pathlib import Path
 
+import pytest
+
 from tare import calibrate as cal
 from tare import capsule as caps
 from tare import dashboard
+from tare.cli import main
 from tare.journal import Journal
 
 
@@ -31,3 +34,41 @@ def test_calibrate_reports_each_side_with_its_interval_and_journals_every_run(tm
     state = dashboard.state(out)
     assert state["kind"] == "calibrate" and state["phase"] == "done"
     assert state["rates"]["a"]["passes"] == 1 and state["rates"]["b"]["n"] == 4
+
+
+def test_each_side_runs_its_own_prompt_and_without_a_check_every_run_is_kept(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "README.md").write_text("x")
+    out = tmp_path / "run"
+    out.mkdir()
+    seen = []
+
+    def fake_tail(agent, real, out_, capsule, prompt, args, check, i, env=None, timeout=1800, tail_dir=None, keep=False):
+        seen.append((agent.name, prompt, check, keep))
+        return caps.Tail(0, True, "agent exit 0; no check")
+
+    monkeypatch.setattr(caps, "run_tail", fake_tail)
+    sides = [cal.Side("a", Named("claude"), None, [], "/unboring:ideate x"), cal.Side("b", Named("codex"), None, [])]
+    text = cal.calibrate(sides, project, "shared task", None, out, runs=2, jobs=2, journal=Journal(out))
+    assert sorted(set(seen)) == [("claude", "/unboring:ideate x", None, True), ("codex", "shared task", None, True)]
+    assert "  task      shared task" in text and "  task a    /unboring:ideate x" in text
+    assert "check     none" in text and "finished" in text and "   2/2" in text
+    state = dashboard.state(out)
+    assert state["check"] is None and state["sides"]["a"]["prompt"] == "/unboring:ideate x"
+    assert len(state["rates"]["b"]["times"]) == 2
+
+
+def test_without_a_check_a_run_counts_when_its_agent_ended_normally(tmp_path):
+    work = tmp_path / "work"
+    work.mkdir()
+    tail = caps._finish(tmp_path, work, 0, "agent exit 0", None)
+    assert tail.passed and tail.detail == "agent exit 0; no check"
+    assert not caps._finish(tmp_path, work, 0, "agent stopped after 1800 s", None).passed
+
+
+def test_side_prompts_must_name_a_side_and_every_side_needs_a_prompt():
+    with pytest.raises(SystemExit):
+        main(["calibrate", "task", "--side", "claude", "--side", "codex", "--side-prompt", "c=x"])
+    with pytest.raises(SystemExit):
+        main(["calibrate", "--side", "claude", "--side", "codex", "--side-prompt", "a=x"])

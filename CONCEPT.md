@@ -170,7 +170,9 @@ Tare is meant to sit underneath such frameworks: their exam, Tare's clean room.
    - fresh credential copy per room, refused when the login would need a refresh;
    - cleared environment with an allowlist;
    - reach probe as a script;
-   - context probe through the fake, with the dirty twin as control;
+   - context probe through the fake, with the dirty twin as control; a twin that is blind for
+     a class runs once more after 10 s, and the reading names the retry (#68: with six runs
+     starting together, a twin sent its request before its MCP servers were connected);
    - `ENABLE_TOOL_SEARCH=true` in both probe and run.
 
    **Measured on this machine:**
@@ -301,6 +303,12 @@ Tare is meant to sit underneath such frameworks: their exam, Tare's clean room.
       Sol's 3/3: no anchoring on inherited work.
     - Cliff stays experimental: two real rounds without a failure that sat in one step. No
       further Cliff experiments until a Swap shows a run's own cells dropping between cuts.
+15. ~~Skill A/B in one call~~ (epic #69), from a field test that compared two ideation
+    skills in 18 rooms (all `tare: 0.00`, including nested `claude -p` inside the room).
+    - `tare calibrate --side-prompt KEY=PROMPT`: each side can have its own prompt.
+    - Without `--check` every run that ends counts and its workspace is kept; the report
+      shows finished runs and their times.
+    - `tare watch DIR DIR ...` shows several runs on one page, each run's dashboard below it.
 
 ## Name
 

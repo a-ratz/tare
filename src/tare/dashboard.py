@@ -2,7 +2,8 @@
 
 Everything comes from the run directory: the recipe, the journal, and the live output each
 original run and tail writes. A finished run looks the same as a live one, so `tare watch`
-can show any run directory.
+can show any run directory. Given several, it serves an overview with one row per run, and each
+run's own dashboard under run/<i>/.
 """
 import json
 import re
@@ -115,7 +116,8 @@ def _rates(tails, sides) -> dict:
                   and (m := re.search(r"score (\d+)", t.get("detail", "")))]
         rates[key] = {"passes": sum(done), "n": len(done), "running": sum(t["status"] == "running" for t in ts),
                       "rate": sum(done) / len(done) if done else None, "lo": lo, "hi": hi, "scores": scores,
-                      "mean": sum(scores) / len(scores) if scores else None}
+                      "mean": sum(scores) / len(scores) if scores else None,
+                      "times": [t["ended"] - t["started"] for t in ts if "ended" in t]}
     return rates
 
 
@@ -146,24 +148,60 @@ def _swap_cells(tails, plan) -> list[dict]:
     return cuts
 
 
-def serve(out: Path, port: int = 0) -> tuple[ThreadingHTTPServer, str]:
-    """Serve the dashboard for a run directory on 127.0.0.1; returns the server and its URL."""
+def overview(out: Path) -> dict:
+    """One row of the overview: what a run is and how far it got."""
+    s = state(out)
+    verdict = next((line.strip()[len("verdict"):].strip() for line in (s["report"] or "").splitlines()
+                    if line.strip().startswith("verdict")), None)
+    running = sum(t["status"] == "running" for t in s["tails"])
+    return {"name": out.name, "kind": s["kind"], "task": s["task"], "check": s["check"], "sides": s["sides"],
+            "phase": s["phase"], "running": running, "done": len(s["tails"]) - running, "rates": s.get("rates"),
+            "verdict": verdict}
+
+
+def serve(out: Path | list[Path], port: int = 0) -> tuple[ThreadingHTTPServer, str]:
+    """Serve the dashboard for a run directory, or an overview of several, on 127.0.0.1;
+    returns the server and its URL."""
+    runs = [out] if isinstance(out, Path) else list(out)
     page = resources.files("tare").joinpath("dashboard.html").read_bytes()
+    index = resources.files("tare").joinpath("overview.html").read_bytes()
+    html = "text/html; charset=utf-8"
+
+    def route(path: str) -> tuple[bytes, str] | str | None:
+        """The body and its type, a path to redirect to, or None."""
+        if len(runs) == 1:
+            run, rest = runs[0], path
+        else:
+            if path in ("/", "/index.html"):
+                return index, html
+            if path == "/runs":
+                return json.dumps([{"i": i, **overview(r)} for i, r in enumerate(runs)]).encode(), "application/json"
+            m = re.fullmatch(r"/run/(\d+)(/.*)?", path)
+            if not m or int(m.group(1)) >= len(runs):
+                return None
+            if not m.group(2):
+                return f"{path}/"
+            run, rest = runs[int(m.group(1))], m.group(2)
+        if rest == "/state":
+            return json.dumps(state(run)).encode(), "application/json"
+        if rest in ("/", "/index.html"):
+            return page, html
+        return None
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass
 
         def do_GET(self):
-            if self.path.startswith("/state"):
-                body, kind = json.dumps(state(out)).encode(), "application/json"
-            elif self.path in ("/", "/index.html"):
-                body, kind = page, "text/html; charset=utf-8"
-            else:
-                self.send_response(404)
+            found = route(self.path.split("?")[0])
+            if found is None or isinstance(found, str):
+                self.send_response(404 if found is None else 301)
+                if found:
+                    self.send_header("location", found)
                 self.send_header("content-length", "0")
                 self.end_headers()
                 return
+            body, kind = found
             self.send_response(200)
             self.send_header("content-type", kind)
             self.send_header("cache-control", "no-store")

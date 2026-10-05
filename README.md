@@ -49,7 +49,8 @@ Antigravity CLI on your own machine, tare is for you.
 - **Measures instead of asking.** tare checks what the agent actually receives. An agent asked
   about its own context can refuse or be wrong.
 - **Tells you when it cannot see.** Every probe also checks your real setup. If tare cannot
-  find a kind of context there, it reports itself blind instead of reporting clean.
+  find a kind of context there, it tries once more (a busy machine can be slow to connect MCP
+  servers) and then reports itself blind instead of reporting clean.
 - **Puts nothing of yours within reach.** Your home directory, your other logins and your
   shell's secrets do not exist inside the room.
 - **Keeps your own session logged in.** Each run gets a fresh copy of the login, removed
@@ -57,6 +58,9 @@ Antigravity CLI on your own machine, tare is for you.
   could log out your real session.
 - **Works like the agent you know.** Claude Code, Codex, Pi or Antigravity, interactive or one-shot: all of
   the agent's arguments pass through, and your project is mounted at `/work`.
+- **Compares skills, plugins or models in one call.** `tare calibrate` runs every side from
+  fresh starts in rooms of their own, each with its own prompt if it needs one, and reports pass
+  rates with intervals, judge scores, or, without a check, the kept workspaces for your scoring.
 - **Tells whether the room or the model lost it.** `tare swap` runs two agents on the same
   task (Claude Code against Codex, or two models) and lets each continue the other's work
   at several points. You see whether a run failed because of what its workspace had become
@@ -201,6 +205,16 @@ finished workspace, for `judge-noise`.
 Cliff now declares a model gap only when the baseline's upper bound is below `--gap-below`
 (default 0.2), so 0 of 3 is no longer read as "never".
 
+Two skills that are invoked differently compare in one call: `--side-prompt` gives a side
+(a, b, c… in `--side` order) its own prompt. Without `--check`, every run that ends counts,
+its workspace is kept, and the report shows the finished runs and their times, for scoring
+elsewhere.
+
+```bash
+tare calibrate --side "claude --plugin-dir plugins/a" --side "claude --plugin-dir plugins/b" \
+  --side-prompt "a=/a:ideate a todo app" --side-prompt "b=/b:ideate a todo app" --runs 5
+```
+
 ### Judge: when tests cannot decide
 
 ```bash
@@ -224,6 +238,7 @@ the Swap matrix filling in, and the report.
 
 ```bash
 tare watch ~/.local/state/tare/cliff/myproject-20261005-142000   # any run, live or finished
+tare watch ~/.local/state/tare/calibrate/*                         # several runs: one row each
 tare rerun ~/.local/state/tare/cliff/myproject-20261005-142000   # the same run again
 ```
 

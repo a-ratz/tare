@@ -150,7 +150,8 @@ def _run_in(agent, real, home: Path, work: Path, command: list[str], env, timeou
 
 def _finish(tail_dir: Path, work: Path, step: int, ran: str, check: str, extra: dict | None = None,
             keep: bool = False) -> Tail:
-    passed, detail = run_check(check, work)
+    # without a check (calibrate only) a run counts when its agent ended normally
+    passed, detail = run_check(check, work) if check else (ran == "agent exit 0", "no check")
     (tail_dir / "result.json").write_text(json.dumps({"step": step, "passed": passed, "agent": ran, "check": detail,
                                                       **(extra or {})}))
     if not keep:
