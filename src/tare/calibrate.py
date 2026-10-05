@@ -47,7 +47,8 @@ def calibrate(sides: list[Side], project: Path, prompt: str | None, check: str |
     journal = journal or Journal(None)
     keep = keep or check is None  # without a check the workspaces are what is scored
     journal("start", kind="calibrate", task=prompt, check=check, project=str(project), tails=runs,
-            sides={s.key: {"agent": s.agent.name, "args": s.args, "dir": ".", "prompt": s.prompt} for s in sides})
+            sides={s.key: {"agent": s.agent.name, "args": s.args, "dir": ".", "prompt": s.prompt,
+                           "billing": usages.billing(s.agent, s.real)} for s in sides})
     work = out / "project"
     shutil.copytree(project, work, symlinks=True)
     caps.archive(work, out / "start.tar")

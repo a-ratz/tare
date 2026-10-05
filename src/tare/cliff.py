@@ -114,7 +114,7 @@ def cliff(agent, real, project: Path, prompt: str, check: str, out: Path, *, tai
     claude_args = claude_args or []
     journal = journal or Journal(None)
     journal("start", kind="cliff", task=prompt, check=check, project=str(project), tails=tails, budget=budget,
-            sides={"a": {"agent": agent.name, "args": claude_args, "dir": "."}})
+            sides={"a": {"agent": agent.name, "args": claude_args, "dir": ".", "billing": usages.billing(agent, real)}})
     journal("phase", phase="original run")
     caps.record(agent, real, project, out, prompt, claude_args, env)
     passed, detail, spent = caps.check_original(agent, out, check)

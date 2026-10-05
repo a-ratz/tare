@@ -1,7 +1,7 @@
 import json
 
 from tare.agents import AGENTS
-from tare.usage import Usage, describe, total
+from tare.usage import Usage, describe, estimate, price_of, total
 
 
 def stream(*events):
@@ -52,3 +52,52 @@ def test_a_total_keeps_count_of_the_runs_whose_cost_is_unknown():
     assert (s.input, s.runs, s.unpriced, s.model) == (150, 2, 1, "m") and abs(s.cost_usd - 0.02) < 1e-9
     assert describe(s) == "2 runs, 150 in (10 cached), 10 out, $0.020 for 1 run, cost unknown for 1"
     assert describe(Usage(1_234_567, 0, 0, 2_000, 0, None)) == "1 run, 1.23M in (0 cached), 2.0k out, cost unknown"
+
+
+def test_prices_come_from_the_users_file_first_then_litellm_with_the_makers_price_first(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    (tmp_path / "tare").mkdir()
+    (tmp_path / "tare" / "prices-litellm.json").write_text(json.dumps({"fetched": "2026-10-05", "models": {
+        "gpt-x": {"input_cost_per_token": 2e-6, "cache_read_input_token_cost": 1e-7, "output_cost_per_token": 1e-5},
+        "aihubmix/glm-9": {"input_cost_per_token": 9e-6, "output_cost_per_token": 9e-6},
+        "zai/glm-9": {"input_cost_per_token": 1e-6, "output_cost_per_token": 4e-6}}}))
+    assert price_of("gpt-x-high")[0]["input"] == 2e-6  # the effort suffix is dropped
+    assert price_of("glm-9")[0]["input"] == 1e-6  # the maker before a reseller
+    u = estimate(Usage(1_000_000, 800_000, 0, 10_000, 0, None), "gpt-x")
+    assert abs(u.cost_usd - (200_000 * 2e-6 + 800_000 * 1e-7 + 10_000 * 1e-5)) < 1e-9
+    assert u.estimated == "LiteLLM prices fetched 2026-10-05" and u.unpriced == 0
+    (tmp_path / "tare" / "prices.json").write_text(json.dumps({"source": "my contract", "date": "2026-10-01",
+                                                              "models": {"gpt-x": {"input": 1, "output": 2}}}))
+    assert price_of("gpt-x") == ({"input": 1e-6, "output": 2e-6}, "prices.json (my contract, 2026-10-01)")
+    assert estimate(Usage(10, 0, 0, 1, 0, 0.5), "gpt-x").estimated is None  # a reported cost stays
+
+
+def test_a_run_reports_estimates_and_marks_subscription_logins(tmp_path, monkeypatch):
+    from tare.journal import Journal
+    from tare.usage import report
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    (tmp_path / "config" / "tare").mkdir(parents=True)
+    (tmp_path / "config" / "tare" / "prices-litellm.json").write_text(json.dumps({"fetched": "2026-10-05", "models": {
+        "gpt-x": {"input_cost_per_token": 1e-6, "output_cost_per_token": 1e-5}}}))
+    j = Journal(tmp_path)
+    j("start", kind="calibrate", sides={"a": {"agent": "codex", "args": ["-m", "gpt-x"], "billing": "subscription"}})
+    j("tail", id="a-0", status="running", agent="a")
+    j("tail", id="a-0", status="passed", usage={"input": 1000, "output": 100})
+    lines = report(tmp_path)
+    assert "a codex -m gpt-x: 1 run, 1.0k in (0 cached), 100 out, about $0.002 (estimated from LiteLLM prices" in lines[1]
+    assert lines[1].endswith("Subscription login, so the cost is notional")
+
+
+def test_billing_reads_how_each_login_pays(tmp_path):
+    from tare.agents import Real
+    claude, codex, agy = tmp_path / "claude", tmp_path / "codex", tmp_path / "agy"
+    for d in (claude, codex, agy):
+        d.mkdir()
+    (claude / ".credentials.json").write_text(json.dumps({"claudeAiOauth": {}}))
+    (codex / "auth.json").write_text(json.dumps({"OPENAI_API_KEY": "set"}))
+    (agy / "antigravity-oauth-token").write_text(json.dumps({"auth_method": "consumer"}))
+    real = lambda config: Real(tmp_path, config, tmp_path / "bin")  # noqa: E731
+    assert AGENTS["claude"].billing(real(claude)) == "subscription"
+    assert AGENTS["codex"].billing(real(codex)) == "api key"
+    assert AGENTS["agy"].billing(real(agy)) == "subscription"
+    assert AGENTS["claude"].billing(real(tmp_path / "missing")) is None

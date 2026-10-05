@@ -211,11 +211,13 @@ function usageCard(s) {
   const n = (x) => (x >= 1e6 ? `${(x / 1e6).toFixed(2)}M` : x >= 1e3 ? `${(x / 1e3).toFixed(1)}k` : `${x}`);
   const money = (c) => (c < 10 ? c.toFixed(3) : c.toFixed(2));
   const cost = (v) => (v.cost_usd == null ? `<span class="muted">unknown</span>`
-    : `$${money(v.cost_usd)}${v.unpriced ? ` <span class="muted">(${v.unpriced} of ${v.runs} runs unknown)</span>` : ""}`);
+    : `${v.estimated ? "about " : ""}$${money(v.cost_usd)}${v.unpriced ? ` <span class="muted">(${v.unpriced} of ${v.runs} runs unknown)</span>` : ""}`
+      + (v.estimated ? `<div class="muted">estimated from ${esc(v.estimated)}</div>` : ""));
   const row = (name, v) => `<tr><td>${name}</td><td class="num">${v.runs}</td><td class="num">${n(v.input)} <span class="muted">(${n(v.cached)} cached)</span></td>
     <td class="num">${n(v.output)}</td><td class="num">${cost(v)}</td></tr>`;
   const rows = Object.entries(u.sides || {}).filter(([, v]) => v.usage)
-    .map(([k, v]) => row(`<b>${esc(k)}</b> ${esc(v.label)}`, v.usage)).join("")
+    .map(([k, v]) => row(`<b>${esc(k)}</b> ${esc(v.label)}${v.billing === "subscription"
+      ? `<div class="muted">subscription login, so the cost is notional</div>` : ""}`, v.usage)).join("")
     + (u.check ? row("check (the judge)", u.check) : "") + row("<b>total</b>", u.total);
   return `<section class="panel"><h2>Usage</h2><table><thead><tr><th></th><th>runs</th><th>tokens in</th><th>tokens out</th><th>cost</th></tr></thead>
     <tbody>${rows}</tbody></table></section>`;

@@ -225,10 +225,24 @@ shows, at three cuts, how often an agent passes when it continues its own worksp
 Swap shows that rate dropping between two cuts, Cliff can narrow the drop down to one step. Only
 then does Cliff get new experiments.
 
+### Tokens and cost
+
+Each adapter reads its agent's own stream after a run into one shape: all input tokens with the
+cached ones included, the cached part, cache writes, output, reasoning, the cost where the agent
+reports it, and the model where the stream names it. The agents count differently: Claude Code
+and Pi report the cache apart from the input, Codex within it. A check that runs an agent itself
+(`tare judge`) appends that agent's usage to a file that tare names in `TARE_USAGE_LOG`, so the
+judge counts too. Where an agent reports no cost, tare estimates it from a price table and says
+so, with the table's source and date. Totals keep count of runs whose cost stays unknown. A
+subscription login is marked, because its cost is notional.
+
+**Measured:** a calibrate run with one Haiku run, one Codex run with gpt-6.1-sol and a Sonnet
+judge read 186.4k tokens in and $0.093 in total, the Codex part estimated from LiteLLM's table.
+
 ### Run directory, dashboard and recipes
 
 Calibrate, Swap and Cliff write everything into a run directory: a journal (one JSON line per
-event), a `recipe.json`, and the live output of every agent. The dashboard reads only the run
+event), a `recipe.json`, a `usage.json` with the totals, and the live output of every agent. The dashboard reads only the run
 directory, so `tare watch` shows a finished run the same way as a live one. The recipe holds the
 command, a fingerprint of the project and the agent versions. `tare rerun` repeats a run and
 names what has changed since.

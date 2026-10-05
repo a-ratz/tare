@@ -64,6 +64,14 @@ def _which(name: str) -> Path:
     return Path(found).resolve()
 
 
+def _json(path: Path) -> dict | None:
+    """A JSON file of the agent's setup, read for its field names and flags, never printed."""
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+
+
 def _one_run(u: Usage) -> Usage:
     """A run's usage is summed from several events, but it is one run."""
     u.runs, u.unpriced = 1, 1 if u.cost_usd is None else 0
@@ -205,6 +213,11 @@ class Claude:
         except (OSError, ValueError, KeyError, TypeError):
             return None
 
+    def billing(self, real: Real) -> str | None:
+        """How the login pays: a subscription makes the reported cost notional."""
+        data = _json(real.config / self.credentials)
+        return None if data is None else "subscription" if "claudeAiOauth" in data else "api key"
+
 
 class Codex:
     name = "codex"
@@ -332,6 +345,10 @@ class Codex:
     def email(self, real: Real) -> str | None:
         return None
 
+    def billing(self, real: Real) -> str | None:
+        data = _json(real.config / self.credentials)
+        return None if data is None else "api key" if data.get("OPENAI_API_KEY") else "subscription"
+
 
 class Pi:
     name = "pi"
@@ -430,6 +447,11 @@ class Pi:
 
     def email(self, real: Real) -> str | None:
         return None
+
+    def billing(self, real: Real) -> str | None:
+        auth = _json(real.config / self.credentials) or {}
+        entry = auth.get(self._settings(real).get("defaultProvider", ""))
+        return None if not entry else "subscription" if entry.get("type") == "oauth" else "api key"
 
     # unattended runs (Cliff, Swap)
     def run_args(self, prompt: str, extra: list[str], hook: str | None = None) -> list[str]:
@@ -583,6 +605,10 @@ class Antigravity:
 
     def email(self, real: Real) -> str | None:
         return None  # the account's email and name did not reach the prompt
+
+    def billing(self, real: Real) -> str | None:
+        data = _json(real.config / self.credentials)
+        return None if data is None else "subscription" if data.get("auth_method") == "consumer" else "api key"
 
     # unattended runs (Cliff, Swap)
     def run_args(self, prompt: str, extra: list[str], hook: str | None = None) -> list[str]:

@@ -80,7 +80,8 @@ def swap(a: Side, b: Side, project: Path, prompt: str, check: str, out: Path, *,
     sides = {"a": a, "b": b}
     journal = journal or Journal(None)
     journal("start", kind="swap", task=prompt, check=check, project=str(project), tails=tails, cuts=cuts,
-            sides={s.key: {"agent": s.agent.name, "args": s.args, "dir": s.out.name} for s in (a, b)})
+            sides={s.key: {"agent": s.agent.name, "args": s.args, "dir": s.out.name,
+                           "billing": usages.billing(s.agent, s.real)} for s in (a, b)})
     journal("phase", phase="original runs")
     with ThreadPoolExecutor(max_workers=2) as pool:
         list(pool.map(lambda s: caps.record(s.agent, s.real, project, s.out, prompt, s.args, env), (a, b)))
