@@ -58,6 +58,7 @@ svg text { fill: var(--muted); font: 11px var(--mono); }
 <body>
 <main>
   <header>
+    <a id="back" href="../../" style="display:none;color:var(--accent);text-decoration:none">← all runs</a>
     <h1 id="title">tare</h1>
     <span class="chip" id="phase"><span class="dot"></span><span>connecting</span></span>
     <span class="chip" id="elapsed"></span>
@@ -236,13 +237,14 @@ function render(s) {
 
 async function tick() {
   try {
-    const r = await fetch("/state", { cache: "no-store" });
+    const r = await fetch("state", { cache: "no-store" });  // relative: under run/<i>/ when tare watch shows several runs
     render(await r.json());
   } catch (e) {
     $("#phase").innerHTML = `${dot("failed")}<span>disconnected</span>`;
   }
   setTimeout(tick, 1000);
 }
+if (location.pathname.startsWith("/run/")) $("#back").style.display = "";
 tick();
 </script>
 </body>

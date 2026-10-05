@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tare runs</title>
+<style>
+:root {
+  --bg: #0e1116; --panel: #161b22; --panel-2: #1c222b; --line: #2a313c; --text: #e6edf3; --muted: #8b96a5;
+  --pass: #3fb950; --fail: #f85149; --run: #d29922; --accent: #79c0ff;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: light) {
+  :root { --bg: #f6f8fa; --panel: #ffffff; --panel-2: #f0f3f6; --line: #d0d7de; --text: #1f2328; --muted: #59636e;
+          --pass: #1a7f37; --fail: #cf222e; --run: #9a6700; --accent: #0969da; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1180px; margin: 0 auto; padding: 20px 16px 60px; }
+h1 { font: 600 22px/1 var(--mono); margin: 0 0 16px; letter-spacing: .5px; }
+section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; font-size: 12px; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.mono { font-family: var(--mono); font-size: 12.5px; }
+.muted { color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; margin-right: 6px; }
+.dot.pass { background: var(--pass); } .dot.fail { background: var(--fail); } .dot.run { background: var(--run); animation: pulse 1.2s infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+.task { max-width: 340px; overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<main>
+  <h1>tare runs</h1>
+  <section class="panel"><table>
+    <thead><tr><th>run</th><th>phase</th><th>task</th><th>sides</th><th>tails</th><th>result</th></tr></thead>
+    <tbody id="rows"><tr><td colspan="6" class="muted">loading…</td></tr></tbody>
+  </table></section>
+</main>
+<script>
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const short = (t, n) => (t && t.length > n ? t.slice(0, n - 1) + "…" : t || "");
+
+function result(r) {
+  if (r.verdict) return esc(r.verdict);
+  if (!r.rates) return `<span class="muted">–</span>`;
+  return Object.entries(r.rates).map(([k, x]) => {
+    const score = x.mean != null ? ` · mean ${x.mean.toFixed(1)}` : "";
+    return `<div class="mono">${esc(k)} ${x.passes}/${x.n} ${r.check ? "passed" : "finished"}${score}</div>`;
+  }).join("");
+}
+
+function row(r) {
+  const phase = r.phase === "done" ? "pass" : "run";
+  const sides = Object.entries(r.sides || {}).map(([k, s]) =>
+    `<div class="mono">${esc(k)} ${esc(s.agent)} ${esc((s.args || []).join(" "))}${s.prompt ? `<div class="muted">${esc(short(s.prompt, 60))}</div>` : ""}</div>`).join("");
+  return `<tr><td><a href="run/${r.i}/"><b>${esc(r.kind || "run")}</b></a><div class="muted mono">${esc(r.name)}</div></td>
+    <td><span class="dot ${phase}"></span>${esc(r.phase)}</td>
+    <td class="task">${esc(short(r.task, 140)) || `<span class="muted">a prompt per side</span>`}</td>
+    <td>${sides}</td><td class="mono">${r.done} done${r.running ? ` · ${r.running} running` : ""}</td><td>${result(r)}</td></tr>`;
+}
+
+async function tick() {
+  try {
+    const runs = await (await fetch("runs", { cache: "no-store" })).json();
+    document.getElementById("rows").innerHTML = runs.map(row).join("");
+  } catch (e) {
+    document.getElementById("rows").innerHTML = `<tr><td colspan="6" class="muted">disconnected</td></tr>`;
+  }
+  setTimeout(tick, 2000);
+}
+tick();
+</script>
+</body>
+</html>

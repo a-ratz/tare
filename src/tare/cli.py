@@ -44,7 +44,7 @@ def _run_attached(argv: list[str]) -> int:
         signal.signal(signal.SIGINT, previous)
 
 
-def _serve(out: Path, port: int) -> str:
+def _serve(out: Path | list[Path], port: int) -> str:
     try:
         return dashboard.serve(out, port)[1]
     except OSError:
@@ -208,14 +208,16 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _watch(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(prog="tare watch", description="the live dashboard of a Cliff or Swap run")
-    ap.add_argument("dir", type=Path)
+    ap = argparse.ArgumentParser(prog="tare watch", description="the live dashboard of a run; several runs on one page")
+    ap.add_argument("dirs", type=Path, nargs="+")
     ap.add_argument("--port", type=int, default=8777)
     args = ap.parse_args(argv)
-    if not (args.dir / "journal.jsonl").exists():
-        print(f"tare watch: {args.dir} holds no run journal", file=sys.stderr)
+    missing = [str(d) for d in args.dirs if not (d / "journal.jsonl").exists()]
+    if missing:
+        print(f"tare watch: no run journal in {', '.join(missing)}", file=sys.stderr)
         return 2
-    print(f"tare watch: {_serve(args.dir.resolve(), args.port)}  (Ctrl-C to stop)", file=sys.stderr)
+    dirs = [d.resolve() for d in args.dirs]
+    print(f"tare watch: {_serve(dirs[0] if len(dirs) == 1 else dirs, args.port)}  (Ctrl-C to stop)", file=sys.stderr)
     try:
         threading.Event().wait()
     except KeyboardInterrupt:
