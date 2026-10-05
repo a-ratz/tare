@@ -14,7 +14,7 @@
 [![Version 0.1.0][version-shield]][version-url]
 [![Python 3.11+][python-shield]][python-url]
 [![Linux | WSL][platform-shield]][platform-url]
-[![Claude Code | Codex][agent-shield]][agent-url]
+[![Claude Code | Codex | Pi][agent-shield]][agent-url]
 
 </div>
 
@@ -39,8 +39,8 @@ with Claude Code, the login alone brings your connectors (mail, calendar, docume
 account's skills and your email into the session. Eval frameworks assume that you provide a
 clean runtime, and nothing checks that you did.
 
-If you run skill evals, A/B comparisons or agent benchmarks with Claude Code or Codex on your
-own machine, tare is for you.
+If you run skill evals, A/B comparisons or agent benchmarks with Claude Code, Codex or Pi on
+your own machine, tare is for you.
 
 ## Features
 
@@ -55,7 +55,7 @@ own machine, tare is for you.
 - **Keeps your own session logged in.** Each run gets a fresh copy of the login, removed
   afterwards. tare refuses to start when that copy would have to refresh, because a refresh
   could log out your real session.
-- **Works like the agent you know.** Claude Code or Codex, interactive or one-shot: all of
+- **Works like the agent you know.** Claude Code, Codex or Pi, interactive or one-shot: all of
   the agent's arguments pass through, and your project is mounted at `/work`.
 - **Tells whether the room or the model lost it.** `tare swap` runs two agents on the same
   task (Claude Code against Codex, or two models) and lets each continue the other's work
@@ -101,7 +101,7 @@ This is the output of a real run, with only the home path shortened. Then
 |---|---|
 | Linux or WSL2 | the room is built with user namespaces |
 | [bubblewrap](https://github.com/containers/bubblewrap) | `sudo apt install bubblewrap` |
-| Claude Code or Codex | on `PATH`, logged in; Codex installed under `/usr` (`npm install -g @openai/codex`) |
+| Claude Code, Codex or Pi | on `PATH`, logged in; Codex installed under `/usr` (`npm install -g @openai/codex`) |
 | [uv](https://docs.astral.sh/uv/) | Python 3.11+ |
 
 From a checkout, either run it in place (`uv run tare ...`) or put `tare` on your `PATH`:
@@ -121,6 +121,7 @@ tare claude --allow-dirty          # start even though the reading is not zero
 tare claude --project ../other     # another project directory (default: the current one)
 
 tare probe codex                   # the same for Codex
+tare probe pi                      # and for Pi
 tare codex -- exec -m MODEL "..."  # one-shot Codex run; arguments after -- go to codex
 ```
 
@@ -172,7 +173,7 @@ scripted model whose cliff is known: step 4 writes the wrong answer into a note.
   tails     18 of a budget of 30
 ```
 
-Cliff works with Claude Code and Codex (`tare cliff codex ...`). Both resume their own
+Cliff works with Claude Code, Codex and Pi (`tare cliff pi ...`). All three resume their own
 sessions natively; an agent that cannot is continued by handoff. Each tail is a real agent
 run, so a search costs what its tails cost.
 
@@ -243,11 +244,9 @@ looks for your files and inherited secrets.
 
 ## Roadmap
 
-Next: [Pi][epic-pi] and [Gemini CLI][epic-gemini], each with its own dirty-twin measurement,
-room and probe. The trail keeps their Cliff and Swap part small. A room for macOS is an idea,
-not yet planned.
+Next: [Gemini CLI][epic-gemini], with its own dirty-twin measurement, room and probe. A room
+for macOS is an idea, not yet planned.
 
-[epic-pi]: https://github.com/AndreRatzenberger/tare/issues/30
 [epic-gemini]: https://github.com/AndreRatzenberger/tare/issues/34
 
 ## Contributing
@@ -272,5 +271,5 @@ Crafted with [Readme Craft](https://github.com/motiful/readme-craft)
 [python-url]: https://www.python.org/
 [platform-shield]: https://img.shields.io/badge/platform-Linux%20%7C%20WSL-555555.svg
 [platform-url]: #install
-[agent-shield]: https://img.shields.io/badge/agents-Claude%20Code%20%7C%20Codex-D97757.svg
+[agent-shield]: https://img.shields.io/badge/agents-Claude%20Code%20%7C%20Codex%20%7C%20Pi-D97757.svg
 [agent-url]: #install

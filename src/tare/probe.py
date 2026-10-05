@@ -17,7 +17,7 @@ from pathlib import Path
 
 from .agents import Capture, Real
 from .fake import Fake
-from .room import TareError, bwrap, room_env, room_home
+from .room import ROOM_HOME, TareError, bwrap, room_env, room_home
 
 SECRET_PATHS = (".claude", ".claude.json", ".codex", ".agents", ".config/gh", ".ssh", ".aws", ".netrc",
                 ".git-credentials", ".docker/config.json")
@@ -78,8 +78,30 @@ def _server_prefix(name: str) -> str:
     return "mcp__" + re.sub(r"[^A-Za-z0-9_-]", "_", name) + "__"
 
 
-def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_out: str) -> Reading:
+def parent_instructions(project: Path) -> list[Path]:
+    """Instruction files in the project's parent directories: the user's, not the project's."""
+    return [d / name for d in project.parents for name in ("AGENTS.md", "CLAUDE.md") if (d / name).is_file()]
+
+
+def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_out: str,
+          bare: Capture | None = None, project: Path | None = None) -> Reading:
     r = Reading(agent=agent.name, version=room.init.get("claude_code_version", "?"))
+
+    # instruction files above the project; an agent that does not read them cannot leak them
+    for path in parent_instructions(project) if project else []:
+        lines = instruction_lines(path)
+        if lines and any(line in twin.text for line in lines):
+            if "parent files" not in r.seen:
+                r.seen.append("parent files")
+            if any(line in room.text for line in lines):
+                r.leaks.append(Finding("parent file", "instructions above the project", str(path)))
+
+    # extensions: tools the dirty twin offers that a run without extensions does not
+    if bare is not None:
+        extension_tools = twin.tools - bare.tools
+        if extension_tools:
+            r.seen.append("extensions")
+        r.leaks += [Finding("extension", name, "a tool of the user's extensions") for name in sorted(extension_tools & room.tools)]
 
     # the user's own files: global instructions, and whatever else the agent reads (memories)
     for kind, path in [("instructions", agent.instructions(real)), *agent.extra_markers(real)]:
@@ -154,8 +176,8 @@ def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_
             r.leaks.append(Finding("reach", value, "visible inside the room"))
         elif kind == "env" and value not in allowed:
             r.leaks.append(Finding("env", value, "inherited environment"))
-    r.declared.append(Finding("credentials", f"{agent.room_config}/{agent.credentials}",
-                              "copy of the login, needed by the CLI"))
+    for name in getattr(agent, "secret_files", [agent.credentials]):
+        r.declared.append(Finding("credentials", f"{agent.room_config}/{name}", "copy of the login, needed by the CLI"))
     return r
 
 
@@ -169,18 +191,25 @@ def probe(agent, real: Real, project: Path) -> Reading:
     twin_env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE") or k == "CLAUDE_CONFIG_DIR"}
     with Fake() as fake:
         args, env = agent.probe(fake.url)
-        twin = _capture(agent, [str(real.binary), *args], twin_env | env, project, fake)
+        with agent.twin(real, fake.url) as extra:
+            twin = _capture(agent, [str(real.binary), *args], twin_env | env | extra, project, fake)
+
+    def in_room(home: Path, flags: list[str]) -> Capture:
+        with Fake() as fake:
+            agent.prepare_probe(home / Path(agent.room_config).relative_to(ROOM_HOME), fake.url)
+            args, env = agent.probe(fake.url)
+            argv = bwrap(agent, real, home, project, [agent.name, *flags, *args], env)
+            return _capture(agent, argv, {**os.environ}, project, fake)
 
     with room_home(agent, real) as home:
-        with Fake() as fake:
-            args, env = agent.probe(fake.url)
-            argv = bwrap(agent, real, home, project, [agent.name, *agent.room_flags, *args], env)
-            room = _capture(agent, argv, {**os.environ}, project, fake)
+        room = in_room(home, agent.room_flags)
+        # where an agent loads extensions, a run without them shows which tools are its own
+        bare = in_room(home, [*agent.room_flags, *agent.bare_flags]) if getattr(agent, "bare_flags", None) else None
         reach = ["/bin/sh", "-c", REACH_SCRIPT, "reach", *targets]
         reach_in = subprocess.run(bwrap(agent, real, home, project, reach), capture_output=True, text=True,
                                   timeout=60, check=True).stdout
     reach_out = subprocess.run(reach, capture_output=True, text=True, timeout=60, check=True).stdout
-    return score(agent, real, twin, room, reach_in, reach_out)
+    return score(agent, real, twin, room, reach_in, reach_out, bare=bare, project=project)
 
 
 def render(reading: Reading, project: Path) -> str:
