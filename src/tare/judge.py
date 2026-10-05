@@ -81,7 +81,7 @@ def judge(work: Path, rubric: Path, page: str = "index.html", agent_name: str = 
 def noise(pages: list[Path], rubric: Path, times: int, threshold: float | None, page: str = "index.html",
           agent_name: str = "claude", agent_args: list[str] | None = None) -> tuple[str, bool]:
     """Score each page `times` times. Returns the report and whether the threshold sits outside every spread."""
-    lines = [f"tare judge noise · {agent_name} {' '.join(agent_args or [])}".rstrip(), f"  rubric    {rubric}",
+    lines = [f"tare judge-noise · {agent_name} {' '.join(agent_args or [])}".rstrip(), f"  rubric    {rubric}",
              "", "  page                              scores                         mean   sd   min-max"]
     clear = True
     for p in pages:
@@ -90,8 +90,9 @@ def noise(pages: list[Path], rubric: Path, times: int, threshold: float | None, 
         inside = threshold is not None and min(scores) <= threshold <= max(scores)
         clear = clear and not inside
         lines.append(f"  {str(p)[-32:]:<32}  {' '.join(f'{x:>3}' for x in scores):<30} {mean:5.1f} {sd:4.1f}  "
-                     f"{min(scores)}-{max(scores)}" + ("  <- threshold inside the spread" if inside else ""))
+                     f"{min(scores)}-{max(scores)}" + ("  <- threshold inside this page's range" if inside else ""))
     if threshold is not None:
-        lines += ["", f"  threshold {threshold}: " + ("outside every spread" if clear else
-                                                     "INSIDE a spread; pass and fail there would be the judge's noise")]
+        lines += ["", f"  threshold {threshold}: " + ("outside every page's range of scores" if clear else
+                                                     "INSIDE a page's range of scores. There, chance decides pass or "
+                                                     "fail.")]
     return "\n".join(lines) + "\n", clear

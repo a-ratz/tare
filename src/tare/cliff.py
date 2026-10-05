@@ -65,14 +65,14 @@ def search(probe, last: int, tails: int, budget: int, gap_below: float = 0.2) ->
     if s.rate(0) == 0:
         n, hi = len(s.results[0]), s.interval(0)[1]
         clear = hi < gap_below
-        s.verdict = (f"A fresh start fails too ({n} of {n}, so at most {hi:.2f}): a model gap, not a moment. "
-                     "There is no cliff to find." if clear else
-                     f"No fresh start passed in {n} tails (at most {hi:.2f}); the budget ran out before a model gap "
-                     "was clear.")
+        s.verdict = (f"A fresh start fails too: {n} of {n} failed, so the upper end of the baseline's 95% interval is {hi:.2f}. The task "
+                     "is too hard for the model (a model gap), so there is no cliff to find." if clear else
+                     f"No fresh start passed in {n} tails, so the upper end of the baseline's 95% interval is {hi:.2f}. The budget ran "
+                     "out before a model gap was clear.")
         return s
     run(last, tails)
-    unlucky = ("Resumed at the last step, the run still passes about as often as a fresh start: "
-               "the original run was unlucky rather than lost.")
+    unlucky = ("Continued from its last step, the run still passes at least half as often as a fresh start. "
+               "The original run was unlucky, not lost.")
 
     while True:
         tau = s.rate(0) / 2
@@ -97,11 +97,12 @@ def search(probe, last: int, tails: int, budget: int, gap_below: float = 0.2) ->
 
     high, low = s.cliff
     if low - high > 1:
-        s.verdict = f"Lost somewhere between step {high} and step {low}; the budget ran out before the range narrowed."
+        s.verdict = f"Lost somewhere between step {high} and step {low}. The budget ran out before the range narrowed."
     elif s.separated:
         s.verdict = f"The run became lost at step {low}."
     else:
-        s.verdict = f"Most likely lost at step {low}, but the intervals still overlap; the budget ran out."
+        s.verdict = (f"Most likely lost at step {low}. The intervals of steps {high} and {low} still overlap, and the "
+                     "budget ran out.")
     return s
 
 
@@ -113,7 +114,7 @@ def cliff(agent, real, project: Path, prompt: str, check: str, out: Path, *, tai
     journal = journal or Journal(None)
     journal("start", kind="cliff", task=prompt, check=check, project=str(project), tails=tails, budget=budget,
             sides={"a": {"agent": agent.name, "args": claude_args, "dir": "."}})
-    journal("phase", phase="recording")
+    journal("phase", phase="original run")
     caps.record(agent, real, project, out, prompt, claude_args, env)
     passed, detail = caps.run_check(check, out / "original" / "work")
     header = [f"tare cliff · {agent.name} · {project}", f"  task      {prompt}", f"  check     {check}"]
@@ -123,7 +124,7 @@ def cliff(agent, real, project: Path, prompt: str, check: str, out: Path, *, tai
         return _write(out, header + [f"  original  passed ({detail}): there is no cliff to find"], journal)
     header.append(f"  original  failed ({detail}) after {len(steps) - 1} steps")
     if len(steps) == 1:
-        return _write(out, header + ["  The run made no tool calls; there is nothing to resume."], journal)
+        return _write(out, header + ["  The run made no tool calls, so there is no step to continue from."], journal)
     journal("phase", phase="tails")
 
     counts: dict[int, int] = {}
@@ -166,9 +167,9 @@ def report(s: Search, steps: list, budget: int) -> list[str]:
         lines.append(f"  at step {step.step}: {step.tool}")
         lines.append(f"  changed   {', '.join(changed[:10]) or 'no files (the conversation changed, not the workspace)'}")
     if s.cliff:
-        lines.append("  monotone  " + ("yes" if not s.rebounds else
+        lines.append("  monotone  " + ("yes: no step after the cliff passes again" if not s.rebounds else
                                        f"no: steps {', '.join(map(str, s.rebounds))} pass again after the cliff"))
-    lines.append(f"  tails     {s.spent} of a budget of {budget}" + (" (spent)" if s.exhausted else ""))
+    lines.append(f"  tails     {s.spent} of a budget of {budget}")
     return lines
 
 

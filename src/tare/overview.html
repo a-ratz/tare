@@ -36,7 +36,7 @@ a:hover { text-decoration: underline; }
 <main>
   <h1>tare runs</h1>
   <section class="panel"><table>
-    <thead><tr><th>run</th><th>phase</th><th>task</th><th>sides</th><th>tails</th><th>result</th></tr></thead>
+    <thead><tr><th>run</th><th>phase</th><th>task</th><th>sides</th><th>progress</th><th>result</th></tr></thead>
     <tbody id="rows"><tr><td colspan="6" class="muted">loading…</td></tr></tbody>
   </table></section>
 </main>
@@ -60,7 +60,7 @@ function row(r) {
   return `<tr><td><a href="run/${r.i}/"><b>${esc(r.kind || "run")}</b></a><div class="muted mono">${esc(r.name)}</div></td>
     <td><span class="dot ${phase}"></span>${esc(r.phase)}</td>
     <td class="task">${esc(short(r.task, 140)) || `<span class="muted">a prompt per side</span>`}</td>
-    <td>${sides}</td><td class="mono">${r.done} done${r.running ? ` · ${r.running} running` : ""}</td><td>${result(r)}</td></tr>`;
+    <td>${sides}</td><td class="mono">${r.done} ${r.kind === "calibrate" ? "runs" : "tails"} done${r.running ? ` · ${r.running} running` : ""}</td><td>${result(r)}</td></tr>`;
 }
 
 async function tick() {

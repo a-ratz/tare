@@ -8,7 +8,7 @@ weak: it ignores the notes and writes 42 or 41 with even odds. Run a writes a tr
 (answer=42) at step 2, run b a poisoned one (answer=41). Expected:
 - cut 0: both rooms are the untouched project: state effect 0 (null check), model effect +0.5;
 - cuts 0.5 and 1: room b misleads agent a: state effect +0.5, model effect 0;
-- verdict: blame passes from the model to the room between cut 0.00 and cut 0.50.
+- verdict: Blame passes from the model to the workspace between cut 0.00 and cut 0.50.
 """
 import random
 import sys

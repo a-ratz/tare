@@ -40,7 +40,7 @@ table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { color: var(--muted); font-weight: 500; font-size: 12px; }
 td.num { font-family: var(--mono); white-space: nowrap; }
-.matrix { display: grid; grid-template-columns: 70px 1fr 1fr; gap: 6px; align-items: stretch; margin: 8px 0; }
+.matrix { display: grid; grid-template-columns: 96px 1fr 1fr; gap: 6px; align-items: stretch; margin: 8px 0; }
 .matrix .head { color: var(--muted); font-size: 12px; align-self: end; }
 .cell { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px; min-height: 58px; }
 .cell .big { font: 600 18px var(--mono); }
@@ -78,17 +78,17 @@ function recipeCard(s) {
   const sides = Object.entries(s.sides || {}).map(([k, v]) => {
     const version = r.agents && r.agents[k] ? r.agents[k].version : "";
     const own = v.prompt ? `<div class="muted">prompt: ${esc(v.prompt)}</div>` : "";
-    return `<div>agent ${esc(k)}</div><div><b>${esc(v.agent)}</b> ${esc((v.args || []).join(" "))} <span class="muted">${esc(version)}</span>${own}</div>`;
+    return `<div>${s.kind === "calibrate" ? "side" : "agent"} ${esc(k)}</div><div><b>${esc(v.agent)}</b> ${esc((v.args || []).join(" "))} <span class="muted">${esc(version)}</span>${own}</div>`;
   }).join("");
   const p = s.params || {};
-  const params = s.kind === "cliff" ? `${esc(p.tails)} tails per probe · budget ${esc(p.budget)}`
+  const params = s.kind === "cliff" ? `${esc(p.tails)} tails per step tried · budget ${esc(p.budget)}`
     : s.kind === "calibrate" ? `${esc(p.tails)} fresh starts per side` : `cuts ${esc((p.cuts || []).join(", "))} · ${esc(p.tails)} tails per cell`;
   return `<section class="panel"><h2>Recipe</h2><div class="kv">
     <div>task</div><div>${s.task ? esc(s.task) : `<span class="muted">a prompt per side</span>`}</div>
-    <div>check</div><div>${s.check ? `<code>${esc(s.check)}</code>` : `<span class="muted">none: every run that ends counts; workspaces kept for scoring elsewhere</span>`}</div>
-    <div>project</div><div><code>${esc(s.project)}</code> <span class="muted">${esc(r.project_digest ? "digest " + r.project_digest.slice(0, 12) : "")}</span></div>
+    <div>check</div><div>${s.check ? `<code>${esc(s.check)}</code>` : `<span class="muted">none. A run counts as finished when its agent exits 0. Workspaces are kept.</span>`}</div>
+    <div>project</div><div><code>${esc(s.project)}</code> <span class="muted">${esc(r.project_digest ? "fingerprint " + r.project_digest.slice(0, 12) : "")}</span></div>
     ${sides}
-    <div>params</div><div>${params}</div>
+    <div>settings</div><div>${params}</div>
     ${r.command ? `<div>repeat</div><div><code>tare rerun ${esc(r.out || "")}</code></div>` : ""}
   </div></section>`;
 }
@@ -96,7 +96,7 @@ function recipeCard(s) {
 function probesCard(s) {
   if (!s.probes.length) return "";
   return `<section class="panel"><h2>Probes</h2><div class="grid">${s.probes.map((p) => `
-    <div><span class="chip">${dot(p.zero ? "passed" : "failed")} ${esc(p.agent)} · ${p.zero ? "tare: 0.00" : "not zero"}</span>
+    <div><span class="chip">${dot(p.zero ? "passed" : "failed")} ${esc(p.agent)} · ${p.zero ? "tare: 0.00" : esc((p.text || "").trim().split("\n").pop())}</span>
     <details><summary>reading</summary><pre>${esc(p.text)}</pre></details></div>`).join("")}</div></section>`;
 }
 
@@ -127,7 +127,7 @@ function cliffCard(s) {
   if (theta != null) {
     svg += `<line x1="${L}" x2="${W - R}" y1="${y(theta)}" y2="${y(theta)}" stroke="var(--accent)" stroke-dasharray="2 3"/>`;
     svg += `<line x1="${L}" x2="${W - R}" y1="${y(theta / 2)}" y2="${y(theta / 2)}" stroke="var(--threshold)" stroke-dasharray="6 4"/>`;
-    svg += `<text x="${L + 6}" y="${y(theta / 2) - 5}">threshold: half of the fresh-start rate</text>`;
+    svg += `<text x="${L + 6}" y="${y(theta / 2) - 5}">threshold: half the baseline pass rate</text>`;
   }
   for (const r of rows) {
     if (r.rate == null) { svg += `<circle cx="${x(r.step)}" cy="${y(.5)}" r="5" fill="none" stroke="var(--run)"/>`; continue; }
@@ -139,9 +139,9 @@ function cliffCard(s) {
   svg += `</svg>`;
   const table = rows.map((r) => `<tr><td class="num">${r.step}</td><td>${esc(o.steps ? o.steps[r.step] : "")}</td>
     <td class="num">${r.passes}/${r.n}${r.running ? ` <span class="muted">+${r.running} running</span>` : ""}</td>
-    <td class="num">${pct(r.rate)}</td><td class="num">${r.n ? `${pct(r.lo)}–${pct(r.hi)}` : "–"}</td></tr>`).join("");
+    <td class="num">${pct(r.rate)}</td><td class="num">${r.n ? `${pct(r.lo)}-${pct(r.hi)}` : "–"}</td></tr>`).join("");
   return `<section class="panel"><h2>Cliff search</h2>${svg}
-    <table><thead><tr><th>step</th><th>what the step did</th><th>tails</th><th>rate</th><th>95% interval</th></tr></thead><tbody>${table}</tbody></table></section>`;
+    <table><thead><tr><th>step</th><th>what the step did</th><th>passed / tails</th><th>rate</th><th>95% interval</th></tr></thead><tbody>${table}</tbody></table></section>`;
 }
 
 function effect(e, label) {
@@ -159,13 +159,13 @@ function swapCard(s) {
       const v = c.cells[r + m], dots = "<span class='dot pass'></span>".repeat(v.passes) + "<span class='dot fail'></span>".repeat(v.n - v.passes) + "<span class='dot run'></span>".repeat(v.running);
       return `<div class="cell"><div class="big">${v.passes}/${v.n}</div><div class="dots">${dots}</div></div>`;
     };
-    const native = Object.entries(c.native).map(([r, v]) => `room ${r} native: ${v.passes}/${v.n}`).join(" · ");
-    return `<div><b>cut ${c.fraction.toFixed(2)}</b> <span class="muted">room a at step ${c.steps.a}, room b at step ${c.steps.b}</span>
+    const native = Object.entries(c.native).map(([r, v]) => `workspace ${r}, own session: ${v.passes}/${v.n}`).join(" · ");
+    return `<div><b>cut ${c.fraction.toFixed(2)}</b> <span class="muted">workspace a at step ${c.steps.a}, workspace b at step ${c.steps.b}</span>
       <div class="matrix"><div></div><div class="head">agent a · ${agentName("a")}</div><div class="head">agent b · ${agentName("b")}</div>
-        <div class="head">room a</div>${cell("a", "a")}${cell("a", "b")}
-        <div class="head">room b</div>${cell("b", "a")}${cell("b", "b")}</div>
+        <div class="head">workspace a</div>${cell("a", "a")}${cell("a", "b")}
+        <div class="head">workspace b</div>${cell("b", "a")}${cell("b", "b")}</div>
       ${native ? `<div class="muted">${native}</div>` : ""}
-      ${effect(c.state, "state effect (room a better)")}${effect(c.model, "model effect (agent a better)")}</div>`;
+      ${effect(c.state, "state effect (positive: workspace a better)")}${effect(c.model, "model effect (positive: agent a better)")}</div>`;
   }).join("")}</div></section>`;
 }
 
@@ -177,7 +177,7 @@ function runsCard(s) {
     const times = [...(r.times || [])].sort((a, b) => a - b);
     const median = times.length ? times[Math.floor((times.length - 1) / 2)] : null;
     return `<tr><td class="num">${esc(k)}</td><td><b>${esc(side.agent)}</b> ${esc((side.args || []).join(" "))}<div class="dots">${dots}</div></td>
-      <td class="num">${r.passes}/${r.n}</td><td class="num">${median == null ? "–" : `${dur(median)} (${dur(times[0])}–${dur(times[times.length - 1])})`}</td></tr>`;
+      <td class="num">${r.passes}/${r.n}</td><td class="num">${median == null ? "–" : `${dur(median)} (${dur(times[0])} to ${dur(times[times.length - 1])})`}</td></tr>`;
   }).join("");
   return `<section class="panel"><h2>Runs · no check</h2><table><thead><tr><th>side</th><th>agent</th><th>finished</th><th>time (median, range)</th></tr></thead><tbody>${rows}</tbody></table></section>`;
 }
@@ -185,6 +185,7 @@ function runsCard(s) {
 function calibrateCard(s) {
   if (!s.check) return runsCard(s);
   const rates = s.rates || {};
+  const judged = Object.values(rates).some((r) => (r.scores || []).length);
   const rows = Object.entries(s.sides || {}).map(([k, side]) => {
     const r = rates[k] || { passes: 0, n: 0, running: 0 };
     const dots = "<span class='dot pass'></span>".repeat(r.passes) + "<span class='dot fail'></span>".repeat(r.n - r.passes) + "<span class='dot run'></span>".repeat(r.running);
@@ -197,12 +198,11 @@ function calibrateCard(s) {
         ${r.mean != null ? `<line x1="${r.mean * 2}" x2="${r.mean * 2}" y1="2" y2="20" stroke="var(--text)" stroke-width="2"/>` : ""}
       </svg><div class="muted mono">${[...scores].sort((a, b) => a - b).join(" ")} · mean ${r.mean.toFixed(1)}</div>` : `<span class="muted">–</span>`;
     return `<tr><td class="num">${esc(k)}</td><td><b>${esc(side.agent)}</b> ${esc((side.args || []).join(" "))}<div class="dots">${dots}</div></td>
-      <td>${strip}</td>
-      <td class="num">${r.passes}/${r.n}</td><td class="num">${pct(r.rate)}</td><td class="num" style="min-width:160px">${r.n ? `${pct(r.lo)}–${pct(r.hi)}` : "–"}${band}</td></tr>`;
+      ${judged ? `<td>${strip}</td>` : ""}
+      <td class="num">${r.passes}/${r.n}</td><td class="num">${pct(r.rate)}</td><td class="num" style="min-width:160px">${r.n ? `${pct(r.lo)}-${pct(r.hi)}` : "–"}${band}</td></tr>`;
   }).join("");
-  const judged = Object.values(rates).some((r) => (r.scores || []).length);
   const title = judged ? "Judge scores and pass rates" : "Pass rates";
-  return `<section class="panel"><h2>${title}</h2><table><thead><tr><th>side</th><th>agent</th><th>judge scores (0–100, line = mean)</th><th>pass</th><th>rate</th><th>95% interval</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+  return `<section class="panel"><h2>${title}</h2><table><thead><tr><th>side</th><th>agent</th>${judged ? "<th>judge scores (0 to 100, line = mean)</th>" : ""}<th>pass</th><th>rate</th><th>95% interval</th></tr></thead><tbody>${rows}</tbody></table></section>`;
 }
 
 function tailsCard(s) {
@@ -210,11 +210,11 @@ function tailsCard(s) {
   if (!s.tails.length) return "";
   const fraction = (i) => (s.plan && s.plan[i] ? s.plan[i].fraction.toFixed(2) : i);
   const where = (t) => s.kind === "cliff" ? `step ${t.step}` : s.kind === "calibrate" ? `side ${t.side} · fresh start`
-    : `cut ${fraction(t.cut)} · room ${t.room} · agent ${t.agent}${t.kind === "native" ? " · native" : ""}`;
+    : `cut ${fraction(t.cut)} · workspace ${t.room} · agent ${t.agent}${t.kind === "native" ? " · own session" : ""}`;
   const row = (t) => `<tr><td>${dot(t.status)}</td><td class="num">${esc(where(t))}</td><td>${esc(t.agent_name)}</td>
     <td class="num">${dur((t.ended || s.now) - t.started)}</td><td class="activity">${esc(t.status === "running" ? (t.activity || "starting…") : t.detail || t.status)}</td></tr>`;
   const total = s.kind === "cliff" ? `${done.length} of a budget of ${esc((s.params || {}).budget)}` : `${done.length} done`;
-  return `<section class="panel"><h2>Tails · ${running.length} running · ${total}</h2>
+  return `<section class="panel"><h2>${s.kind === "calibrate" ? "Runs" : "Tails"} · ${running.length} running · ${total}</h2>
     <table><thead><tr><th></th><th>where</th><th>agent</th><th>time</th><th>doing / result</th></tr></thead>
     <tbody>${running.map(row).join("")}${done.slice(0, 40).map(row).join("")}</tbody></table></section>`;
 }
@@ -226,7 +226,7 @@ function render(s) {
   $("#phase").innerHTML = `${dot(status)}<span>${esc(s.phase)}</span>`;
   if (s.started) $("#elapsed").textContent = `${dur((s.phase === "done" ? s.updated : s.now) - s.started)}`;
   const quiet = s.updated ? s.now - s.updated : 0;
-  $("#updated").innerHTML = s.phase !== "done" && quiet > 300 ? `<span class="stale">no journal entry for ${dur(quiet)}</span>` : "";
+  $("#updated").innerHTML = s.phase !== "done" && quiet > 300 ? `<span class="stale">no update for ${dur(quiet)}</span>` : "";
   let cliffStep = null;
   if (s.report) { const m = s.report.match(/lost at step (\d+)/); if (m) cliffStep = Number(m[1]); }
   $("#app").innerHTML = (s.kind ? recipeCard(s) : "") + probesCard(s) + (s.kind && s.kind !== "calibrate" ? originalsCard(s, cliffStep) : "")

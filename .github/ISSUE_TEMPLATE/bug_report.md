@@ -7,7 +7,7 @@ labels: type:bug
 ---
 
 ## What happens
-A clear description of the bug.
+A description of the bug.
 
 ## To reproduce
 1. ...
@@ -17,4 +17,4 @@ A clear description of the bug.
 What should have happened.
 
 ## Output
-The `tare` output, versions (`claude --version`, OS), logs.
+The `tare` output, the agent and its version (for example `claude --version`), the OS, logs.
