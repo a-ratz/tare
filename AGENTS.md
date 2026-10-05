@@ -17,6 +17,8 @@ machine instead of the skill.
 | `src/tare/agents.py` | what tare knows about each agent: its setup, login, probe arguments, request format, markers |
 | `src/tare/room.py` | the room: bwrap arguments, a fresh home with a login copy, the environment allowlist |
 | `src/tare/probe.py` | the probe: context, control, reach, scoring and the printed reading |
+| `src/tare/capsule.py` | Cliff's capsules: archive the workspace at every tool call, resume one in a fresh room, run the check |
+| `src/tare/cliff.py` | Cliff: baseline, adaptive search with Wilson intervals, the report |
 | `src/tare/fake.py` | the fake model endpoint (Anthropic Messages for Claude Code, OpenAI Responses for Codex) |
 | `tests/` | pytest; needs no agent, no login and no network |
 | `experiments/` | pre-registered measurements (`PLAN.md` before the runs, `RESULTS.md` after) |
@@ -35,6 +37,9 @@ touches the room or the probe, run it on the machine:
    every control class.
 2. A spike must fail the probe: plant known dirt into a room's own copy (instructions, a skill,
    an environment variable) and check that each piece is named with its source.
+3. Before a PR that touches Cliff: `uv run experiments/cliff-scripted/world.py` must report
+   "The run became lost at step 4". It drives the real Claude Code CLI against a scripted model,
+   so it costs no API calls.
 
 ## Development process
 
