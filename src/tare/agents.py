@@ -7,6 +7,7 @@ of the user's files mark their context.
 import base64
 import json
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -35,7 +36,7 @@ class Real:
 class Capture:
     text: str  # every string of the first model request
     tools: set[str]
-    init: dict  # the CLI's own report of what it loaded, where it gives one
+    init: dict  # the CLI's own report of what it loaded, where it gives one (Codex: what its request lists)
 
 
 def strings(obj):
@@ -231,6 +232,10 @@ class Claude:
         return None if data is None else "subscription" if "claudeAiOauth" in data else "api key"
 
 
+# a plugin's skill in Codex's skills listing: "- <plugin>:<skill>: <description>"
+PLUGIN_SKILL = re.compile(r"^- ([A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+): ", re.M)
+
+
 class Codex:
     name = "codex"
     credentials = "auth.json"
@@ -288,11 +293,22 @@ class Codex:
         main = next((r for r in requests if "input" in r), None)
         if main is None:
             return None
-        tools = {t.get("name") for t in main.get("tools", []) if t.get("name")}
-        for item in main.get("input", []):
-            tools |= {t.get("name") for t in item.get("tools", []) or [] if isinstance(t, dict) and t.get("name")}
+        entries = [*main.get("tools", []), *(t for item in main.get("input", []) for t in item.get("tools", []) or [])]
+        tools = set()
+        for t in entries:
+            if isinstance(t, dict) and t.get("name"):
+                tools.add(t["name"])
+                if t.get("type") == "namespace" and t["name"].startswith("mcp__"):
+                    # an MCP server's tools, grouped as mcp__<server>: named the way MCP names them
+                    tools |= {f"{t['name']}__{n['name']}" for n in t.get("tools", [])
+                              if isinstance(n, dict) and n.get("name")}
         text = "\n".join(strings({k: main.get(k) for k in ("instructions", "input", "tools")}))
-        return Capture(text, tools, {})
+        # Codex gives no init report, but its request lists each plugin's skills as
+        # "- <plugin>:<skill>: ...". Those lines name the plugins and their skills.
+        skills = sorted(set(PLUGIN_SKILL.findall(text)))
+        plugins = sorted({s.split(":")[0] for s in skills})
+        init = {"skills": skills, "plugins": [{"name": p, "path": "Codex plugin"} for p in plugins]} if skills else {}
+        return Capture(text, tools, init)
 
     def instructions(self, real: Real) -> Path:
         return real.config / "AGENTS.md"
