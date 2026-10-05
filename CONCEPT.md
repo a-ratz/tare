@@ -197,6 +197,69 @@ Tare is meant to sit underneath such frameworks: their exam, Tare's clean room.
 5. ~~Bring the `claude-naked` connector fix in~~. `tare claude` carries its own context
    layer (fresh config plus the flags). The fix stays useful for `claude-naked` itself:
    `f61aff7` on `fix/remote-plugin-isolation` in `codex-naked`, pushed, not merged.
+6. ~~Cliff~~. Done 2026-10-05 for Claude Code (`tare cliff claude`).
+   - **Capsules:** a `PostToolUse` hook from `--settings` archives the workspace after every
+     tool call, and it fires with the room flags in place.
+   - **Tails:** each tail resumes the transcript cut after that step's tool result.
+   - **Measured:**
+     - Scripted run against a model whose cliff is known: the search found step 4 with
+       separated intervals in 18 tails.
+     - Real model: a recorded run resumed from step 1, and the backend accepted the cut
+       transcript.
+   - **Open:**
+     - Cliff for Codex, which resumes differently.
+     - The cost of real searches: every tail is a full agent run.
+7. ~~Swap~~. Done 2026-10-05 (`tare swap`), for Claude Code and Codex.
+   - **The trail:** one neutral record of a run (task, messages, tool calls, results), and one
+     renderer that turns any prefix of it into a handoff prompt. Each agent continues a
+     capsule by handoff, so no agent ever writes another agent's session format. A new agent
+     needs three things: a snapshot hook, a translation of its session into the trail, and a
+     way to start a session with a prompt.
+   - **Codex specifics:**
+     - It takes the `PostToolUse` hook from the room's `hooks.json`, but only with
+       `--dangerously-bypass-hook-trust`.
+     - In code mode one model call (`exec`) runs several commands; a step carries the
+       commands' ids.
+   - **Measured:**
+     - Scripted models with a known truth: null check passed; blame passed from the model
+       to the room between cut 0 and cut 0.5, as built.
+     - Real Claude Code (haiku) against real Codex on a small task: both ran, and each
+       continued the other's room. Every cell passed, so there was no effect to find.
+   - **Open:** Codex's code-mode calls are verbose in a handoff.
+8. ~~Every agent in Cliff and Swap~~. Done 2026-10-05.
+   - Cliff continues by handoff where an agent has no native resume.
+   - Codex resumes natively: a rollout cut after a step, placed under the room's
+     `sessions/` with the session id at the end of its file name, continues with
+     `codex exec resume <id>`.
+   - **Measured:** the resumed thread kept the original id, and from step 1 it finished the
+     remaining plan. Swap now has native cells for both agents.
+9. ~~Live dashboard and recipes~~. Done 2026-10-05 (epic #39).
+   - **The run directory is the source of truth:** the journal, the recipe, and the agents'
+     live output. So `tare watch` shows a finished run the same way as a live one.
+   - **Recipes** keep the command, the project digest and the CLI versions. `tare rerun`
+     repeats a run and names what changed.
+10. ~~Pi~~. Done 2026-10-05 (`tare probe pi`, `tare pi`, Cliff and Swap).
+    - **Probe:** Pi has no base-URL variable. The fake is reached through a provider of its own
+      (`tare`, api `anthropic-messages`), added to a copy of the agent directory for the dirty
+      twin and to the room's own.
+    - **Room:** no flags, because a fresh agent directory without the user's parent
+      directories is clean and keeps the project's AGENTS.md. `--no-context-files` would drop
+      it ([results](experiments/dirty-twin-pi/RESULTS.md)).
+    - **Extensions:** extension tools are found as the dirty twin's tools that a room run with
+      `--no-extensions` does not offer.
+    - **Capsules:** a small extension hands every top-level tool call to the snapshot hook.
+      Sessions resume with `--session`.
+    - **Measured:**
+      - The clean room read 0.00.
+      - A room planted with the user's extension package and an environment variable read 5
+        leaks, each with its source.
+      - A real run (zai) recorded three capsules and continued from step 1 both natively and
+        by handoff.
+    - **Also measured, for every agent:** instruction files in the project's parent
+      directories are their own class now. Claude Code's print mode, which the probe uses, did
+      not load `~/AGENTS.md`; Pi loaded it. So the probe vouches for print mode only. A room
+      has no parent directories, so the class cannot leak into one.
+11. Gemini CLI (epic #34).
 
 ## Name
 
