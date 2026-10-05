@@ -4,3 +4,6 @@ __pycache__/
 # agent skills installed locally (readme-craft and friends), not part of tare
 .agents/
 .claude/
+
+# build output
+dist/
