@@ -118,7 +118,7 @@ def test_a_tool_name_mentioned_in_prose_is_not_an_offered_server(tmp_path):
     assert score(Claude(), real, twin_capture(tmp_path), room, "", "").leaks == []
 
 
-CODIE = "You are Codex, also called Codie, a fun and quirky AI."
+GLOBAL_AGENTS = "Always write the failing test first, then the smallest fix."
 MEMORY = "The user works across private research and professional repositories."
 
 
@@ -128,13 +128,13 @@ def codex_real(tmp_path):
     (config / "skills" / "clockodo-time-entry").mkdir()
     (tmp_path / ".agents" / "skills" / "dialectic").mkdir(parents=True)
     (config / "memories").mkdir()
-    (config / "AGENTS.md").write_text(f"# DNA\n\n{CODIE}\n")
+    (config / "AGENTS.md").write_text(f"# DNA\n\n{GLOBAL_AGENTS}\n")
     (config / "memories" / "memory_summary.md").write_text(f"v1\n\n{MEMORY}\n")
     return Real(home=tmp_path, config=config, binary=tmp_path / "codex")
 
 
 def codex_twin(home):
-    return Capture("\n".join([CODIE, MEMORY, f"<cwd>{home}/project</cwd>", "- imagegen: bundled",
+    return Capture("\n".join([GLOBAL_AGENTS, MEMORY, f"<cwd>{home}/project</cwd>", "- imagegen: bundled",
                               "- clockodo-time-entry: book hours", "- dialectic: argue both sides"]),
                    {"shell", "mcp__qmd__query"}, {})
 

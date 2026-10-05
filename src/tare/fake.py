@@ -6,6 +6,7 @@ body is kept in memory; headers are never stored, so the login token never leave
 request. Each turn is answered with the text "ok", so the CLI ends its loop at once.
 """
 import json
+import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -37,6 +38,14 @@ def _responses_events() -> list[tuple[str, dict]]:
         ("response.output_item.done", {"type": "response.output_item.done", "output_index": 0, "item": item}),
         ("response.completed", {"type": "response.completed", "response": {"id": "resp_tare", "usage": usage}}),
     ]
+
+
+class _QuietServer(ThreadingHTTPServer):
+    def handle_error(self, request, client_address):
+        # The CLIs drop connections at will (a refused websocket, the end of a run);
+        # that is not worth a traceback in the user's terminal.
+        if not isinstance(sys.exc_info()[1], ConnectionError):
+            super().handle_error(request, client_address)
 
 
 class Fake:
@@ -102,7 +111,7 @@ class Fake:
                                  "content": [{"type": "text", "text": "ok"}], "stop_reason": "end_turn",
                                  "stop_sequence": None, "usage": {"input_tokens": 1, "output_tokens": 1}})
 
-        self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self._server = _QuietServer(("127.0.0.1", 0), Handler)
         self.url = f"http://127.0.0.1:{self._server.server_address[1]}"
 
     def __enter__(self):
