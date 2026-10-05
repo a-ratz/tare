@@ -18,8 +18,10 @@ from pathlib import Path
 
 import tare.capsule as caps
 from tare.agents import Claude
+from tare import dashboard
 from tare.cliff import cliff
 from tare.fake import Fake
+from tare.journal import Journal
 
 
 class World:
@@ -64,9 +66,10 @@ project = Path(tempfile.mkdtemp(prefix="cliff-project-"))
 out = Path(tempfile.mkdtemp(prefix="cliff-e2e-")) / "run"
 out.mkdir()
 agent = Claude()
+print("live dashboard:", dashboard.serve(out, 8777)[1], flush=True)
 with Fake(world) as fake:
     text = cliff(agent, agent.discover(), project, "Write the answer to answer.txt.",
                  'test "$(cat answer.txt)" = 42', out, tails=3, budget=int(sys.argv[1]) if len(sys.argv) > 1 else 30,
-                 jobs=3, env={"ANTHROPIC_BASE_URL": fake.url})
+                 jobs=3, env={"ANTHROPIC_BASE_URL": fake.url}, journal=Journal(out))
 print(text)
 print("run directory:", out)
