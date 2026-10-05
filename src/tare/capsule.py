@@ -133,7 +133,9 @@ def capsules(out: Path, agent) -> list[Capsule]:
 def session_id(out: Path) -> str:
     for line in session_lines(out):
         entry = json.loads(line)
-        sid = entry.get("sessionId") or (entry.get("payload") or {}).get("id")
+        # Claude Code: sessionId on every entry; Codex: the session_meta payload; Pi: the session header
+        sid = (entry.get("sessionId") or (entry.get("payload") or {}).get("id")
+               or (entry.get("id") if entry.get("type") == "session" else None))
         if sid:
             return sid
     raise ValueError("no session id in the session file")

@@ -1,8 +1,8 @@
 """tare: zero the scale before you weigh.
 
-  tare probe {claude,codex} [--project DIR]
-  tare {claude,codex} [--project DIR] [--allow-dirty] [--yolo] [-- AGENT_ARGS...]
-  tare cliff {claude,codex} PROMPT --check CMD [--tails N] [--budget N] [--jobs N] [-- AGENT_ARGS...]
+  tare probe {claude,codex,pi} [--project DIR]
+  tare {claude,codex,pi} [--project DIR] [--allow-dirty] [--yolo] [-- AGENT_ARGS...]
+  tare cliff {claude,codex,pi} PROMPT --check CMD [--tails N] [--budget N] [--jobs N] [-- AGENT_ARGS...]
   tare swap PROMPT --check CMD [--a claude] [--b codex] [--a-args ARGS] [--b-args ARGS] [--cuts 0,0.5,1]
   tare watch DIR [--port N]      the live dashboard of a Cliff or Swap run, also a finished one
   tare rerun DIR [--out DIR]     repeat a run from its recipe
