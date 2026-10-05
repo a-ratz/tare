@@ -1,0 +1,1 @@
+Build index.html: a single-file landing page for Orbit Notes, using exactly the copy in content.md: a hero with name and tagline and a call to action, the four features, a pricing table with the three plans, and the FAQ. Use no external libraries, fonts or images from the network. It should look like the landing page of a well-designed, modern product.
