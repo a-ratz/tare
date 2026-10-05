@@ -18,7 +18,7 @@ from pathlib import Path
 
 from .agents import Capture, Real
 from .fake import Fake
-from .room import ROOM_HOME, TareError, bwrap, room_env, room_home
+from .room import Room, TareError, backend, room_env
 
 SECRET_PATHS = (".claude", ".claude.json", ".codex", ".agents", ".config/gh", ".ssh", ".aws", ".netrc",
                 ".git-credentials", ".docker/config.json")
@@ -96,7 +96,7 @@ def parent_instructions(project: Path) -> list[Path]:
 
 
 def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_out: str,
-          bare: Capture | None = None, project: Path | None = None) -> Reading:
+          bare: Capture | None = None, project: Path | None = None, inside_config: str | None = None) -> Reading:
     r = Reading(agent=agent.name, version=room.init.get("claude_code_version", "?"))
 
     # instruction files above the project; an agent that does not read them cannot leak them
@@ -190,7 +190,8 @@ def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_
         elif kind == "env" and value not in allowed:
             r.leaks.append(Finding("env", value, "inherited environment"))
     for name in getattr(agent, "secret_files", [agent.credentials]):
-        r.declared.append(Finding("credentials", f"{agent.room_config}/{name}", "copy of the login, needed by the CLI"))
+        config = inside_config or Room(Path(), Path()).inside_config(agent)
+        r.declared.append(Finding("credentials", f"{config}/{name}", "copy of the login, needed by the CLI"))
     return r
 
 
@@ -224,23 +225,26 @@ def probe(agent, real: Real, project: Path) -> Reading:
                     argv = agent.twin_argv(argv, env)
                 return _capture(agent, argv, env, project, fake)
 
-    def in_room(home: Path, flags: list[str]) -> Capture:
+    rooms = backend()
+
+    def in_room(room: Room, flags: list[str]) -> Capture:
         with Fake() as fake:
-            agent.prepare_probe(home / Path(agent.room_config).relative_to(ROOM_HOME), fake.url)
+            agent.prepare_probe(room.config(agent), fake.url)
             args, env = agent.probe(fake.url)
-            argv = bwrap(agent, real, home, project, [agent.name, *flags, *args], env)
+            argv = rooms.argv(room, agent, real, [agent.name, *flags, *args], env)
             return _capture(agent, argv, {**os.environ}, project, fake)
 
-    with room_home(agent, real) as home:
-        room = in_room(home, agent.room_flags)
+    with rooms.open(agent, real, project) as room:
+        inside = in_room(room, agent.room_flags)
         # where an agent loads extensions, a run without them shows which tools are its own
-        bare = in_room(home, [*agent.room_flags, *agent.bare_flags]) if getattr(agent, "bare_flags", None) else None
+        bare = in_room(room, [*agent.room_flags, *agent.bare_flags]) if getattr(agent, "bare_flags", None) else None
         reach = ["/bin/sh", "-c", REACH_SCRIPT, "reach", *targets]
-        reach_in = subprocess.run(bwrap(agent, real, home, project, reach), capture_output=True, text=True,
+        reach_in = subprocess.run(rooms.argv(room, agent, real, reach), capture_output=True, text=True,
                                   timeout=60, check=True).stdout
+        inside_config = room.inside_config(agent)
     reach_out = subprocess.run(reach, capture_output=True, text=True, timeout=60, check=True).stdout
-    return settle(run_twin, lambda twin: score(agent, real, twin, room, reach_in, reach_out, bare=bare,
-                                                project=project))
+    return settle(run_twin, lambda twin: score(agent, real, twin, inside, reach_in, reach_out, bare=bare,
+                                                project=project, inside_config=inside_config))
 
 
 def render(reading: Reading, project: Path) -> str:

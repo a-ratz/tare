@@ -4,6 +4,7 @@ from pathlib import Path
 
 from tare import trail
 from tare.agents import Capture, Pi, Real
+from tare.room import Room
 from tare.probe import score
 
 
@@ -55,7 +56,7 @@ def test_pi_room_keeps_only_login_providers_and_the_default_model(tmp_path):
              {"defaultProvider": "zai", "defaultModel": "glm", "packages": ["npm:some-extension"], "theme": "dark"})
     room = tmp_path / "room"
     room.mkdir()
-    Pi().seed(r, room)
+    Pi().seed(r, room, Room(tmp_path, tmp_path))
     assert json.loads((room / "settings.json").read_text()) == {"defaultProvider": "zai", "defaultModel": "glm"}
     assert (room / "auth.json").exists() and (room / "models.json").exists()
     assert oct((room / "models.json").stat().st_mode & 0o777) == "0o600"

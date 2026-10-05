@@ -7,6 +7,7 @@ of the user's files mark their context.
 import base64
 import json
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -16,7 +17,7 @@ from pathlib import Path
 
 from . import trail as trails
 from .fake import FAKE_MODEL
-from .room import ROOM_HOME, ROOM_PROJECT, TareError
+from .room import TareError
 from .usage import Usage
 
 PROMPT = "say ok"
@@ -85,7 +86,7 @@ def _lifetime_error(path: Path) -> TareError:
 class Claude:
     name = "claude"
     credentials = ".credentials.json"
-    room_config = f"{ROOM_HOME}/.claude-config"
+    config_dir = ".claude-config"  # under the room's home
     # Login-carried connectors and account skills arrive unless these are passed (CONCEPT.md, layer 1).
     room_flags = ["--strict-mcp-config", "--setting-sources", "project,local"]
     yolo = ["--dangerously-skip-permissions"]
@@ -107,15 +108,15 @@ class Claude:
         except (OSError, ValueError, KeyError, TypeError):
             raise _lifetime_error(path) from None
 
-    def seed(self, real: Real, config: Path):
+    def seed(self, real: Real, config: Path, room):
         shutil.copyfile(real.config / self.credentials, config / self.credentials)
         (config / self.credentials).chmod(0o600)
         (config / ".claude.json").write_text(json.dumps(
-            {"hasCompletedOnboarding": True, "projects": {ROOM_PROJECT: {"hasTrustDialogAccepted": True}}}))
+            {"hasCompletedOnboarding": True, "projects": {room.inside_work: {"hasTrustDialogAccepted": True}}}))
 
-    def room_env(self) -> dict[str, str]:
+    def room_env(self, room) -> dict[str, str]:
         # A custom base URL turns tool search off; keep probe and run in the same form.
-        return {"CLAUDE_CONFIG_DIR": self.room_config, "ENABLE_TOOL_SEARCH": "true"}
+        return {"CLAUDE_CONFIG_DIR": room.inside_config(self), "ENABLE_TOOL_SEARCH": "true"}
 
     def binds(self, real: Real) -> tuple[list[str], str]:
         """bwrap arguments that make the CLI available, and the command inside the room."""
@@ -144,7 +145,7 @@ class Claude:
         return real.config / "CLAUDE.md"
 
     # unattended runs (Cliff, Swap): args after the room flags; `hook` archives /work after every tool call
-    def run_args(self, prompt: str, extra: list[str], hook: str | None = None) -> list[str]:
+    def run_args(self, prompt: str, extra: list[str], hook: str | None = None, room=None) -> list[str]:
         args = ["--dangerously-skip-permissions"]
         if hook:
             args += ["--settings", json.dumps({"hooks": {"PostToolUse": [
@@ -163,8 +164,9 @@ class Claude:
         sessions = sorted((home / ".claude-config" / "projects").rglob("*.jsonl"), key=lambda p: p.stat().st_size)
         return sessions[-1] if sessions else None
 
-    def place_session(self, home: Path, session: str, lines: list[str]):
-        target = home / ".claude-config" / "projects" / "-work"
+    def place_session(self, room, session: str, lines: list[str]):
+        # Claude Code keeps a project's sessions in a directory named after its path
+        target = room.config(self) / "projects" / re.sub(r"[^A-Za-z0-9]", "-", room.inside_work)
         target.mkdir(parents=True, exist_ok=True)
         (target / f"{session}.jsonl").write_text("\n".join(lines) + "\n")
 
@@ -222,7 +224,7 @@ class Claude:
 class Codex:
     name = "codex"
     credentials = "auth.json"
-    room_config = f"{ROOM_HOME}/.codex"
+    config_dir = ".codex"
     # Account plugins can restore personal skills after login (CONCEPT.md, adapters).
     room_flags = ["--disable", "remote_plugin"]
     yolo = ["--dangerously-bypass-approvals-and-sandbox"]
@@ -245,13 +247,13 @@ class Codex:
         except (OSError, ValueError, KeyError, IndexError, TypeError):
             raise _lifetime_error(path) from None
 
-    def seed(self, real: Real, config: Path):
+    def seed(self, real: Real, config: Path, room):
         shutil.copyfile(real.config / self.credentials, config / self.credentials)
         (config / self.credentials).chmod(0o600)
-        (config / "config.toml").write_text(f'[projects."{ROOM_PROJECT}"]\ntrust_level = "trusted"\n')
+        (config / "config.toml").write_text(f'[projects."{room.inside_work}"]\ntrust_level = "trusted"\n')
 
-    def room_env(self) -> dict[str, str]:
-        return {"CODEX_HOME": self.room_config}
+    def room_env(self, room) -> dict[str, str]:
+        return {"CODEX_HOME": room.inside_config(self)}
 
     def binds(self, real: Real) -> tuple[list[str], str]:
         # the npm package and node live under /usr, which every room mounts read-only
@@ -285,7 +287,7 @@ class Codex:
     def instructions(self, real: Real) -> Path:
         return real.config / "AGENTS.md"
 
-    def run_args(self, prompt: str, extra: list[str], hook: str | None = None) -> list[str]:
+    def run_args(self, prompt: str, extra: list[str], hook: str | None = None, room=None) -> list[str]:
         args = ["--dangerously-bypass-approvals-and-sandbox", "exec", "--skip-git-repo-check", "--json"]
         if hook:
             args.append("--dangerously-bypass-hook-trust")  # exec runs no untrusted hook otherwise
@@ -303,9 +305,9 @@ class Codex:
         rollouts = sorted((home / ".codex" / "sessions").rglob("rollout-*.jsonl"))
         return rollouts[-1] if rollouts else None
 
-    def place_session(self, home: Path, session: str, lines: list[str]):
+    def place_session(self, room, session: str, lines: list[str]):
         # Codex finds a session by the id at the end of its rollout's file name
-        target = home / ".codex" / "sessions" / "2026" / "01" / "01"
+        target = room.config(self) / "sessions" / "2026" / "01" / "01"
         target.mkdir(parents=True, exist_ok=True)
         (target / f"rollout-2026-01-01T00-00-00-{session}.jsonl").write_text("\n".join(lines) + "\n")
 
@@ -353,7 +355,7 @@ class Codex:
 class Pi:
     name = "pi"
     credentials = "auth.json"
-    room_config = f"{ROOM_HOME}/.pi/agent"
+    config_dir = ".pi/agent"
     # A fresh agent directory in a room is clean on its own and keeps the project's
     # AGENTS.md; --no-context-files would drop it (experiments/dirty-twin-pi).
     room_flags: list[str] = []
@@ -386,7 +388,7 @@ class Pi:
             return float("inf")
         return entry["expires"] / 1000 - time.time()
 
-    def seed(self, real: Real, config: Path):
+    def seed(self, real: Real, config: Path, room):
         # the login, the providers (with their keys) and the default model; nothing else of the setup
         for name in (self.credentials, "models.json"):
             if (real.config / name).exists():
@@ -396,8 +398,8 @@ class Pi:
         (config / "settings.json").write_text(json.dumps(
             {k: settings[k] for k in ("defaultProvider", "defaultModel") if k in settings}))
 
-    def room_env(self) -> dict[str, str]:
-        return {"PI_CODING_AGENT_DIR": self.room_config}
+    def room_env(self, room) -> dict[str, str]:
+        return {"PI_CODING_AGENT_DIR": room.inside_config(self)}
 
     def binds(self, real: Real) -> tuple[list[str], str]:
         # the npm package lives in the home directory, which the room does not have: mount it
@@ -454,8 +456,8 @@ class Pi:
         return None if not entry else "subscription" if entry.get("type") == "oauth" else "api key"
 
     # unattended runs (Cliff, Swap)
-    def run_args(self, prompt: str, extra: list[str], hook: str | None = None) -> list[str]:
-        loaded = ["-e", f"{self.room_config}/{self.snapshot}"] if hook else []
+    def run_args(self, prompt: str, extra: list[str], hook: str | None = None, room=None) -> list[str]:
+        loaded = ["-e", f"{room.inside_config(self)}/{self.snapshot}"] if hook else []
         return loaded + extra + ["-p", "--mode", "json", prompt]
 
     def prepare_hook(self, config: Path, hook: str):
@@ -476,8 +478,9 @@ export default function (pi: any) {{
         sessions = sorted((home / ".pi" / "agent" / "sessions").rglob("*.jsonl"), key=lambda p: p.stat().st_mtime)
         return sessions[-1] if sessions else None
 
-    def place_session(self, home: Path, session: str, lines: list[str]):
-        target = home / ".pi" / "agent" / "sessions" / "--work--"
+    def place_session(self, room, session: str, lines: list[str]):
+        # Pi keeps a working directory's sessions in --<path with dashes>--
+        target = room.config(self) / "sessions" / f"--{room.inside_work.strip('/').replace('/', '-')}--"
         target.mkdir(parents=True, exist_ok=True)
         (target / f"2026-01-01T00-00-00-000Z_{session}.jsonl").write_text("\n".join(lines) + "\n")
 
@@ -520,7 +523,7 @@ class Antigravity:
 
     name = "agy"
     credentials = "antigravity-oauth-token"
-    room_config = f"{ROOM_HOME}/.gemini/antigravity-cli"
+    config_dir = ".gemini/antigravity-cli"
     room_flags: list[str] = []
     yolo = ["--dangerously-skip-permissions"]
     # agy keeps a conversation as protobuf; a cut after a step cannot be placed, so Cliff and
@@ -538,7 +541,7 @@ class Antigravity:
             raise _lifetime_error(real.config / self.credentials)
         return float("inf")
 
-    def seed(self, real: Real, config: Path):
+    def seed(self, real: Real, config: Path, room):
         # the login and the chosen model; nothing else of the setup
         shutil.copyfile(real.config / self.credentials, config / self.credentials)
         (config / self.credentials).chmod(0o600)
@@ -548,7 +551,7 @@ class Antigravity:
             model = None
         (config / "settings.json").write_text(json.dumps({"model": model} if model else {}))
 
-    def room_env(self) -> dict[str, str]:
+    def room_env(self, room) -> dict[str, str]:
         return {}  # agy finds its setup under HOME
 
     def binds(self, real: Real) -> tuple[list[str], str]:
@@ -611,7 +614,7 @@ class Antigravity:
         return None if data is None else "subscription" if data.get("auth_method") == "consumer" else "api key"
 
     # unattended runs (Cliff, Swap)
-    def run_args(self, prompt: str, extra: list[str], hook: str | None = None) -> list[str]:
+    def run_args(self, prompt: str, extra: list[str], hook: str | None = None, room=None) -> list[str]:
         return ["--dangerously-skip-permissions", *extra, "-p", prompt, "--output-format", "stream-json"]
 
     def prepare_hook(self, config: Path, hook: str):

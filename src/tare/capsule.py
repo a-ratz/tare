@@ -18,17 +18,21 @@ from pathlib import Path
 
 from . import trail as trails
 from . import usage as usages
-from .room import ROOM_HOME, bwrap, room_home
+from .room import Room, backend
 
-RUN_MOUNT = "/tare-run"
-HOOK_COMMAND = f"/bin/sh {RUN_MOUNT}/hook.sh"
-# Archives /work after every tool call, numbered, named by the call's tool_use_id.
-# The hook input is JSON on stdin; its top-level tool_use_id is the first one in it.
-HOOK = """#!/bin/sh
+
+def hook_script(room: Room) -> str:
+    """Archives the workspace after every tool call, numbered, named by the call's tool_use_id.
+    The hook input is JSON on stdin; its top-level tool_use_id is the first one in it."""
+    return f"""#!/bin/sh
 id=$(grep -o '"tool_use_id": *"[^"]*"' | head -1 | sed 's/.*"\\([^"]*\\)"$/\\1/')
-n=$(ls /tare-run/capsules | wc -l)
-tar -C /work -cf "/tare-run/capsules/$(printf %04d "$n")-$id.tar" .
+n=$(ls {room.inside_run}/capsules | wc -l)
+tar -C {room.inside_work} -cf "{room.inside_run}/capsules/$(printf %04d "$n")-$id.tar" .
 """
+
+
+def hook_command(room: Room) -> str:
+    return f"/bin/sh {room.inside_run}/hook.sh"
 CONTINUE = "Continue."
 
 
@@ -72,27 +76,23 @@ def unpack(source: Path, directory: Path):
         tar.extractall(directory, filter="tar")
 
 
-def _config(agent, home: Path) -> Path:
-    return home / Path(agent.room_config).relative_to(ROOM_HOME)
-
-
 def record(agent, real, project: Path, out: Path, prompt: str, args: list[str],
            env: dict[str, str] | None = None) -> int:
     """The original run, in a room, on a copy of the project, with a capsule per tool call.
     Returns the agent's exit code."""
     store = out / "store"
     (store / "capsules").mkdir(parents=True)
-    (store / "hook.sh").write_text(HOOK)
     work = out / "original" / "work"
     shutil.copytree(project, work, symlinks=True)
     archive(work, store / "capsules" / "0000-start.tar")
     (out / "original" / "task.txt").write_text(prompt)
-    with room_home(agent, real) as home:
-        agent.prepare_hook(_config(agent, home), HOOK_COMMAND)
-        command = [agent.name, *agent.room_flags, *agent.run_args(prompt, args, hook=HOOK_COMMAND)]
-        code = _stream(bwrap(agent, real, home, work, command, env, ["--bind", str(store), RUN_MOUNT]),
-                       out / "original", None)
-        session = agent.session_file(home)
+    rooms = backend()
+    with rooms.open(agent, real, work, run=store) as room:
+        (store / "hook.sh").write_text(hook_script(room))
+        agent.prepare_hook(room.config(agent), hook_command(room))
+        command = [agent.name, *agent.room_flags, *agent.run_args(prompt, args, hook=hook_command(room), room=room)]
+        code = _stream(rooms.argv(room, agent, real, command, env), out / "original", None)
+        session = agent.session_file(room.home)
         if session:
             shutil.copyfile(session, out / "original" / "session.jsonl")
     return code
@@ -145,9 +145,9 @@ def session_id(out: Path) -> str:
     raise ValueError("no session id in the session file")
 
 
-def _run_in(agent, real, home: Path, work: Path, command: list[str], env, timeout: float, log_dir: Path) -> str:
+def _run_in(room: Room, agent, real, command: list[str], env, timeout: float, log_dir: Path) -> str:
     try:
-        return f"agent exit {_stream(bwrap(agent, real, home, work, command, env), log_dir, timeout)}"
+        return f"agent exit {_stream(backend().argv(room, agent, real, command, env), log_dir, timeout)}"
     except subprocess.TimeoutExpired:
         return f"agent stopped after {int(timeout)} s"
 
@@ -189,14 +189,14 @@ def run_tail(agent, real, out: Path, capsule: Capsule, prompt: str, args: list[s
     work = tail_dir / "work"
     work.mkdir(parents=True)
     unpack(capsule.archive, work)
-    with room_home(agent, real) as home:
+    with backend().open(agent, real, work) as room:
         if capsule.step == 0:
-            command = [agent.name, *agent.room_flags, *agent.run_args(prompt, args)]
+            command = [agent.name, *agent.room_flags, *agent.run_args(prompt, args, room=room)]
         else:
             sid = session_id(out)
-            agent.place_session(home, sid, session_lines(out)[:capsule.cut])
+            agent.place_session(room, sid, session_lines(out)[:capsule.cut])
             command = [agent.name, *agent.room_flags, *agent.resume_args(sid, CONTINUE, args)]
-        ran = _run_in(agent, real, home, work, command, env, timeout, tail_dir)
+        ran = _run_in(room, agent, real, command, env, timeout, tail_dir)
     return _finish(tail_dir, work, capsule.step, ran, check, keep=keep, usage=read_usage(agent, tail_dir))
 
 
@@ -217,8 +217,8 @@ def run_handoff(agent, real, tail_dir: Path, capsule: Capsule, events: list[trai
     unpack(capsule.archive, work)
     handoff = trails.render(task, events[:capsule.trail_cut], workspace_only)
     (tail_dir / "handoff.txt").write_text(handoff)
-    with room_home(agent, real) as home:
-        ran = _run_in(agent, real, home, work, [agent.name, *agent.room_flags, *agent.run_args(handoff, args)],
+    with backend().open(agent, real, work) as room:
+        ran = _run_in(room, agent, real, [agent.name, *agent.room_flags, *agent.run_args(handoff, args, room=room)],
                       env, timeout, tail_dir)
     return _finish(tail_dir, work, capsule.step, ran, check, {"agent_name": agent.name},
                    usage=read_usage(agent, tail_dir))

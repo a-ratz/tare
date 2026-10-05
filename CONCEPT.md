@@ -83,7 +83,13 @@ your instructions, memories, plugins, hooks and skills. That is not enough.
 
 ### Room
 
-A room is a bubblewrap sandbox for one agent run: an empty `/home` with the room's own home
+A backend builds the room, and every path the agent sees comes from the room it built: its
+home, the project and a run's store. On Linux and WSL the backend is bubblewrap, which mounts
+them at fixed paths. A backend that cannot mount, such as Seatbelt on macOS, uses the host paths
+instead, and the adapters follow (the trust entry, the session directories, the config
+variables).
+
+A bubblewrap room is a sandbox for one agent run: an empty `/home` with the room's own home
 directory at `/home/tare`, a fresh copy of the login, the agent's executable, the project at
 `/work`, and the environment allowlist. `tare claude` and the other agent commands mount your
 project directly, so the agent changes your real files. Calibrate, Swap and Cliff give every run

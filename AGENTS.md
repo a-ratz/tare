@@ -24,7 +24,7 @@ The README explains these words for users. Contributors also meet these terms in
 |---|---|
 | `src/tare/cli.py` | the `tare` command |
 | `src/tare/agents.py` | what tare knows about each agent: its setup, login, probe arguments, request format, markers, unattended runs, saved session and trail |
-| `src/tare/room.py` | the room: bwrap arguments, a fresh home with a login copy, the environment allowlist |
+| `src/tare/room.py` | the room: a `Room` with the host paths and the paths the agent sees, the backend that builds it (bubblewrap on Linux), a fresh home with a login copy, the environment allowlist |
 | `src/tare/probe.py` | the probe: context, control, reach, scoring and the printed reading |
 | `src/tare/capsule.py` | capsules: archive the workspace after every tool call, continue one from the agent's own saved session or by handoff, run the check |
 | `src/tare/cliff.py` | Cliff: baseline, adaptive search with Wilson intervals, the report |

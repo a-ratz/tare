@@ -72,9 +72,9 @@ def judge(work: Path, rubric: Path, page: str = "index.html", agent_name: str = 
         # the source the agent wrote, without anything that names an agent or its setup
         shutil.copytree(work, bench / "source", ignore=shutil.ignore_patterns(
             ".git", ".claude", ".codex", ".pi", "AGENTS.md", "CLAUDE.md", "node_modules"))
-        with rooms.room_home(agent, real) as home:
-            argv = rooms.bwrap(agent, real, home, bench, [agent.name, *agent.room_flags,
-                                                         *agent.run_args(PROMPT, agent_args or [])])
+        with rooms.backend().open(agent, real, bench) as room:
+            argv = rooms.backend().argv(room, agent, real, [agent.name, *agent.room_flags,
+                                                            *agent.run_args(PROMPT, agent_args or [], room=room)])
             proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
     _log_usage(agent, proc.stdout)
     return _score(proc.stdout)

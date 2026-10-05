@@ -110,3 +110,22 @@ def test_claude_reads_the_account_email(tmp_path, monkeypatch):
     assert Claude().email(real) == "me@example.org"
     (tmp_path / ".claude.json").unlink()
     assert Claude().email(real) is None
+
+
+def test_adapters_take_every_path_from_the_room_so_a_backend_without_mounts_can_use_host_paths(tmp_path):
+    from tare.agents import Pi
+    from tare.room import Room, room_env
+    room = Room(tmp_path / "home", tmp_path / "work", None, "/private/tmp/r1/home", "/private/tmp/r1/work", "/private/tmp/r1/run")
+    assert room_env(Claude(), room)["CLAUDE_CONFIG_DIR"] == "/private/tmp/r1/home/.claude-config"
+    assert room_env(Codex(), room)["CODEX_HOME"] == "/private/tmp/r1/home/.codex"
+    assert room_env(Pi(), room)["HOME"] == "/private/tmp/r1/home"
+    Claude().place_session(room, "s1", ["{}"])
+    assert (tmp_path / "home" / ".claude-config" / "projects" / "-private-tmp-r1-work" / "s1.jsonl").exists()
+    Pi().place_session(room, "s2", ["{}"])
+    assert (tmp_path / "home" / ".pi" / "agent" / "sessions" / "--private-tmp-r1-work--").is_dir()
+    config = tmp_path / "codex-config"
+    config.mkdir()
+    Codex().seed(codex_real(tmp_path), config, room)
+    assert '[projects."/private/tmp/r1/work"]' in (config / "config.toml").read_text()
+    assert "-e" in Pi().run_args("t", [], hook="h", room=room) and \
+        "/private/tmp/r1/home/.pi/agent/tare-snapshot.ts" in Pi().run_args("t", [], hook="h", room=room)
