@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import capsule as caps
+from . import usage as usages
 from .journal import Journal
 
 Z = 1.96  # 95 % intervals
@@ -175,7 +176,7 @@ def report(s: Search, steps: list, budget: int) -> list[str]:
 
 
 def _write(out: Path, lines: list[str], journal: Journal) -> str:
-    text = "\n".join(lines) + "\n"
+    text = "\n".join(lines + usages.report(out)) + "\n"
     (out / "report.txt").write_text(text)
     journal("report", text=text)
     journal("phase", phase="done")

@@ -14,6 +14,7 @@ from importlib import resources
 from pathlib import Path
 
 from . import journal as journals
+from . import usage as usages
 from .agents import AGENTS
 from .cliff import wilson
 from .swap import Cut
@@ -89,6 +90,7 @@ def state(out: Path) -> dict:
         s["cells"] = _swap_cells(tails.values(), s["plan"])
     elif s["kind"] == "calibrate":
         s["rates"] = _rates(tails.values(), s["sides"])
+    s["usage"] = usages.of_run(events)
     return s
 
 

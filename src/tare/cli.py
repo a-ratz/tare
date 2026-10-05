@@ -11,6 +11,7 @@
   tare rerun DIR [--out DIR]     repeat a run from its recipe
 """
 import argparse
+import json
 import shlex
 import threading
 import signal
@@ -20,6 +21,7 @@ import time
 from pathlib import Path
 
 from . import dashboard, recipe
+from . import usage as usages
 from .agents import AGENTS
 from . import calibrate as calibration
 from .cliff import cliff
@@ -273,6 +275,10 @@ def _rerun(argv: list[str]) -> int:
             pass
     for note in recipe.drift(r, reals):
         print(f"tare rerun: note: {note}", file=sys.stderr)
+    spent = args.dir / "usage.json"
+    if spent.exists():
+        before = usages.Usage.from_dict(json.loads(spent.read_text()).get("total"))
+        print(f"tare rerun: the run being repeated used {usages.describe(before)}", file=sys.stderr)
     command = recipe.with_out(r["argv"], args.out) if args.out else r["argv"]
     print(f"tare rerun: tare {shlex.join(command)}", file=sys.stderr)
     return main(command)

@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import capsule as caps
+from . import usage as usages
 from .cliff import wilson
 from .journal import Journal
 
@@ -127,7 +128,8 @@ def swap(a: Side, b: Side, project: Path, prompt: str, check: str, out: Path, *,
         for (kind, i, room, agent, _, _), passed in pool.map(run, jobs_list):
             (plan[i].native[room] if kind == "native" else plan[i].cells[(room, agent)]).append(passed)
 
-    text = "\n".join(report(sides, plan, prompt, check, project, len(jobs_list), workspace_only)) + "\n"
+    text = "\n".join(report(sides, plan, prompt, check, project, len(jobs_list), workspace_only)
+                     + usages.report(out)) + "\n"
     (out / "report.txt").write_text(text)
     journal("report", text=text)
     journal("phase", phase="done")

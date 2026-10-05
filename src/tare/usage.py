@@ -5,6 +5,7 @@ input token, cached ones included, and `cached` is the part read from a prompt c
 is what the agent itself reports, or None when it reports none. Sums keep count of the runs
 whose cost is unknown, so a total never looks complete when it is not.
 """
+import json
 from dataclasses import asdict, dataclass
 
 
@@ -78,3 +79,41 @@ def describe(u: "Usage | None") -> str:
 
 def money(usd: float) -> str:
     return f"${usd:.3f}" if usd < 10 else f"${usd:.2f}"
+
+
+def of_run(events: list[dict]) -> dict:
+    """The usage of a run, from its journal: per side (original and tails), the check, and the total."""
+    labels: dict[str, str] = {}
+    owner: dict[str, str] = {}  # tail id -> side key, from the event that started it
+    sides: dict[str, list] = {}
+    check: list = []
+    for e in events:
+        kind = e.get("event")
+        if kind == "start":
+            labels = {k: " ".join([v.get("agent", "?"), *v.get("args", [])]) for k, v in (e.get("sides") or {}).items()}
+        elif kind == "tail" and e.get("status") == "running":
+            owner[e["id"]] = e.get("agent") or e.get("side") or "?"
+        elif kind in ("original", "tail"):
+            key = e.get("side") if kind == "original" else owner.get(e.get("id"), "?")
+            sides.setdefault(key, []).append(e.get("usage"))
+            check.append(e.get("check_usage"))
+    per_side = {k: total(v) for k, v in sides.items()}
+    checks = total(check)
+    everything = total([*per_side.values(), checks])
+    return {"sides": {k: {"label": labels.get(k, k), "usage": u.to_dict() if u else None} for k, u in per_side.items()},
+            "check": checks.to_dict() if checks else None, "total": everything.to_dict() if everything else None}
+
+
+def report(out) -> list[str]:
+    """The usage lines that end a report. Also writes usage.json into the run directory."""
+    from . import journal as journals
+    summary = of_run(journals.read(out))
+    (out / "usage.json").write_text(json.dumps(summary, indent=2) + "\n")
+    if summary["total"] is None:
+        return []
+    rows = [f"{k} {s['label']}: {describe(Usage.from_dict(s['usage']))}" for k, s in sorted(summary["sides"].items())
+            if s["usage"]]
+    if summary["check"]:
+        rows.append(f"check (the judge): {describe(Usage.from_dict(summary['check']))}")
+    rows.append(f"total: {describe(Usage.from_dict(summary['total']))}")
+    return ["", f"  usage     {rows[0]}", *[f"            {r}" for r in rows[1:]]]
