@@ -275,7 +275,7 @@ All measurements ran on WSL2 on 2026-10-04 and 2026-10-05.
   long.
 - **Cost:** every tail is a full agent run, so a Cliff search or a Swap costs as much as its tails.
 - **macOS:** a room built on Seatbelt (`sandbox-exec`), which Claude Code and Codex already use
-  for their own sandboxes. Not built.
+  for their own sandboxes. In progress (epic #85), not in a release yet.
 - **Other probes, not built:** weighing the first request's input tokens before and after adding
   junk to the real setup, and file tripwires that report which secret files a run opened.
 - **Docker:** could contain files where bubblewrap is missing, but does nothing against context

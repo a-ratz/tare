@@ -11,7 +11,7 @@
 <div align="center">
 
 [![License: MIT][license-shield]][license-url]
-[![Version 0.1.0][version-shield]][version-url]
+[![PyPI][version-shield]][version-url]
 [![Python 3.11+][python-shield]][python-url]
 [![Linux | WSL][platform-shield]][platform-url]
 [![Claude Code | Codex | Pi | Antigravity][agent-shield]][agent-url]
@@ -99,7 +99,7 @@ something. tare does the same for an agent before you measure it.
 | Use tare when | Look elsewhere when |
 |---|---|
 | you compare agent runs with and without a skill, plugin or prompt | you need protection from a hostile agent, because the room has network access and a working login |
-| you benchmark agents on your own machine | you are on macOS (not supported) |
+| you benchmark agents on your own machine | you are on macOS (a room is in progress, not released yet) |
 | you want a fresh-machine run without a fresh machine | you log in with an API key only (untested) |
 | an agent failed a task and you want to know which step lost it | you want a single run explained without running the agent again, because Cliff runs it many times |
 
@@ -111,25 +111,27 @@ something. tare does the same for an agent before you measure it.
 | [bubblewrap](https://github.com/containers/bubblewrap) | `sudo apt install bubblewrap` |
 | at least one of the four agents | on `PATH` and logged in. Codex must resolve to a path under `/usr` for now, because tare mounts Codex's npm package and Node.js from there. If `which codex` points elsewhere, for example into nvm, install it with the system's npm (`sudo npm install -g @openai/codex`) and put `/usr/bin` first on `PATH`. The other agents can live anywhere on `PATH`. |
 | Google Chrome, only for `tare judge` | `google-chrome` on `PATH`, installed under `/usr` or `/opt`. `tare judge` scores web pages and takes their screenshots with it. |
-| [uv](https://docs.astral.sh/uv/) | Python 3.11 or newer |
+| [uv](https://docs.astral.sh/uv/) or [pipx](https://pipx.pypa.io/) | Python 3.11 or newer |
 
-Clone the repository, then run tare from the checkout with `uv run tare ...`, or put `tare` on
-your `PATH` with `uv tool install .`:
+Install tare from PyPI. The package is `tare-cli`, the command is `tare`:
+
+```bash
+uv tool install tare-cli   # or: pipx install tare-cli
+```
+
+To work on tare itself, clone the repository and run it from the checkout with `uv run tare ...`:
 
 ```bash
 git clone https://github.com/a-ratz/tare.git && cd tare
-uv tool install .   # optional
+uv run tare --version
 ```
-
-The examples after Quick start write `tare` for short. Without `uv tool install .`, write
-`uv run --project <checkout> tare` instead.
 
 ## Quick start
 
-Run this in the checkout:
+With tare installed:
 
 ```bash
-uv run tare probe claude
+tare probe claude
 ```
 
 ```text
@@ -163,8 +165,8 @@ servers start too. The Antigravity CLI writes into its config directory on every
 lets its dirty twin write into a temporary overlay that is discarded after the run. Your
 `~/.gemini` stays unchanged.
 
-`uv run tare claude` then starts Claude Code in that room. `uv run tare codex`, `uv run tare pi`
-and `uv run tare agy` do the same for the other agents.
+`tare claude` then starts Claude Code in that room. `tare codex`, `tare pi` and `tare agy` do
+the same for the other agents.
 
 ## Usage
 
@@ -450,7 +452,8 @@ room looks for your files and for secret environment variables.
 
 ## Roadmap
 
-macOS is not supported. A room for macOS is an idea, not yet planned.
+A room for macOS, built on Seatbelt, is in progress ([epic #85](https://github.com/a-ratz/tare/issues/85)).
+Until it is released, tare runs on Linux and WSL.
 
 ## Contributing
 
@@ -468,7 +471,7 @@ Crafted with [Readme Craft](https://github.com/motiful/readme-craft)
 
 [license-shield]: https://img.shields.io/badge/license-MIT-blue.svg
 [license-url]: https://github.com/a-ratz/tare/blob/main/LICENSE
-[version-shield]: https://img.shields.io/badge/version-0.1.0-informational.svg
+[version-shield]: https://img.shields.io/pypi/v/tare-cli.svg
 [version-url]: https://github.com/a-ratz/tare/blob/main/pyproject.toml
 [python-shield]: https://img.shields.io/badge/python-3.11%2B-3776AB.svg
 [python-url]: https://www.python.org/
