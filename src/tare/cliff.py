@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import capsule as caps
+from .journal import Journal
 
 Z = 1.96  # 95 % intervals
 
@@ -97,27 +98,41 @@ def search(probe, last: int, tails: int, budget: int) -> Search:
 
 
 def cliff(agent, real, project: Path, prompt: str, check: str, out: Path, *, tails: int = 3, budget: int = 30,
-          jobs: int = 3, claude_args: list[str] | None = None, env: dict[str, str] | None = None) -> str:
+          jobs: int = 3, claude_args: list[str] | None = None, env: dict[str, str] | None = None,
+          journal: Journal | None = None) -> str:
     """The whole move: original run, capsules, baseline, search, report. Returns the report."""
     claude_args = claude_args or []
+    journal = journal or Journal(None)
+    journal("start", kind="cliff", task=prompt, check=check, project=str(project), tails=tails, budget=budget,
+            sides={"a": {"agent": agent.name, "args": claude_args, "dir": "."}})
+    journal("phase", phase="recording")
     caps.record(agent, real, project, out, prompt, claude_args, env)
     passed, detail = caps.run_check(check, out / "original" / "work")
     header = [f"tare cliff · {agent.name} · {project}", f"  task      {prompt}", f"  check     {check}"]
-    if passed:
-        return _write(out, header + [f"  original  passed ({detail}): there is no cliff to find"])
     steps = caps.capsules(out, agent)
+    journal("original", side="a", passed=passed, detail=detail, steps=[s.tool for s in steps])
+    if passed:
+        return _write(out, header + [f"  original  passed ({detail}): there is no cliff to find"], journal)
     header.append(f"  original  failed ({detail}) after {len(steps) - 1} steps")
     if len(steps) == 1:
-        return _write(out, header + ["  The run made no tool calls; there is nothing to resume."])
+        return _write(out, header + ["  The run made no tool calls; there is nothing to resume."], journal)
+    journal("phase", phase="tails")
 
     counts: dict[int, int] = {}
     events = agent.trail(caps.session_lines(out)).events
 
     def tail(step: int, i: int) -> caps.Tail:
-        if step == 0 or agent.native_resume:
-            return caps.run_tail(agent, real, out, steps[step], prompt, claude_args, check, i, env)
-        return caps.run_handoff(agent, real, out / "tails" / f"{step:04d}-{i}", steps[step], events, prompt,
-                                claude_args, check, env)
+        native = step == 0 or agent.native_resume
+        name = f"{step:04d}-{i}"
+        journal("tail", id=name, status="running", step=step, room="a", agent="a", agent_name=agent.name,
+                kind="native" if native else "handoff", dir=f"tails/{name}")
+        if native:
+            result = caps.run_tail(agent, real, out, steps[step], prompt, claude_args, check, i, env)
+        else:
+            result = caps.run_handoff(agent, real, out / "tails" / name, steps[step], events, prompt,
+                                      claude_args, check, env)
+        journal("tail", id=name, status="passed" if result.passed else "failed", detail=result.detail)
+        return result
 
     def probe(step: int, n: int) -> list[bool]:
         start = counts.get(step, 0)
@@ -126,7 +141,7 @@ def cliff(agent, real, project: Path, prompt: str, check: str, out: Path, *, tai
             return [t.passed for t in pool.map(lambda i: tail(step, i), range(start, start + n))]
 
     s = search(probe, len(steps) - 1, tails, budget)
-    return _write(out, header + report(s, steps, budget))
+    return _write(out, header + report(s, steps, budget), journal)
 
 
 def report(s: Search, steps: list, budget: int) -> list[str]:
@@ -149,7 +164,9 @@ def report(s: Search, steps: list, budget: int) -> list[str]:
     return lines
 
 
-def _write(out: Path, lines: list[str]) -> str:
+def _write(out: Path, lines: list[str], journal: Journal) -> str:
     text = "\n".join(lines) + "\n"
     (out / "report.txt").write_text(text)
+    journal("report", text=text)
+    journal("phase", phase="done")
     return text

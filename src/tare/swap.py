@@ -16,6 +16,7 @@ from pathlib import Path
 
 from . import capsule as caps
 from .cliff import wilson
+from .journal import Journal
 
 
 @dataclass
@@ -73,8 +74,13 @@ class Cut:
 
 
 def swap(a: Side, b: Side, project: Path, prompt: str, check: str, out: Path, *, cuts: list[float],
-         tails: int = 3, jobs: int = 3, workspace_only: bool = False, env: dict[str, str] | None = None) -> str:
+         tails: int = 3, jobs: int = 3, workspace_only: bool = False, env: dict[str, str] | None = None,
+         journal: Journal | None = None) -> str:
     sides = {"a": a, "b": b}
+    journal = journal or Journal(None)
+    journal("start", kind="swap", task=prompt, check=check, project=str(project), tails=tails, cuts=cuts,
+            sides={s.key: {"agent": s.agent.name, "args": s.args, "dir": s.out.name} for s in (a, b)})
+    journal("phase", phase="recording")
     with ThreadPoolExecutor(max_workers=2) as pool:
         list(pool.map(lambda s: caps.record(s.agent, s.real, project, s.out, prompt, s.args, env), (a, b)))
     for side in (a, b):
@@ -82,8 +88,11 @@ def swap(a: Side, b: Side, project: Path, prompt: str, check: str, out: Path, *,
         side.steps = caps.capsules(side.out, side.agent)
         side.events = side.agent.trail(caps.session_lines(side.out)).events
         side.original = f"{'passed' if passed else 'failed'} ({detail}) after {len(side.steps) - 1} steps"
+        journal("original", side=side.key, passed=passed, detail=detail, steps=[s.tool for s in side.steps])
 
     plan = [Cut(f, {k: round(f * (len(s.steps) - 1)) for k, s in sides.items()}) for f in cuts]
+    journal("plan", cuts=[{"fraction": c.fraction, "steps": c.steps} for c in plan])
+    journal("phase", phase="tails")
     jobs_list = []
     for i, cut in enumerate(plan):
         for room in "ab":
@@ -99,7 +108,10 @@ def swap(a: Side, b: Side, project: Path, prompt: str, check: str, out: Path, *,
 
     def run(job):
         kind, i, room, agent, n, capsule = job
-        tail_dir = out / "swap" / f"cut{i}" / f"{kind}-room-{room}-agent-{agent}-{n}"
+        name = f"cut{i}/{kind}-room-{room}-agent-{agent}-{n}"
+        tail_dir = out / "swap" / name
+        journal("tail", id=name, status="running", cut=i, room=room, agent=agent, kind=kind,
+                agent_name=sides[agent].agent.name, dir=f"swap/{name}")
         if kind == "native":
             s = sides[room]
             tail = caps.run_tail(s.agent, s.real, s.out, capsule, prompt, s.args, check, n, env, tail_dir=tail_dir)
@@ -107,6 +119,7 @@ def swap(a: Side, b: Side, project: Path, prompt: str, check: str, out: Path, *,
             s = sides[agent]
             tail = caps.run_handoff(s.agent, s.real, tail_dir, capsule, sides[room].events, prompt, s.args, check,
                                     env, workspace_only)
+        journal("tail", id=name, status="passed" if tail.passed else "failed", detail=tail.detail)
         return job, tail.passed
 
     with ThreadPoolExecutor(max_workers=jobs) as pool:
@@ -115,6 +128,8 @@ def swap(a: Side, b: Side, project: Path, prompt: str, check: str, out: Path, *,
 
     text = "\n".join(report(sides, plan, prompt, check, project, len(jobs_list), workspace_only)) + "\n"
     (out / "report.txt").write_text(text)
+    journal("report", text=text)
+    journal("phase", phase="done")
     return text
 
 

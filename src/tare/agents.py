@@ -145,6 +145,20 @@ class Claude:
     def trail(self, lines: list[str]) -> trails.Trail:
         return trails.claude(lines)
 
+    def activity(self, event: dict) -> str | None:
+        """What one line of the live stream (stream-json) shows, for the dashboard."""
+        if event.get("type") == "result":
+            return "finished"
+        if event.get("type") == "assistant":
+            for block in reversed((event.get("message") or {}).get("content") or []):
+                if block.get("type") == "tool_use":
+                    args = block.get("input", {})
+                    detail = args.get("command") or args.get("file_path") or args.get("pattern") or ""
+                    return f"{block.get('name')}: {str(detail).splitlines()[0][:90] if detail else ''}"
+                if block.get("type") == "text" and block.get("text", "").strip():
+                    return "says: " + block["text"].strip().splitlines()[0][:90]
+        return None
+
     def skill_dirs(self, real: Real) -> list[Path]:
         return [real.config / "skills"]
 
@@ -244,6 +258,19 @@ class Codex:
 
     def trail(self, lines: list[str]) -> trails.Trail:
         return trails.codex(lines)
+
+    def activity(self, event: dict) -> str | None:
+        """What one line of the live stream (--json) shows, for the dashboard."""
+        if event.get("type") == "turn.completed":
+            return "finished"
+        item = event.get("item") or {}
+        if item.get("type") == "command_execution" and item.get("command"):
+            return "runs: " + str(item["command"]).splitlines()[0][:90]
+        if item.get("type") == "agent_message" and item.get("text", "").strip():
+            return "says: " + item["text"].strip().splitlines()[0][:90]
+        if item.get("type") == "file_change":
+            return "edits files"
+        return None
 
     def skill_dirs(self, real: Real) -> list[Path]:
         return [real.config / "skills", real.home / ".agents" / "skills"]
