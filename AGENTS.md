@@ -24,7 +24,7 @@ The README explains these words for users. Contributors also meet these terms in
 |---|---|
 | `src/tare/cli.py` | the `tare` command |
 | `src/tare/agents.py` | what tare knows about each agent: its setup, login, probe arguments, request format, markers, unattended runs, saved session and trail |
-| `src/tare/room.py` | the room: a `Room` with the host paths and the paths the agent sees, the backend that builds it (bubblewrap on Linux), a fresh home with a login copy, the environment allowlist |
+| `src/tare/room.py` | the room: a `Room` with the host paths and the paths the agent sees, the backend that builds it (bubblewrap on Linux, Seatbelt on macOS), a fresh home with a login copy, the environment allowlist |
 | `src/tare/probe.py` | the probe: context, control, reach, scoring and the printed reading |
 | `src/tare/capsule.py` | capsules: archive the workspace after every tool call, continue one from the agent's own saved session or by handoff, run the check |
 | `src/tare/cliff.py` | Cliff: baseline, adaptive search with Wilson intervals, the report |
@@ -127,6 +127,8 @@ test, a fix next door) becomes a new issue or a question, not part of the PR.
 - Python through uv (`uv run`, `uv add`). tare itself has no runtime dependencies.
 - Write like the surrounding code: its naming, its comment density, its idiom.
 - A user-visible change updates README.md and CONCEPT.md in the same PR.
-- Linux and WSL only for now, because the room uses bubblewrap. macOS would need its own room,
-  built on Seatbelt, the macOS sandbox.
+- The room uses bubblewrap on Linux and WSL and Seatbelt on macOS (epic #85, not finished: the
+  probe's macOS markers, Calibrate, Swap, Cliff and the judge still assume Linux). Tests describe
+  Linux unless they say otherwise: `tests/conftest.py` pins the platform and keeps the tests away
+  from the Keychain.
 - Commits use the `AndreRatzenberger` identity. Pushes go through that GitHub account.

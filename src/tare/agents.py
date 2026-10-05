@@ -5,12 +5,17 @@ how the CLI is pointed at the fake endpoint, how the captured request is read, a
 of the user's files mark their context.
 """
 import base64
+import getpass
+import hashlib
 import json
 import os
 import re
 import shutil
+import subprocess
+import sys
 import tempfile
 import time
+import unicodedata
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
@@ -79,6 +84,13 @@ def _one_run(u: Usage) -> Usage:
     return u
 
 
+def _security(account: str, service: str) -> str | None:
+    """A password from the user's Keychain, read the way Claude Code reads its own. Never printed."""
+    found = subprocess.run(["security", "find-generic-password", "-a", account, "-w", "-s", service],
+                           capture_output=True, text=True)
+    return found.stdout.rstrip("\n") if found.returncode == 0 else None
+
+
 def _lifetime_error(path: Path) -> TareError:
     return TareError(f"no login at {path}: log in with the agent first")
 
@@ -101,22 +113,56 @@ class Claude:
         # .claude.json moves with CLAUDE_CONFIG_DIR, otherwise it sits in the home directory
         return real.config / ".claude.json" if os.environ.get("CLAUDE_CONFIG_DIR") else real.home / ".claude.json"
 
+    def keychain_item(self) -> tuple[str, str]:
+        """The account and service of the Keychain item Claude Code keeps its login in on macOS. The
+        service has a suffix from the config directory when CLAUDE_CONFIG_DIR is set (Claude Code 2.1.289)."""
+        user = os.environ.get("USER") or getpass.getuser()
+        account = user if re.fullmatch(r"[a-zA-Z0-9._-]+", user) else "claude-code-user"
+        custom = os.environ.get("CLAUDE_CONFIG_DIR")
+        suffix = f"-{hashlib.sha256(unicodedata.normalize('NFC', custom).encode()).hexdigest()[:8]}" if custom else ""
+        return account, f"Claude Code-credentials{suffix}"
+
+    def _keychain(self) -> str | None:
+        """macOS: the login from the Keychain."""
+        return _security(*self.keychain_item()) if sys.platform == "darwin" else None
+
+    def _login(self, real: Real) -> str | None:
+        """The login's JSON: the Keychain item on macOS, else (and as Claude Code's own fallback) the file."""
+        keychain = self._keychain()
+        if keychain is not None:
+            return keychain
+        try:
+            return (real.config / self.credentials).read_text()
+        except OSError:
+            return None
+
     def token_lifetime(self, real: Real) -> float:
         path = real.config / self.credentials
         try:
-            return json.loads(path.read_text())["claudeAiOauth"]["expiresAt"] / 1000 - time.time()
-        except (OSError, ValueError, KeyError, TypeError):
+            return json.loads(self._login(real))["claudeAiOauth"]["expiresAt"] / 1000 - time.time()
+        except (ValueError, KeyError, TypeError):
+            if sys.platform == "darwin":
+                raise TareError(f"no login in the Keychain ({self.keychain_item()[1]}) or at {path}: "
+                                "log in with the agent first") from None
             raise _lifetime_error(path) from None
 
     def seed(self, real: Real, config: Path, room):
-        shutil.copyfile(real.config / self.credentials, config / self.credentials)
+        # Claude Code takes the login from this file when its room has no Keychain item (#86)
+        keychain = self._keychain()
+        if keychain is None:
+            shutil.copyfile(real.config / self.credentials, config / self.credentials)
+        else:
+            (config / self.credentials).write_text(keychain)
         (config / self.credentials).chmod(0o600)
         (config / ".claude.json").write_text(json.dumps(
             {"hasCompletedOnboarding": True, "projects": {room.inside_work: {"hasTrustDialogAccepted": True}}}))
 
     def room_env(self, room) -> dict[str, str]:
         # A custom base URL turns tool search off; keep probe and run in the same form.
-        return {"CLAUDE_CONFIG_DIR": room.inside_config(self), "ENABLE_TOOL_SEARCH": "true"}
+        env = {"CLAUDE_CONFIG_DIR": room.inside_config(self), "ENABLE_TOOL_SEARCH": "true"}
+        if "TMPDIR" in room.env:
+            env["CLAUDE_CODE_TMPDIR"] = room.env["TMPDIR"]  # it ignores TMPDIR and uses /tmp/claude-<uid> (#86)
+        return env
 
     def binds(self, real: Real) -> tuple[list[str], str]:
         """bwrap arguments that make the CLI available, and the command inside the room."""
@@ -217,8 +263,11 @@ class Claude:
 
     def billing(self, real: Real) -> str | None:
         """How the login pays: a subscription makes the reported cost notional."""
-        data = _json(real.config / self.credentials)
-        return None if data is None else "subscription" if "claudeAiOauth" in data else "api key"
+        try:
+            data = json.loads(self._login(real))
+        except (TypeError, ValueError):
+            return None
+        return "subscription" if "claudeAiOauth" in data else "api key"
 
 
 class Codex:
@@ -256,6 +305,10 @@ class Codex:
         return {"CODEX_HOME": room.inside_config(self)}
 
     def binds(self, real: Real) -> tuple[list[str], str]:
+        if sys.platform == "darwin":
+            # the standalone release (bin/codex beside its helpers) lives in ~/.codex/packages (#86)
+            release = real.binary.parents[1]
+            return ["--ro-bind", str(release), "/opt/agent/codex"], f"/opt/agent/codex/{real.binary.relative_to(release)}"
         # the npm package and node live under /usr, which every room mounts read-only
         if not real.binary.is_relative_to("/usr"):
             raise TareError(f"codex resolves to {real.binary}; tare needs a codex installed under /usr for now")
@@ -404,7 +457,11 @@ class Pi:
     def binds(self, real: Real) -> tuple[list[str], str]:
         # the npm package lives in the home directory, which the room does not have: mount it
         package = real.binary.parents[2]  # <package>/dist/bundle/cli.js
-        return ["--ro-bind", str(package), "/opt/agent/pi"], "/opt/agent/pi/dist/bundle/cli.js"
+        binds = ["--ro-bind", str(package), "/opt/agent/pi"]
+        if sys.platform == "darwin":
+            # cli.js starts with `env node`, and node lives wherever the user installed it, often under the home
+            binds += ["--ro-bind", str(_which("node")), "/opt/agent/node"]
+        return binds, "/opt/agent/pi/dist/bundle/cli.js"
 
     # the probe: Pi has no base-URL variable, so the fake is a provider of its own
     def _provider(self, models: Path, fake_url: str):

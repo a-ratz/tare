@@ -96,7 +96,8 @@ def parent_instructions(project: Path) -> list[Path]:
 
 
 def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_out: str,
-          bare: Capture | None = None, project: Path | None = None, inside_config: str | None = None) -> Reading:
+          bare: Capture | None = None, project: Path | None = None, built: Room | None = None) -> Reading:
+    """`built` is the Room the room's capture ran in; its backend adds variables of its own."""
     r = Reading(agent=agent.name, version=room.init.get("claude_code_version", "?"))
 
     # instruction files above the project; an agent that does not read them cannot leak them
@@ -182,7 +183,7 @@ def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_
     # reach: the same script outside (control) and inside the room
     if any(line.startswith("path ") for line in reach_out.splitlines()):
         r.seen.append("reach")
-    allowed = set(room_env(agent)) | SHELL_ENV
+    allowed = set(room_env(agent, built)) | SHELL_ENV
     for line in reach_in.splitlines():
         kind, _, value = line.partition(" ")
         if kind == "path":
@@ -190,7 +191,7 @@ def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_
         elif kind == "env" and value not in allowed:
             r.leaks.append(Finding("env", value, "inherited environment"))
     for name in getattr(agent, "secret_files", [agent.credentials]):
-        config = inside_config or Room(Path(), Path()).inside_config(agent)
+        config = (built or Room(Path(), Path())).inside_config(agent)
         r.declared.append(Finding("credentials", f"{config}/{name}", "copy of the login, needed by the CLI"))
     return r
 
@@ -241,10 +242,9 @@ def probe(agent, real: Real, project: Path) -> Reading:
         reach = ["/bin/sh", "-c", REACH_SCRIPT, "reach", *targets]
         reach_in = subprocess.run(rooms.argv(room, agent, real, reach), capture_output=True, text=True,
                                   timeout=60, check=True).stdout
-        inside_config = room.inside_config(agent)
     reach_out = subprocess.run(reach, capture_output=True, text=True, timeout=60, check=True).stdout
     return settle(run_twin, lambda twin: score(agent, real, twin, inside, reach_in, reach_out, bare=bare,
-                                                project=project, inside_config=inside_config))
+                                                project=project, built=room))
 
 
 def render(reading: Reading, project: Path) -> str:
