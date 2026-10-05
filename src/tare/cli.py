@@ -3,8 +3,10 @@
   tare probe {claude,codex} [--project DIR]
   tare {claude,codex} [--project DIR] [--allow-dirty] [--yolo] [-- AGENT_ARGS...]
   tare cliff claude PROMPT --check CMD [--tails N] [--budget N] [--jobs N] [-- CLAUDE_ARGS...]
+  tare swap PROMPT --check CMD [--a claude] [--b codex] [--a-args ARGS] [--b-args ARGS] [--cuts 0,0.5,1]
 """
 import argparse
+import shlex
 import signal
 import subprocess
 import sys
@@ -13,6 +15,7 @@ from pathlib import Path
 
 from .agents import AGENTS
 from .cliff import cliff
+from .swap import Side, swap
 from .probe import probe, render
 from .room import TareError, bwrap, room_home
 
@@ -60,29 +63,60 @@ def main(argv: list[str] | None = None) -> int:
     k.add_argument("--jobs", type=int, default=3, help="tails run at the same time (default 3)")
     k.add_argument("--out", type=Path, help="run directory (default ~/.local/state/tare/cliff/<project>-<time>)")
     k.add_argument("--allow-dirty", action="store_true", help="run even if the probe reading is not zero")
+    w = sub.add_parser("swap", help="cross two runs' rooms with two agents: was it the room or the model")
+    w.add_argument("prompt", help="the task, as given to both agents")
+    w.add_argument("--check", required=True, help="shell command run in the finished workspace; exit 0 passes")
+    w.add_argument("--a", default="claude", choices=sorted(AGENTS), help="agent a (default claude)")
+    w.add_argument("--b", default="codex", choices=sorted(AGENTS), help="agent b (default codex)")
+    w.add_argument("--a-args", default="", help="arguments for every run of agent a, e.g. '--model sonnet'")
+    w.add_argument("--b-args", default="", help="arguments for every run of agent b, e.g. '-m MODEL'")
+    w.add_argument("--cuts", default="0,0.5,1", help="where to cut each run, as fractions (default 0,0.5,1)")
+    w.add_argument("--tails", type=int, default=3, help="tails per cell (default 3)")
+    w.add_argument("--jobs", type=int, default=3, help="tails run at the same time (default 3)")
+    w.add_argument("--handoff", choices=["trail", "workspace"], default="trail",
+                   help="what a continuing agent is given besides the workspace (default: the rendered trail)")
+    w.add_argument("--project", type=Path, default=Path.cwd())
+    w.add_argument("--out", type=Path, help="run directory (default ~/.local/state/tare/swap/<project>-<time>)")
+    w.add_argument("--allow-dirty", action="store_true", help="run even if a probe reading is not zero")
     args = ap.parse_args(argv)
-    agent = AGENTS[args.agent if args.command in ("probe", "cliff") else args.command]
+    if args.command == "swap":
+        names = [args.a, args.b]
+    else:
+        names = [args.agent if args.command in ("probe", "cliff") else args.command]
     project = args.project.resolve()
     for signum in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(signum, _exit_on)
 
     try:
-        real = agent.discover()
-        reading = probe(agent, real, project)
-        print(render(reading, project), file=sys.stderr)
-        if args.command == "probe":
-            return 0 if reading.zero else 1
-        if not reading.zero:
-            if not args.allow_dirty:
-                print("tare: not starting; fix the leaks or pass --allow-dirty", file=sys.stderr)
-                return 1
-            print("tare: --allow-dirty given, starting in a room that is not zero", file=sys.stderr)
-        if args.command == "cliff":
-            out = args.out or Path.home() / ".local/state/tare/cliff" / f"{project.name}-{time.strftime('%Y%m%d-%H%M%S')}"
+        reals = {}
+        for name in dict.fromkeys(names):
+            agent = AGENTS[name]
+            reals[name] = agent.discover()
+            reading = probe(agent, reals[name], project)
+            print(render(reading, project), file=sys.stderr)
+            if args.command == "probe":
+                return 0 if reading.zero else 1
+            if not reading.zero:
+                if not args.allow_dirty:
+                    print("tare: not starting; fix the leaks or pass --allow-dirty", file=sys.stderr)
+                    return 1
+                print(f"tare: --allow-dirty given, running {name} in a room that is not zero", file=sys.stderr)
+        agent, real = AGENTS[names[0]], reals[names[0]]
+        if args.command in ("cliff", "swap"):
+            out = args.out or (Path.home() / ".local/state/tare" / args.command
+                               / f"{project.name}-{time.strftime('%Y%m%d-%H%M%S')}")
             out.mkdir(parents=True, exist_ok=False)
-            print(f"tare cliff: run directory {out}", file=sys.stderr)
+            print(f"tare {args.command}: run directory {out}", file=sys.stderr)
+        if args.command == "cliff":
             print(cliff(agent, real, project, args.prompt, args.check, out, tails=args.tails, budget=args.budget,
                         jobs=args.jobs, claude_args=passthrough), end="")
+            return 0
+        if args.command == "swap":
+            a = Side("a", AGENTS[args.a], reals[args.a], shlex.split(args.a_args), out / "a")
+            b = Side("b", AGENTS[args.b], reals[args.b], shlex.split(args.b_args), out / "b")
+            cuts = [float(c) for c in args.cuts.split(",")]
+            print(swap(a, b, project, args.prompt, args.check, out, cuts=cuts, tails=args.tails, jobs=args.jobs,
+                       workspace_only=args.handoff == "workspace"), end="")
             return 0
         flags = agent.room_flags + (agent.yolo if args.yolo else [])
         with room_home(agent, real) as home:

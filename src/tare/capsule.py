@@ -1,12 +1,11 @@
-"""Capsules: a run in the room, resumable at every tool call (epic Cliff).
+"""Capsules: a run in the room, resumable at every step (epics Cliff and Swap).
 
 During the original run a PostToolUse hook archives /work after every tool call into a
-run directory outside the room. Together with the session transcript cut right after
-that call's tool result, an archive is a capsule: a tail resumed from it starts from
-exactly that workspace and that conversation. Capsule 0 is the project before the run;
-its tail is a fresh start with the original prompt.
-
-Claude Code only for now.
+run directory outside the room. A step is one model tool call, or several issued together;
+its capsule is the archive taken after its last tool plus the session up to its results.
+Capsule 0 is the project before the run. A capsule is continued either natively (the
+agent's own session, cut after the step; Claude Code) or by handoff (a fresh session
+started with the trail rendered up to the step; every agent).
 """
 import hashlib
 import json
@@ -16,9 +15,11 @@ import tarfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from .room import bwrap, room_home
+from . import trail as trails
+from .room import ROOM_HOME, bwrap, room_home
 
 RUN_MOUNT = "/tare-run"
+HOOK_COMMAND = f"/bin/sh {RUN_MOUNT}/hook.sh"
 # Archives /work after every tool call, numbered, named by the call's tool_use_id.
 # The hook input is JSON on stdin; its top-level tool_use_id is the first one in it.
 HOOK = """#!/bin/sh
@@ -26,8 +27,6 @@ id=$(grep -o '"tool_use_id": *"[^"]*"' | head -1 | sed 's/.*"\\([^"]*\\)"$/\\1/'
 n=$(ls /tare-run/capsules | wc -l)
 tar -C /work -cf "/tare-run/capsules/$(printf %04d "$n")-$id.tar" .
 """
-HOOK_SETTINGS = json.dumps({"hooks": {"PostToolUse": [
-    {"matcher": "", "hooks": [{"type": "command", "command": f"/bin/sh {RUN_MOUNT}/hook.sh"}]}]}})
 CONTINUE = "Continue."
 
 
@@ -36,8 +35,9 @@ class Capsule:
     step: int
     tool_use_id: str | None  # None for step 0
     archive: Path  # tar of /work; identical workspaces share one archive
-    cut: int  # transcript lines kept (0 for step 0)
-    tool: str  # what the step did, for the report
+    cut: int  # native session lines kept (0 for step 0, or when there is no native resume)
+    trail_cut: int  # trail events up to this step
+    tool: str  # what the step did, for reports
 
 
 @dataclass
@@ -68,11 +68,11 @@ def unpack(source: Path, directory: Path):
         tar.extractall(directory, filter="tar")
 
 
-def _claude_args(agent, extra: list[str]) -> list[str]:
-    return ["claude", *agent.room_flags, "--dangerously-skip-permissions", *extra]
+def _config(agent, home: Path) -> Path:
+    return home / Path(agent.room_config).relative_to(ROOM_HOME)
 
 
-def record(agent, real, project: Path, out: Path, prompt: str, claude_args: list[str],
+def record(agent, real, project: Path, out: Path, prompt: str, args: list[str],
            env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
     """The original run, in a room, on a copy of the project, with a capsule per tool call."""
     store = out / "store"
@@ -81,104 +81,102 @@ def record(agent, real, project: Path, out: Path, prompt: str, claude_args: list
     work = out / "original" / "work"
     shutil.copytree(project, work, symlinks=True)
     archive(work, store / "capsules" / "0000-start.tar")
+    (out / "original" / "task.txt").write_text(prompt)
     with room_home(agent, real) as home:
-        argv = bwrap(agent, real, home, work,
-                     [*_claude_args(agent, ["--settings", HOOK_SETTINGS, *claude_args]), "-p", prompt,
-                      "--output-format", "stream-json", "--verbose"],
-                     env, ["--bind", str(store), RUN_MOUNT])
-        proc = subprocess.run(argv, capture_output=True, text=True, stdin=subprocess.DEVNULL)
-        sessions = sorted((home / ".claude-config" / "projects").rglob("*.jsonl"), key=lambda p: p.stat().st_size)
-        if sessions:
-            shutil.copyfile(sessions[-1], out / "original" / "transcript.jsonl")
+        agent.prepare_hook(_config(agent, home), HOOK_COMMAND)
+        command = [agent.name, *agent.room_flags, *agent.run_args(prompt, args, hook=HOOK_COMMAND)]
+        proc = subprocess.run(bwrap(agent, real, home, work, command, env, ["--bind", str(store), RUN_MOUNT]),
+                              capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        session = agent.session_file(home)
+        if session:
+            shutil.copyfile(session, out / "original" / "session.jsonl")
     (out / "original" / "stdout.jsonl").write_text(proc.stdout)
     return proc
 
 
-def _describe(block: dict) -> str:
-    args = block.get("input", {})
-    detail = args.get("command") or args.get("file_path") or args.get("pattern") or args.get("description") or ""
-    return f"{block.get('name', '?')} {str(detail).splitlines()[0][:70] if detail else ''}".strip()
+def session_lines(out: Path) -> list[str]:
+    path = out / "original" / "session.jsonl"
+    return path.read_text().splitlines() if path.exists() else []
 
 
-def capsules(out: Path) -> list[Capsule]:
+def capsules(out: Path, agent) -> list[Capsule]:
     """The resumable steps of the original run, in order."""
-    store = out / "store" / "capsules"
-    archives = sorted(store.glob("*.tar"))
-    lines = (out / "original" / "transcript.jsonl").read_text().splitlines()
-    entries = [json.loads(line) for line in lines]
-
-    # where each tool call was made and where its result was written
-    made_in: dict[str, int] = {}
-    described: dict[str, str] = {}
-    result_at: dict[str, int] = {}
-    for i, entry in enumerate(entries):
-        content = (entry.get("message") or {}).get("content")
-        if not isinstance(content, list):
-            continue
-        for block in content:
-            if block.get("type") == "tool_use":
-                made_in[block["id"]] = i
-                described[block["id"]] = _describe(block)
-            elif block.get("type") == "tool_result":
-                result_at[block["tool_use_id"]] = i
-
-    result = [Capsule(0, None, archives[0], 0, "start")]
+    archives = sorted((out / "store" / "capsules").glob("*.tar"))
+    by_id = {path.stem.split("-", 1)[1]: path for path in archives[1:]}
+    result = [Capsule(0, None, archives[0], 0, 0, "start")]
     seen = {_digest(archives[0]): archives[0]}
-    pending: dict[int, list[tuple[str, Path]]] = {}
-    for path in archives[1:]:
-        tool_use_id = path.stem.split("-", 1)[1]
-        if tool_use_id not in made_in or tool_use_id not in result_at:
-            continue  # a subagent's call, or one whose result never reached the transcript
-        pending.setdefault(made_in[tool_use_id], []).append((tool_use_id, path))
-    # parallel calls in one assistant message are one step: resumable only after the last result
-    for _, calls in sorted(pending.items()):
-        tool_use_id, path = max(calls, key=lambda c: result_at[c[0]])
-        cut = max(result_at[c[0]] for c in calls) + 1
-        digest = _digest(path)
-        shared = seen.setdefault(digest, path)
+    previous = archives[0]
+    for step in agent.trail(session_lines(out)).steps:
+        taken = [by_id[i] for i in step.ids if i in by_id]
+        # the last snapshot of the step; a step whose tools the hook never saw left the workspace as it was
+        path = max(taken) if taken else previous
+        shared = seen.setdefault(_digest(path), path)
         if shared != path:
             path.unlink()  # same workspace as an earlier capsule: keep one archive
-        tool = " + ".join(described[c[0]] for c in calls)
-        result.append(Capsule(len(result), tool_use_id, shared, cut, tool))
+        result.append(Capsule(len(result), step.ids[-1], shared, step.native_cut or 0, step.trail_cut, step.tool))
+        previous = shared
     return result
 
 
 def session_id(out: Path) -> str:
-    for line in (out / "original" / "transcript.jsonl").read_text().splitlines():
-        sid = json.loads(line).get("sessionId")
+    for line in session_lines(out):
+        entry = json.loads(line)
+        sid = entry.get("sessionId") or (entry.get("payload") or {}).get("id")
         if sid:
             return sid
-    raise ValueError("no session id in the transcript")
+    raise ValueError("no session id in the session file")
 
 
-def run_tail(agent, real, out: Path, capsule: Capsule, prompt: str, claude_args: list[str], check: str,
-             index: int, env: dict[str, str] | None = None, timeout: float = 1800) -> Tail:
-    """Resume a capsule in a fresh room, run it to the end, score the workspace with the check."""
-    tail_dir = out / "tails" / f"{capsule.step:04d}-{index}"
+def _run_in(agent, real, home: Path, work: Path, command: list[str], env, timeout: float) -> str:
+    try:
+        proc = subprocess.run(bwrap(agent, real, home, work, command, env), capture_output=True, text=True,
+                              timeout=timeout, stdin=subprocess.DEVNULL)
+        return f"agent exit {proc.returncode}"
+    except subprocess.TimeoutExpired:
+        return f"agent stopped after {int(timeout)} s"
+
+
+def _finish(tail_dir: Path, work: Path, step: int, ran: str, check: str, extra: dict | None = None) -> Tail:
+    passed, detail = run_check(check, work)
+    (tail_dir / "result.json").write_text(json.dumps({"step": step, "passed": passed, "agent": ran, "check": detail,
+                                                      **(extra or {})}))
+    shutil.rmtree(work, ignore_errors=True)
+    return Tail(step, passed, f"{ran}; {detail}")
+
+
+def run_tail(agent, real, out: Path, capsule: Capsule, prompt: str, args: list[str], check: str,
+             index: int, env: dict[str, str] | None = None, timeout: float = 1800, tail_dir: Path | None = None) -> Tail:
+    """Continue a capsule natively in a fresh room (the agent's own session, cut after the step),
+    run it to the end, score the workspace with the check. Step 0 is a fresh start."""
+    tail_dir = tail_dir or out / "tails" / f"{capsule.step:04d}-{index}"
     work = tail_dir / "work"
     work.mkdir(parents=True)
     unpack(capsule.archive, work)
     with room_home(agent, real) as home:
         if capsule.step == 0:
-            command = [*_claude_args(agent, claude_args), "-p", prompt]
+            command = [agent.name, *agent.room_flags, *agent.run_args(prompt, args)]
         else:
             sid = session_id(out)
-            sessions = home / ".claude-config" / "projects" / "-work"
-            sessions.mkdir(parents=True)
-            lines = (out / "original" / "transcript.jsonl").read_text().splitlines()[:capsule.cut]
-            (sessions / f"{sid}.jsonl").write_text("\n".join(lines) + "\n")
-            command = [*_claude_args(agent, claude_args), "-p", "--resume", sid, CONTINUE]
-        try:
-            proc = subprocess.run(bwrap(agent, real, home, work, command, env), capture_output=True, text=True,
-                                  timeout=timeout, stdin=subprocess.DEVNULL)
-            ran = f"agent exit {proc.returncode}"
-        except subprocess.TimeoutExpired:
-            ran = f"agent stopped after {int(timeout)} s"
-    passed, detail = run_check(check, work)
-    (tail_dir / "result.json").write_text(json.dumps({"step": capsule.step, "passed": passed, "agent": ran,
-                                                      "check": detail}))
-    shutil.rmtree(work, ignore_errors=True)
-    return Tail(capsule.step, passed, f"{ran}; {detail}")
+            agent.place_session(home, sid, session_lines(out)[:capsule.cut])
+            command = [agent.name, *agent.room_flags, *agent.resume_args(sid, CONTINUE, args)]
+        ran = _run_in(agent, real, home, work, command, env, timeout)
+    return _finish(tail_dir, work, capsule.step, ran, check)
+
+
+def run_handoff(agent, real, tail_dir: Path, capsule: Capsule, events: list[trails.Event], task: str,
+                args: list[str], check: str, env: dict[str, str] | None = None, workspace_only: bool = False,
+                timeout: float = 1800) -> Tail:
+    """Continue a capsule by handoff: a fresh session of any agent, in the capsule's workspace,
+    started with the trail rendered up to the step."""
+    work = tail_dir / "work"
+    work.mkdir(parents=True)
+    unpack(capsule.archive, work)
+    handoff = trails.render(task, events[:capsule.trail_cut], workspace_only)
+    (tail_dir / "handoff.txt").write_text(handoff)
+    with room_home(agent, real) as home:
+        ran = _run_in(agent, real, home, work, [agent.name, *agent.room_flags, *agent.run_args(handoff, args)],
+                      env, timeout)
+    return _finish(tail_dir, work, capsule.step, ran, check, {"agent_name": agent.name})
 
 
 def run_check(check: str, work: Path, timeout: float = 600) -> tuple[bool, str]:

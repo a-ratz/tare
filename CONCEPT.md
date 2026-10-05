@@ -209,7 +209,25 @@ Tare is meant to sit underneath such frameworks: their exam, Tare's clean room.
    - **Open:**
      - Cliff for Codex, which resumes differently.
      - The cost of real searches: every tail is a full agent run.
-7. Swap (epic #17), on top of Cliff's capsules and tails.
+7. ~~Swap~~. Done 2026-10-05 (`tare swap`), for Claude Code and Codex.
+   - **The trail:** one neutral record of a run (task, messages, tool calls, results), and one
+     renderer that turns any prefix of it into a handoff prompt. Each agent continues a
+     capsule by handoff, so no agent ever writes another agent's session format. A new agent
+     needs three things: a snapshot hook, a translation of its session into the trail, and a
+     way to start a session with a prompt.
+   - **Codex specifics:**
+     - It takes the `PostToolUse` hook from the room's `hooks.json`, but only with
+       `--dangerously-bypass-hook-trust`.
+     - In code mode one model call (`exec`) runs several commands; a step carries the
+       commands' ids.
+   - **Measured:**
+     - Scripted models with a known truth: null check passed; blame passed from the model
+       to the room between cut 0 and cut 0.5, as built.
+     - Real Claude Code (haiku) against real Codex on a small task: both ran, and each
+       continued the other's room. Every cell passed, so there was no effect to find.
+   - **Open:**
+     - Codex has no native cell yet, so its foreignness is not priced.
+     - Codex's code-mode calls are verbose in a handoff.
 
 ## Name
 

@@ -12,6 +12,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import trail as trails
 from .room import ROOM_HOME, ROOM_PROJECT, TareError
 
 PROMPT = "say ok"
@@ -70,6 +71,7 @@ class Claude:
     # Login-carried connectors and account skills arrive unless these are passed (CONCEPT.md, layer 1).
     room_flags = ["--strict-mcp-config", "--setting-sources", "project,local"]
     yolo = ["--dangerously-skip-permissions"]
+    native_resume = True  # Cliff resumes its own session; Swap prices handoffs against it
 
     def discover(self) -> Real:
         home = Path.home()
@@ -117,6 +119,32 @@ class Claude:
     def instructions(self, real: Real) -> Path:
         return real.config / "CLAUDE.md"
 
+    # unattended runs (Cliff, Swap): args after the room flags; `hook` archives /work after every tool call
+    def run_args(self, prompt: str, extra: list[str], hook: str | None = None) -> list[str]:
+        args = ["--dangerously-skip-permissions"]
+        if hook:
+            args += ["--settings", json.dumps({"hooks": {"PostToolUse": [
+                {"matcher": "", "hooks": [{"type": "command", "command": hook}]}]}})]
+        return args + extra + ["-p", prompt, "--output-format", "stream-json", "--verbose"]
+
+    def prepare_hook(self, config: Path, hook: str):
+        pass  # passed with --settings in run_args
+
+    def resume_args(self, session: str, prompt: str, extra: list[str]) -> list[str] | None:
+        return ["--dangerously-skip-permissions", *extra, "-p", "--resume", session, prompt]
+
+    def session_file(self, home: Path) -> Path | None:
+        sessions = sorted((home / ".claude-config" / "projects").rglob("*.jsonl"), key=lambda p: p.stat().st_size)
+        return sessions[-1] if sessions else None
+
+    def place_session(self, home: Path, session: str, lines: list[str]):
+        target = home / ".claude-config" / "projects" / "-work"
+        target.mkdir(parents=True, exist_ok=True)
+        (target / f"{session}.jsonl").write_text("\n".join(lines) + "\n")
+
+    def trail(self, lines: list[str]) -> trails.Trail:
+        return trails.claude(lines)
+
     def skill_dirs(self, real: Real) -> list[Path]:
         return [real.config / "skills"]
 
@@ -137,6 +165,7 @@ class Codex:
     # Account plugins can restore personal skills after login (CONCEPT.md, adapters).
     room_flags = ["--disable", "remote_plugin"]
     yolo = ["--dangerously-bypass-approvals-and-sandbox"]
+    native_resume = False
 
     def discover(self) -> Real:
         home = Path.home()
@@ -188,6 +217,29 @@ class Codex:
 
     def instructions(self, real: Real) -> Path:
         return real.config / "AGENTS.md"
+
+    def run_args(self, prompt: str, extra: list[str], hook: str | None = None) -> list[str]:
+        args = ["--dangerously-bypass-approvals-and-sandbox", "exec", "--skip-git-repo-check", "--json"]
+        if hook:
+            args.append("--dangerously-bypass-hook-trust")  # exec runs no untrusted hook otherwise
+        return args + extra + [prompt]
+
+    def prepare_hook(self, config: Path, hook: str):
+        (config / "hooks.json").write_text(json.dumps({"hooks": {"PostToolUse": [
+            {"matcher": "", "hooks": [{"type": "command", "command": hook}]}]}}))
+
+    def resume_args(self, session: str, prompt: str, extra: list[str]) -> list[str] | None:
+        return None  # continued by handoff only
+
+    def session_file(self, home: Path) -> Path | None:
+        rollouts = sorted((home / ".codex" / "sessions").rglob("rollout-*.jsonl"))
+        return rollouts[-1] if rollouts else None
+
+    def place_session(self, home: Path, session: str, lines: list[str]):
+        raise TareError("codex continues by handoff only")
+
+    def trail(self, lines: list[str]) -> trails.Trail:
+        return trails.codex(lines)
 
     def skill_dirs(self, real: Real) -> list[Path]:
         return [real.config / "skills", real.home / ".agents" / "skills"]

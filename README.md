@@ -57,6 +57,10 @@ own machine, tare is for you.
   could log out your real session.
 - **Works like the agent you know.** Claude Code or Codex, interactive or one-shot: all of
   the agent's arguments pass through, and your project is mounted at `/work`.
+- **Tells whether the room or the model lost it.** `tare swap` runs two agents on the same
+  task (Claude Code against Codex, or two models) and lets each continue the other's work
+  at several points. You see whether a run failed because of what its workspace had become
+  or because of the agent continuing it.
 - **Shows where a failed run became lost.** `tare cliff` resumes a failed run from its own
   steps, many times, and names the step after which it no longer succeeds as often as a
   fresh start does, with the evidence next to it.
@@ -171,6 +175,44 @@ scripted model whose cliff is known: step 4 writes the wrong answer into a note.
 Cliff works with Claude Code for now. Each tail is a real agent run, so a search costs what
 its tails cost.
 
+### Swap: the room or the model
+
+```bash
+tare swap "fix the failing test" --check "uv run pytest -q" --a claude --a-args "--model sonnet" --b codex
+```
+
+Both agents run the task once in a room. At each cut (`--cuts`, default `0,0.5,1`) every
+agent continues every room, three tails each, from the same handoff: the workspace plus a
+neutral account of the steps so far, rendered the same way for every agent. The *state
+effect* says how much better the tails do in room a than in room b. The *model effect* says
+how much better agent a does than agent b. At cut 0 both rooms are your untouched project,
+so the state effect there must be zero: that is the null check. Where an agent can resume its
+own session (Claude Code), a native cell prices what the handoff itself costs.
+
+This report comes from the real machinery against two scripted models whose truth is
+known: a is competent but trusts a note in the workspace, b is weak, and run b poisoned
+the note at step 2.
+
+```text
+  cut 0.00: room a at step 0, room b at step 0
+                agent a          agent b
+    room a      4/4 0.51-1.00    1/4 0.05-0.70
+    room b      4/4 0.51-1.00    1/4 0.05-0.70
+    state effect  +0.00 [-0.35, +0.35]  (room a better than room b)
+    model effect  +0.75 [+0.28, +0.89]  (agent a better than agent b)
+
+  cut 0.50: room a at step 2, room b at step 2
+                agent a          agent b
+    room a      4/4 0.51-1.00    1/4 0.05-0.70
+    room b      0/4 0.00-0.49    2/4 0.15-0.85
+    state effect  +0.38 [-0.03, +0.66]  (room a better than room b)
+    model effect  +0.12 [-0.25, +0.44]  (agent a better than agent b)
+
+  null check   passed: no state effect at cut 0, where both rooms are the untouched project
+  verdict      blame passes from the model to the room between cut 0.00 and cut 0.50; some
+               deciding intervals still include zero, more tails would firm this up
+```
+
 ## How it works
 
 tare takes three readings, and none of them asks the agent anything. First, the real CLI runs
@@ -184,8 +226,8 @@ looks for your files and inherited secrets.
 
 ## Roadmap
 
-Next: [Swap][epic-swap], which crosses two runs' workspaces with two agents at the cliff and
-tells whether the room or the model was to blame.
+No epic is open. Ideas, not yet planned: Cliff for Codex (by handoff), adapters for Gemini
+CLI and Pi (the trail keeps each one small), and a room for macOS.
 
 ## Contributing
 
@@ -211,4 +253,3 @@ Crafted with [Readme Craft](https://github.com/motiful/readme-craft)
 [platform-url]: #install
 [agent-shield]: https://img.shields.io/badge/agents-Claude%20Code%20%7C%20Codex-D97757.svg
 [agent-url]: #install
-[epic-swap]: https://github.com/AndreRatzenberger/tare/issues/17

@@ -3,6 +3,7 @@ import random
 from pathlib import Path
 
 from tare import capsule as caps
+from tare.agents import Claude
 from tare.cliff import Search, report, search, wilson
 
 
@@ -56,7 +57,7 @@ def test_search_with_noise_still_brackets_the_cliff():
 def test_report_says_when_a_step_after_the_cliff_passes_again():
     s = Search(results={0: [True] * 3, 2: [True] * 3, 3: [False] * 3, 5: [True] * 3, 8: [False] * 3},
                cliff=(2, 3), separated=True, rebounds=[5], spent=15, verdict="The run became lost at step 3.")
-    steps = [caps.Capsule(i, None, Path("/nonexistent"), 0, f"step {i}") for i in range(9)]
+    steps = [caps.Capsule(i, None, Path("/nonexistent"), 0, 0, f"step {i}") for i in range(9)]
     s.cliff = (2, 4)  # not adjacent: the report does not open archives
     text = "\n".join(report(s, steps, 30))
     assert "monotone  no: steps 5 pass again after the cliff" in text
@@ -66,7 +67,7 @@ def write_run(tmp_path, entries, archives):
     out = tmp_path / "run"
     (out / "original").mkdir(parents=True)
     (out / "store" / "capsules").mkdir(parents=True)
-    (out / "original" / "transcript.jsonl").write_text("\n".join(json.dumps(e) for e in entries) + "\n")
+    (out / "original" / "session.jsonl").write_text("\n".join(json.dumps(e) for e in entries) + "\n")
     for name, files in archives.items():
         work = tmp_path / f"w-{name}"
         work.mkdir()
@@ -100,7 +101,7 @@ def test_capsules_follow_the_transcript_group_parallel_calls_and_share_archives(
                 "0004-sub9": {"x.txt": "x"},  # a subagent's call: not in the main transcript
                 "0005-t4": {"x.txt": "x", "a.txt": "a", "b.txt": "b"}}
     out = write_run(tmp_path, entries, archives)
-    steps = caps.capsules(out)
+    steps = caps.capsules(out, Claude())
     assert [s.tool_use_id for s in steps] == [None, "t1", "t3", "t4"]
     assert [s.cut for s in steps] == [0, 3, 6, 8]
     assert steps[2].tool == "Read ls + Read ls"
@@ -121,7 +122,7 @@ def test_report_names_the_cliff_step_and_its_changes(tmp_path):
                {"message": {"role": "assistant", "content": [use("t1", command="echo 41 > notes.txt")]}},
                {"message": {"role": "user", "content": [result("t1")]}}]
     out = write_run(tmp_path, entries, {"0000-start": {"x": "x"}, "0001-t1": {"x": "x", "notes.txt": "41"}})
-    steps = caps.capsules(out)
+    steps = caps.capsules(out, Claude())
     s = search(deterministic(1), last=1, tails=3, budget=12)
     text = "\n".join(report(s, steps, 12))
     assert "The run became lost at step 1." in text
