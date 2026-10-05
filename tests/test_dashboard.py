@@ -111,3 +111,15 @@ def test_recipe_notes_what_changed_since(tmp_path):
     assert recipe.drift(r, {}) == []
     (project / "a.py").write_text("x = 2\n")
     assert any("has changed" in note for note in recipe.drift(r, {}))
+
+
+def test_calibrate_rates_carry_the_judge_scores_of_finished_tails(tmp_path):
+    j = Journal(tmp_path)
+    j("start", kind="calibrate", task="t", check="tare judge", project="/p", tails=3,
+      sides={"a": {"agent": "claude", "args": [], "dir": "."}})
+    for i, detail in enumerate(["check exit 0: score 70 (threshold 0): fine", "check exit 1: score 40 (threshold 50): bad"]):
+        j("tail", id=f"a-{i}", status="running", side="a", agent="a", agent_name="claude", kind="fresh", dir=f"calibrate/a-{i}")
+        j("tail", id=f"a-{i}", status="passed" if i == 0 else "failed", detail=detail)
+    j("tail", id="a-2", status="running", side="a", agent="a", agent_name="claude", kind="fresh", dir="calibrate/a-2")
+    rate = dashboard.state(tmp_path)["rates"]["a"]
+    assert rate["scores"] == [70, 40] and rate["mean"] == 55 and rate["running"] == 1

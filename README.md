@@ -61,9 +61,9 @@ your own machine, tare is for you.
   task (Claude Code against Codex, or two models) and lets each continue the other's work
   at several points. You see whether a run failed because of what its workspace had become
   or because of the agent continuing it.
-- **Shows where a failed run became lost.** `tare cliff` resumes a failed run from its own
-  steps, many times, and names the step after which it no longer succeeds as often as a
-  fresh start does, with the evidence next to it.
+- **Shows where a failed run became lost** (experimental). `tare cliff` resumes a failed run
+  from its own steps, many times, and names the step after which it no longer succeeds as
+  often as a fresh start does, with the evidence next to it.
 
 ## When to use
 
@@ -146,6 +146,12 @@ your login, because the agent needs one to run.
 
 ### Cliff: where did a failed run become lost
 
+> **Experimental.** Cliff finds a known cliff in a scripted run, and on real runs it has not
+> raised a false alarm. But it has not yet found a cliff in a real run: neither real round had
+> a failure that sat in one step ([migration](experiments/migration/RESULTS.md),
+> [HTML](experiments/html/RESULTS.md)). Swap's cells where an agent continues its own room
+> are a coarse Cliff at three cuts; when they drop between two cuts, Cliff can zoom in.
+
 ```bash
 tare cliff claude "fix the failing test" --check "uv run pytest -q" -- --model sonnet
 ```
@@ -176,6 +182,36 @@ scripted model whose cliff is known: step 4 writes the wrong answer into a note.
 Cliff works with Claude Code, Codex and Pi (`tare cliff pi ...`). All three resume their own
 sessions natively; an agent that cannot is continued by handoff. Each tail is a real agent
 run, so a search costs what its tails cost.
+
+### Calibrate first
+
+```bash
+tare calibrate "fix the failing test" --check "uv run pytest -q" \
+  --side "claude --model haiku" --side "codex -m gpt-6.1-sol" --runs 10
+```
+
+Before Cliff or Swap spend tails on a task, calibrate tells you how often each side passes
+it from a fresh start, with intervals. Cliff and Swap need a task where the original fails but
+a fresh start sometimes passes, or where one side mostly fails and the other mostly passes.
+With a judge check at threshold 0, every run passes and the scores are what count: the report
+lists them per side and the dashboard draws them on a 0-100 scale. `--keep` keeps every
+finished workspace, for `judge-noise`.
+Cliff now declares a model gap only when the baseline's upper bound is below `--gap-below`
+(default 0.2), so 0 of 3 is no longer read as "never".
+
+### Judge: when tests cannot decide
+
+```bash
+tare judge-noise good-page/ bad-page/ --rubric rubric.md --times 10 --threshold 60
+tare cliff claude "build the page" --check "tare judge --rubric $PWD/rubric.md --threshold 60" -- --model haiku
+```
+
+For work like a web page, a judge model scores the result. tare renders the page headless in a
+room of its own and gives a judge agent the screenshot, the source and your rubric, in a fresh,
+blind room: no agent or model names. `tare judge` is a check (exit 0 at or above the threshold);
+its score line shows up in the dashboard. A judge has its own noise: one test page scored 55, 60,
+58, 58, 66 and 62 on six runs. So `tare judge-noise` scores the same pages repeatedly and refuses a
+threshold that falls inside a page's spread.
 
 ### Watch it live, repeat it exactly
 

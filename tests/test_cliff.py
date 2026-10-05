@@ -154,3 +154,18 @@ def test_cliff_continues_by_handoff_when_the_agent_cannot_resume(tmp_path, monke
     cliff_module.cliff(NoResume(), None, tmp_path, "task", "check", tmp_path, tails=1, budget=4, jobs=1)
     assert ("native", 0) in used  # step 0 is a fresh start for every agent
     assert all(kind == "handoff" for kind, step in used if step > 0)
+
+
+def test_search_samples_the_baseline_before_it_declares_a_model_gap():
+    # a model that passes one fresh start in five: 0/3 is likely, but not a gap
+    outcomes = iter([False] * 5 + [True] + [False] * 200)
+    s = search(lambda step, n: [next(outcomes) if step == 0 else False for _ in range(n)], last=6, tails=3, budget=60)
+    assert len(s.results[0]) >= 6 and s.rate(0) > 0
+    assert "model gap" not in s.verdict
+
+
+def test_search_declares_a_model_gap_only_when_its_bound_is_clear():
+    s = search(lambda step, n: [False] * n, last=6, tails=3, budget=60)
+    assert s.interval(0)[1] < 0.2 and "model gap" in s.verdict and "at most" in s.verdict
+    short = search(lambda step, n: [False] * n, last=6, tails=3, budget=6)
+    assert "budget ran out before a model gap was clear" in short.verdict

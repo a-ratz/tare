@@ -121,3 +121,13 @@ def test_report_says_neither_when_no_effect_shows():
             cut(1.0, {k: 4 for k in [("a", "a"), ("a", "b"), ("b", "a"), ("b", "b")]})]
     assert "neither the room nor the model makes a difference at any cut" in "\n".join(
         report(sides, plan, "t", "c", Path("/p"), 32, False))
+
+
+def test_report_calls_a_tie_a_tie():
+    # the migration run: the model leads at cuts 0 and 0.5, at cut 1 both effects are -0.50
+    sides = {"a": Side("a", Named("claude"), None, [], Path("/a")), "b": Side("b", Named("codex"), None, [], Path("/b"))}
+    plan = [cut(0.0, {("a", "a"): 1, ("a", "b"): 3, ("b", "a"): 0, ("b", "b"): 3}, n=3),
+            cut(0.5, {("a", "a"): 0, ("a", "b"): 3, ("b", "a"): 1, ("b", "b"): 3}, n=3),
+            cut(1.0, {("a", "a"): 0, ("a", "b"): 3, ("b", "a"): 3, ("b", "b"): 3}, n=3)]
+    text = "\n".join(report(sides, plan, "t", "c", Path("/p"), 36, False))
+    assert "until cut 0.50; from cut 1.00 on, room and model weigh alike" in text

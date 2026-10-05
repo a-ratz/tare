@@ -1,0 +1,15 @@
+{
+  "year": 2026,
+  "currency": "EUR",
+  "monthly_revenue": [41200, 38950, 45110, 47830, 52240, 49980, 55310, 61020, 58460, 63890, 70150, 81740],
+  "products": [
+    {"name": "Aurora Desk Lamp", "units": 1840, "revenue": 128800},
+    {"name": "Basalt Mug Set", "units": 3120, "revenue": 74880},
+    {"name": "Cirrus Notebook", "units": 5410, "revenue": 64920},
+    {"name": "Dune Backpack", "units": 960, "revenue": 115200},
+    {"name": "Ember Candle", "units": 4200, "revenue": 50400},
+    {"name": "Fjord Water Bottle", "units": 2870, "revenue": 71750},
+    {"name": "Glacier Throw", "units": 730, "revenue": 87600},
+    {"name": "Harbor Tote", "units": 1990, "revenue": 71640}
+  ]
+}

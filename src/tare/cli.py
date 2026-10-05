@@ -4,6 +4,9 @@
   tare {claude,codex,pi} [--project DIR] [--allow-dirty] [--yolo] [-- AGENT_ARGS...]
   tare cliff {claude,codex,pi} PROMPT --check CMD [--tails N] [--budget N] [--jobs N] [-- AGENT_ARGS...]
   tare swap PROMPT --check CMD [--a claude] [--b codex] [--a-args ARGS] [--b-args ARGS] [--cuts 0,0.5,1]
+  tare calibrate PROMPT --check CMD --side "claude --model haiku" --side "codex" [--runs N]
+  tare judge [DIR] --rubric FILE --threshold N [--judge "claude --model sonnet"]   a check: exit 0 at or above N
+  tare judge-noise DIR... --rubric FILE --times K [--threshold N]                  the judge's own spread
   tare watch DIR [--port N]      the live dashboard of a Cliff or Swap run, also a finished one
   tare rerun DIR [--out DIR]     repeat a run from its recipe
 """
@@ -18,6 +21,7 @@ from pathlib import Path
 
 from . import dashboard, recipe
 from .agents import AGENTS
+from . import calibrate as calibration
 from .cliff import cliff
 from .journal import Journal
 from .swap import Side, swap
@@ -54,6 +58,8 @@ def main(argv: list[str] | None = None) -> int:
         return _watch(argv[1:])
     if argv[:1] == ["rerun"]:
         return _rerun(argv[1:])
+    if argv[:1] in (["judge"], ["judge-noise"]):
+        return _judge(argv[0], argv[1:])
     passthrough: list[str] = []
     if "--" in argv:
         at = argv.index("--")
@@ -78,6 +84,8 @@ def main(argv: list[str] | None = None) -> int:
     k.add_argument("--tails", type=int, default=3, help="tails per probe (default 3)")
     k.add_argument("--budget", type=int, default=30, help="tails in total, baseline included (default 30)")
     k.add_argument("--jobs", type=int, default=3, help="tails run at the same time (default 3)")
+    k.add_argument("--gap-below", type=float, default=0.2,
+                   help="declare a model gap only when the baseline's upper bound is below this (default 0.2)")
     k.add_argument("--out", type=Path, help="run directory (default ~/.local/state/tare/cliff/<project>-<time>)")
     k.add_argument("--allow-dirty", action="store_true", help="run even if the probe reading is not zero")
     w = sub.add_parser("swap", help="cross two runs' rooms with two agents: was it the room or the model")
@@ -95,13 +103,32 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--project", type=Path, default=Path.cwd())
     w.add_argument("--out", type=Path, help="run directory (default ~/.local/state/tare/swap/<project>-<time>)")
     w.add_argument("--allow-dirty", action="store_true", help="run even if a probe reading is not zero")
-    for parser in (k, w):
+    c = sub.add_parser("calibrate", help="pass rates of agents on a task, before Cliff or Swap")
+    c.add_argument("prompt", help="the task, as given to every side")
+    c.add_argument("--check", required=True, help="shell command run in the finished workspace; exit 0 passes")
+    c.add_argument("--side", action="append", required=True,
+                   help="an agent and its arguments, e.g. 'claude --model haiku' (repeat for each side)")
+    c.add_argument("--runs", type=int, default=10, help="fresh starts per side (default 10)")
+    c.add_argument("--jobs", type=int, default=3, help="runs at the same time (default 3)")
+    c.add_argument("--project", type=Path, default=Path.cwd())
+    c.add_argument("--out", type=Path, help="run directory (default ~/.local/state/tare/calibrate/<project>-<time>)")
+    c.add_argument("--allow-dirty", action="store_true", help="run even if a probe reading is not zero")
+    c.add_argument("--keep", action="store_true", help="keep every run's finished workspace (e.g. for judge-noise)")
+    for parser in (k, w, c):
         parser.add_argument("--port", type=int, default=8777, help="dashboard port on localhost (default 8777)")
     sub.add_parser("watch", help="the live dashboard of a run directory (tare watch DIR)")
+    sub.add_parser("judge", help="score a page by a rubric in a blind room; usable as --check")
+    sub.add_parser("judge-noise", help="score the same pages repeatedly: the judge's own spread")
     sub.add_parser("rerun", help="repeat a run from its recipe (tare rerun DIR)")
     args = ap.parse_args(argv)
     if args.command == "swap":
         names = [args.a, args.b]
+    elif args.command == "calibrate":
+        sides = [shlex.split(side) for side in args.side]
+        unknown = [side[0] for side in sides if side[0] not in AGENTS]
+        if unknown:
+            ap.error(f"unknown agent: {', '.join(unknown)} (known: {', '.join(sorted(AGENTS))})")
+        names = [side[0] for side in sides]
     else:
         names = [args.agent if args.command in ("probe", "cliff") else args.command]
     project = args.project.resolve()
@@ -111,14 +138,17 @@ def main(argv: list[str] | None = None) -> int:
     try:
         reals = {name: AGENTS[name].discover() for name in dict.fromkeys(names)}
         journal = Journal(None)
-        if args.command in ("cliff", "swap"):
+        if args.command in ("cliff", "swap", "calibrate"):
             out = args.out or (Path.home() / ".local/state/tare" / args.command
                                / f"{project.name}-{time.strftime('%Y%m%d-%H%M%S')}")
             out.mkdir(parents=True, exist_ok=False)
             journal = Journal(out)
             if args.command == "cliff":
                 agents = {"a": (AGENTS[args.agent], reals[args.agent], passthrough)}
-                params = {"tails": args.tails, "budget": args.budget, "jobs": args.jobs}
+                params = {"tails": args.tails, "budget": args.budget, "jobs": args.jobs, "gap_below": args.gap_below}
+            elif args.command == "calibrate":
+                agents = {chr(97 + i): (AGENTS[side[0]], reals[side[0]], side[1:]) for i, side in enumerate(sides)}
+                params = {"runs": args.runs, "jobs": args.jobs}
             else:
                 agents = {"a": (AGENTS[args.a], reals[args.a], shlex.split(args.a_args)),
                           "b": (AGENTS[args.b], reals[args.b], shlex.split(args.b_args))}
@@ -141,8 +171,14 @@ def main(argv: list[str] | None = None) -> int:
         agent, real = AGENTS[names[0]], reals[names[0]]
         if args.command == "cliff":
             print(cliff(agent, real, project, args.prompt, args.check, out, tails=args.tails, budget=args.budget,
-                        jobs=args.jobs, claude_args=passthrough, journal=journal), end="")
+                        jobs=args.jobs, claude_args=passthrough, journal=journal, gap_below=args.gap_below), end="")
             print(f"tare cliff: see it again with  tare watch {out}", file=sys.stderr)
+            return 0
+        if args.command == "calibrate":
+            runs = [calibration.Side(key, agent_, real_, list(extra)) for key, (agent_, real_, extra) in agents.items()]
+            print(calibration.calibrate(runs, project, args.prompt, args.check, out, runs=args.runs, jobs=args.jobs,
+                                        journal=journal, keep=args.keep), end="")
+            print(f"tare calibrate: see it again with  tare watch {out}", file=sys.stderr)
             return 0
         if args.command == "swap":
             a = Side("a", AGENTS[args.a], reals[args.a], shlex.split(args.a_args), out / "a")
@@ -174,6 +210,31 @@ def _watch(argv: list[str]) -> int:
     except KeyboardInterrupt:
         pass
     return 0
+
+
+def _judge(command: str, argv: list[str]) -> int:
+    from . import judge as judging
+    ap = argparse.ArgumentParser(prog=f"tare {command}")
+    ap.add_argument("dirs", type=Path, nargs="*" if command == "judge" else "+", default=[Path.cwd()])
+    ap.add_argument("--rubric", type=Path, required=True)
+    ap.add_argument("--threshold", type=float, required=command == "judge")
+    ap.add_argument("--times", type=int, default=10, help="scores per page (judge-noise; default 10)")
+    ap.add_argument("--page", default="index.html", help="the page to render (default index.html)")
+    ap.add_argument("--judge", default="claude --model sonnet", help="the judge agent and its arguments")
+    args = ap.parse_args(argv)
+    name, *extra = shlex.split(args.judge)
+    try:
+        if command == "judge":
+            score, reason = judging.judge(args.dirs[0].resolve(), args.rubric.resolve(), args.page, name, extra)
+            print(f"score {score} (threshold {args.threshold:g}): {reason}")
+            return 0 if score >= args.threshold else 1
+        text, clear = judging.noise([d.resolve() for d in args.dirs], args.rubric.resolve(), args.times,
+                                    args.threshold, args.page, name, extra)
+        print(text, end="")
+        return 0 if clear else 1
+    except (RuntimeError, TareError) as err:
+        print(f"tare {command}: {err}")
+        return 2
 
 
 def _rerun(argv: list[str]) -> int:
