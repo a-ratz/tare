@@ -1,0 +1,24 @@
+name: Feature
+description: A piece of an epic
+labels: ["type:feature"]
+
+body:
+  - type: textarea
+    id: feature
+    attributes:
+      label: Feature
+      description: What should be built? Every feature belongs to an epic; attach it as the epic's sub-issue.
+      placeholder: A short description of the feature.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance criteria
+      description: When is the feature done?
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
