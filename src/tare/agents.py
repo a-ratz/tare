@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import trail as trails
+from .fake import FAKE_MODEL
 from .room import ROOM_HOME, ROOM_PROJECT, TareError
 
 PROMPT = "say ok"
@@ -439,6 +440,85 @@ export default function (pi: any) {{
                 if block.get("type") == "text" and block.get("text", "").strip():
                     return "says: " + block["text"].strip().splitlines()[0][:90]
         return None
+
+
+class Antigravity:
+    """The Antigravity CLI (`agy`). Not offered by `tare` until its dirty-twin test is done
+    (experiments/dirty-twin-agy)."""
+
+    name = "agy"
+    credentials = "antigravity-oauth-token"
+    room_config = f"{ROOM_HOME}/.gemini/antigravity-cli"
+    room_flags: list[str] = []
+    yolo = ["--dangerously-skip-permissions"]
+    native_resume = True
+
+    def discover(self) -> Real:
+        home = Path.home()
+        return Real(home, home / ".gemini" / "antigravity-cli", _which("agy"))
+
+    def token_lifetime(self, real: Real) -> float:
+        """A Google OAuth refresh does not rotate the refresh token (measured: digests before and
+        after a refresh in a room), so a room may refresh its own copy without harm."""
+        if not (real.config / self.credentials).exists():
+            raise _lifetime_error(real.config / self.credentials)
+        return float("inf")
+
+    def seed(self, real: Real, config: Path):
+        # the login and the chosen model; nothing else of the setup
+        shutil.copyfile(real.config / self.credentials, config / self.credentials)
+        (config / self.credentials).chmod(0o600)
+        try:
+            model = json.loads((real.config / "settings.json").read_text()).get("model")
+        except (OSError, ValueError):
+            model = None
+        (config / "settings.json").write_text(json.dumps({"model": model} if model else {}))
+
+    def room_env(self) -> dict[str, str]:
+        return {}  # agy finds its setup under HOME
+
+    def binds(self, real: Real) -> tuple[list[str], str]:
+        return ["--ro-bind", str(real.binary), "/opt/agent/agy"], "/opt/agent/agy"
+
+    # the probe: CLOUD_CODE_URL points agy at the fake, which offers one model
+    def probe(self, fake_url: str) -> tuple[list[str], dict[str, str]]:
+        return (["-p", PROMPT, "--output-format", "stream-json", "--model", FAKE_MODEL],
+                {"CLOUD_CODE_URL": fake_url})
+
+    def prepare_probe(self, config: Path, fake_url: str):
+        pass
+
+    @contextmanager
+    def twin(self, real: Real, fake_url: str):
+        """The dirty twin sees the real setup, but agy writes into ~/.gemini on every run (its
+        conversations, caches, onboarding state). So it runs with an overlay over ~/.gemini
+        whose writes go to a tmpfs that dies with the run; see twin_argv."""
+        mount = tempfile.mkdtemp(prefix="tare-agy-twin-")
+        try:
+            yield {"TARE_TWIN_MOUNT": mount}
+        finally:
+            shutil.rmtree(mount, ignore_errors=True)
+
+    def twin_argv(self, argv: list[str], env: dict[str, str], plant: str = "") -> list[str]:
+        """Wrap the twin's command: as mapped root in a user and mount namespace, put a tmpfs on
+        the mount point and an overlay over ~/.gemini, then run agy as the user's own uid.
+        `plant` is shell run inside the overlay first (experiments only)."""
+        mount, gemini = env.pop("TARE_TWIN_MOUNT"), Path.home() / ".gemini"
+        script = (f'mount -t tmpfs tmpfs "{mount}" && mkdir "{mount}/u" "{mount}/w" && '
+                  f'mount -t overlay overlay -o lowerdir="{gemini}",upperdir="{mount}/u",workdir="{mount}/w" "{gemini}" && '
+                  f'{plant + " && " if plant else ""}'
+                  f'exec unshare --user --map-user={os.getuid()} --map-group={os.getgid()} -- "$@"')
+        return ["unshare", "--user", "--map-root-user", "--mount", "/bin/sh", "-c", script, "sh", *argv]
+
+    def capture(self, stdout: str, requests: list[dict]) -> Capture | None:
+        main = next((r for r in requests if (r.get("request") or {}).get("tools")), None)
+        if main is None:
+            return None
+        request = main["request"]
+        text = "\n".join(strings({k: request.get(k) for k in ("systemInstruction", "contents", "tools")}))
+        tools = {d["name"] for t in request["tools"] for d in t.get("functionDeclarations", [])}
+        init = next((e.get("init", {}) for e in events(stdout) if e.get("event") == "init"), {})
+        return Capture(text, tools, init)
 
 
 AGENTS = {agent.name: agent for agent in (Claude(), Codex(), Pi())}
