@@ -105,7 +105,7 @@ def cliff(agent, real, project: Path, prompt: str, check: str, out: Path, *, tai
     header = [f"tare cliff · {agent.name} · {project}", f"  task      {prompt}", f"  check     {check}"]
     if passed:
         return _write(out, header + [f"  original  passed ({detail}): there is no cliff to find"])
-    steps = caps.capsules(out)
+    steps = caps.capsules(out, agent)
     header.append(f"  original  failed ({detail}) after {len(steps) - 1} steps")
     if len(steps) == 1:
         return _write(out, header + ["  The run made no tool calls; there is nothing to resume."])
