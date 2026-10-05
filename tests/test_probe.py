@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from tare.agents import Capture, Claude, Codex, Real
+from tare.agents import Antigravity, Capture, Claude, Codex, Real
 from tare.probe import instruction_lines, render, score
 
 
@@ -169,3 +169,36 @@ def test_codex_capture_reads_input_items_and_additional_tools():
     assert capture.tools == {"shell", "mcp__qmd__query"}
     assert "hello" in capture.text
     assert Codex().capture("", []) is None
+
+
+def agy_real(tmp_path):
+    gemini = tmp_path / ".gemini"
+    (gemini / "config" / "skills" / "own-skill").mkdir(parents=True)
+    (gemini / "GEMINI.md").write_text(f"{INSTRUCTIONS}\n")
+    return Real(home=tmp_path, config=gemini / "antigravity-cli", binary=tmp_path / "agy")
+
+
+def test_agy_names_its_global_rule_and_skill_and_reads_zero_when_the_room_has_neither(tmp_path):
+    real = agy_real(tmp_path)
+    twin = Capture("\n".join([f"<RULE[user_global]>\n{INSTRUCTIONS}\n</RULE[user_global]>",
+                              f"- own-skill ({tmp_path}/.gemini/config/skills/own-skill/SKILL.md): the user's skill",
+                              f"App Data Directory: {tmp_path}/.gemini/antigravity-cli"]), {"run_command"}, {})
+    room = Capture("App Data Directory: /home/tare/.gemini/antigravity-cli", {"run_command"}, {})
+    clean = score(Antigravity(), real, twin, room, "env HOME\n", f"path {tmp_path}/.gemini\n")
+    assert clean.zero and set(clean.seen) == {"instructions", "home path", "skills", "reach"}
+    # the dirty room names the same files under its own home
+    dirty = score(Antigravity(), real, twin, Capture(twin.text.replace(str(tmp_path), "/home/tare"), twin.tools, {}), "", "")
+    found = {(f.kind, f.source) for f in dirty.leaks}
+    assert {("instructions", str(tmp_path / ".gemini" / "GEMINI.md")),
+            ("skills", str(tmp_path / ".gemini" / "config" / "skills"))} <= found
+
+
+def test_agy_capture_reads_the_cloud_code_request():
+    body = {"model": "tare-fake", "request": {
+        "systemInstruction": {"role": "user", "parts": [{"text": "system words"}]},
+        "contents": [{"role": "user", "parts": [{"text": "say ok"}]}],
+        "tools": [{"functionDeclarations": [{"name": "run_command", "description": "runs"}]}]}}
+    stdout = json.dumps({"event": "init", "init": {"cwd": "/work"}}) + "\n"
+    capture = Antigravity().capture(stdout, [{"request": {"contents": []}}, body])
+    assert "system words" in capture.text and "say ok" in capture.text
+    assert capture.tools == {"run_command"} and capture.init == {"cwd": "/work"}

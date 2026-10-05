@@ -443,8 +443,9 @@ export default function (pi: any) {{
 
 
 class Antigravity:
-    """The Antigravity CLI (`agy`). Not offered by `tare` until its dirty-twin test is done
-    (experiments/dirty-twin-agy)."""
+    """The Antigravity CLI (`agy`). Its context classes come from experiments/dirty-twin-agy:
+    global rules in ~/.gemini/GEMINI.md, global skills in ~/.gemini/config/skills/; files above
+    the project, ~/.agents/ and ~/.gemini/skills/ were not read."""
 
     name = "agy"
     credentials = "antigravity-oauth-token"
@@ -520,5 +521,17 @@ class Antigravity:
         init = next((e.get("init", {}) for e in events(stdout) if e.get("event") == "init"), {})
         return Capture(text, tools, init)
 
+    def instructions(self, real: Real) -> Path:
+        return real.home / ".gemini" / "GEMINI.md"  # arrives as <RULE[user_global]>
 
-AGENTS = {agent.name: agent for agent in (Claude(), Codex(), Pi())}
+    def skill_dirs(self, real: Real) -> list[Path]:
+        return [real.home / ".gemini" / "config" / "skills"]
+
+    def extra_markers(self, real: Real) -> list[tuple[str, Path]]:
+        return []
+
+    def email(self, real: Real) -> str | None:
+        return None  # the account's email and name did not reach the prompt
+
+
+AGENTS = {agent.name: agent for agent in (Claude(), Codex(), Pi(), Antigravity())}
