@@ -119,6 +119,43 @@ def codex(lines: list[str]) -> Trail:
     return trail
 
 
+def pi(lines: list[str]) -> Trail:
+    """Pi session (JSON lines, a tree of message entries) to a trail."""
+    trail = Trail()
+    calls: dict[int, list[str]] = {}
+    origin: dict[str, int] = {}
+    described: dict[str, str] = {}
+    waiting: dict[int, set[str]] = {}
+    for i, line in enumerate(lines):
+        entry = json.loads(line)
+        if entry.get("type") != "message":
+            continue
+        message = entry.get("message") or {}
+        role = message.get("role")
+        if role == "assistant":
+            for block in message.get("content") or []:
+                if block.get("type") == "text" and block.get("text", "").strip():
+                    trail.events.append(Event("say", block["text"].strip()))
+                elif block.get("type") == "toolCall":
+                    arguments = block.get("arguments") or {}
+                    detail = str(arguments.get("command") or arguments.get("path") or json.dumps(arguments))
+                    trail.events.append(Event("call", _short(detail), block.get("name", "?")))
+                    calls.setdefault(i, []).append(block["id"])
+                    origin[block["id"]] = i
+                    described[block["id"]] = f"{block.get('name', '?')} {detail.splitlines()[0][:70] if detail else ''}".strip()
+                    waiting.setdefault(i, set()).add(block["id"])
+        elif role == "toolResult":
+            trail.events.append(Event("result", _short(_text(message.get("content")))))
+            made = origin.get(message.get("toolCallId"))
+            if made is None:
+                continue
+            waiting[made].discard(message["toolCallId"])
+            if not waiting[made]:
+                ids = calls[made]
+                trail.steps.append(Step(ids, len(trail.events), i + 1, " + ".join(described[t] for t in ids)))
+    return trail
+
+
 def render(task: str, events: list[Event], workspace_only: bool = False) -> str:
     """The handoff prompt: the task and what happened so far, the same for every agent."""
     head = ("You are taking over a task in /work. The workspace is exactly as the previous session "
