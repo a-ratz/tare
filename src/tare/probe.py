@@ -12,6 +12,7 @@ Three readings, none of which asks the agent anything:
 import os
 import re
 import subprocess
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -28,6 +29,9 @@ LABELS = {"instructions": "global instructions", "memories": "memories"}
 # An offered MCP tool: an entry of the tools array, or a whole line of a deferred-tools
 # listing (tool search). A mention inside prose, e.g. in instructions, is not one.
 MCP_TOOL = re.compile(r"^(mcp__[A-Za-z0-9_.\-]+?__)[A-Za-z0-9_.\-]+$", re.M)
+# Under load a dirty twin can send its request before its MCP servers are connected. A blind
+# twin gets one more try after this pause, and the reading says so.
+TWIN_RETRY_PAUSE = 10
 
 
 @dataclass
@@ -45,6 +49,7 @@ class Reading:
     declared: list[Finding] = field(default_factory=list)
     seen: list[str] = field(default_factory=list)  # classes the control found in the dirty twin
     blind: list[str] = field(default_factory=list)  # classes the user has but the dirty twin did not show
+    retried: list[str] = field(default_factory=list)  # classes a first dirty twin was blind for
 
     @property
     def zero(self) -> bool:
@@ -181,6 +186,17 @@ def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_
     return r
 
 
+def settle(run_twin, read) -> Reading:
+    """Read with a dirty twin; a twin blind for some class gets one more try."""
+    reading = read(run_twin())
+    if reading.blind:
+        first = list(reading.blind)
+        time.sleep(TWIN_RETRY_PAUSE)
+        reading = read(run_twin())
+        reading.retried = first
+    return reading
+
+
 def probe(agent, real: Real, project: Path) -> Reading:
     project = project.resolve()
     targets = [str(real.home), str(real.config), *(str(real.home / p) for p in SECRET_PATHS)]
@@ -189,10 +205,12 @@ def probe(agent, real: Real, project: Path) -> Reading:
 
     # the dirty twin: the user's real setup, as a plain terminal would start it
     twin_env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE") or k == "CLAUDE_CONFIG_DIR"}
-    with Fake() as fake:
-        args, env = agent.probe(fake.url)
-        with agent.twin(real, fake.url) as extra:
-            twin = _capture(agent, [str(real.binary), *args], twin_env | env | extra, project, fake)
+
+    def run_twin() -> Capture:
+        with Fake() as fake:
+            args, env = agent.probe(fake.url)
+            with agent.twin(real, fake.url) as extra:
+                return _capture(agent, [str(real.binary), *args], twin_env | env | extra, project, fake)
 
     def in_room(home: Path, flags: list[str]) -> Capture:
         with Fake() as fake:
@@ -209,7 +227,8 @@ def probe(agent, real: Real, project: Path) -> Reading:
         reach_in = subprocess.run(bwrap(agent, real, home, project, reach), capture_output=True, text=True,
                                   timeout=60, check=True).stdout
     reach_out = subprocess.run(reach, capture_output=True, text=True, timeout=60, check=True).stdout
-    return score(agent, real, twin, room, reach_in, reach_out, bare=bare, project=project)
+    return settle(run_twin, lambda twin: score(agent, real, twin, room, reach_in, reach_out, bare=bare,
+                                                project=project))
 
 
 def render(reading: Reading, project: Path) -> str:
@@ -221,6 +240,9 @@ def render(reading: Reading, project: Path) -> str:
     version = f" {reading.version}" if reading.version != "?" else ""
     out = [f"tare probe · {reading.agent}{version} · {project}",
            f"  control   dirty twin shows: {', '.join(reading.seen) or 'nothing'}"]
+    if reading.retried:
+        out.append(f"  retried   the first dirty twin was blind for {', '.join(reading.retried)}; "
+                   "this reading comes from a second one")
     for cls in reading.blind:
         out.append(f"  BLIND     {cls}: the user has it, but the dirty twin did not show it")
     if reading.leaks:

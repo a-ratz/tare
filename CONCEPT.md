@@ -169,7 +169,9 @@ Tare is meant to sit underneath such frameworks: their exam, Tare's clean room.
    - fresh credential copy per room, refused when the login would need a refresh;
    - cleared environment with an allowlist;
    - reach probe as a script;
-   - context probe through the fake, with the dirty twin as control;
+   - context probe through the fake, with the dirty twin as control; a twin that is blind for
+     a class runs once more after 10 s, and the reading names the retry (#68: with six runs
+     starting together, a twin sent its request before its MCP servers were connected);
    - `ENABLE_TOOL_SEARCH=true` in both probe and run.
 
    **Measured on this machine:**

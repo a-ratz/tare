@@ -49,7 +49,8 @@ your own machine, tare is for you.
 - **Measures instead of asking.** tare checks what the agent actually receives. An agent asked
   about its own context can refuse or be wrong.
 - **Tells you when it cannot see.** Every probe also checks your real setup. If tare cannot
-  find a kind of context there, it reports itself blind instead of reporting clean.
+  find a kind of context there, it tries once more (a busy machine can be slow to connect MCP
+  servers) and then reports itself blind instead of reporting clean.
 - **Puts nothing of yours within reach.** Your home directory, your other logins and your
   shell's secrets do not exist inside the room.
 - **Keeps your own session logged in.** Each run gets a fresh copy of the login, removed

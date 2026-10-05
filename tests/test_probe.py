@@ -1,9 +1,11 @@
 import json
+from pathlib import Path
 
 import pytest
 
+from tare import probe as probe_module
 from tare.agents import Capture, Claude, Codex, Real
-from tare.probe import instruction_lines, render, score
+from tare.probe import Reading, instruction_lines, render, score
 
 
 INSTRUCTIONS = "Always answer like a pirate captain, every single time."
@@ -169,3 +171,18 @@ def test_codex_capture_reads_input_items_and_additional_tools():
     assert capture.tools == {"shell", "mcp__qmd__query"}
     assert "hello" in capture.text
     assert Codex().capture("", []) is None
+
+
+def test_a_blind_dirty_twin_gets_one_more_try_and_the_reading_says_so(monkeypatch):
+    monkeypatch.setattr(probe_module, "TWIN_RETRY_PAUSE", 0)
+    twins = iter(["slow", "settled", "never used"])
+    readings = {"slow": Reading(blind=["mcp"]), "settled": Reading(seen=["mcp"])}
+    reading = probe_module.settle(lambda: next(twins), readings.get)
+    assert reading.zero and reading.retried == ["mcp"] and next(twins) == "never used"
+    assert "retried   the first dirty twin was blind for mcp" in render(reading, Path("/p"))
+
+
+def test_a_twin_blind_twice_stays_blind(monkeypatch):
+    monkeypatch.setattr(probe_module, "TWIN_RETRY_PAUSE", 0)
+    reading = probe_module.settle(lambda: "twin", lambda twin: Reading(blind=["mcp"]))
+    assert not reading.zero and reading.blind == ["mcp"]
