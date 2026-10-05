@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tare live</title>
+<style>
+:root {
+  --bg: #0e1116; --panel: #161b22; --panel-2: #1c222b; --line: #2a313c; --text: #e6edf3; --muted: #8b96a5;
+  --pass: #3fb950; --fail: #f85149; --run: #d29922; --accent: #79c0ff; --threshold: #a371f7;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: light) {
+  :root { --bg: #f6f8fa; --panel: #ffffff; --panel-2: #f0f3f6; --line: #d0d7de; --text: #1f2328; --muted: #59636e;
+          --pass: #1a7f37; --fail: #cf222e; --run: #9a6700; --accent: #0969da; --threshold: #8250df; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1180px; margin: 0 auto; padding: 20px 16px 60px; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 16px; }
+h1 { font: 600 22px/1 var(--mono); margin: 0; letter-spacing: .5px; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: var(--panel-2);
+        border: 1px solid var(--line); font-size: 12px; white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; flex: none; }
+.dot.pass { background: var(--pass); } .dot.fail { background: var(--fail); } .dot.run { background: var(--run); animation: pulse 1.2s infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+.muted { color: var(--muted); }
+.grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+.kv { display: grid; grid-template-columns: 90px 1fr; gap: 4px 12px; }
+.kv div:nth-child(odd) { color: var(--muted); }
+code, pre, .mono { font-family: var(--mono); font-size: 12.5px; }
+pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
+.steps { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.step { min-width: 26px; padding: 2px 6px; border-radius: 6px; background: var(--panel-2); border: 1px solid var(--line);
+        font: 11px var(--mono); text-align: center; }
+.step.cliff { border-color: var(--fail); color: var(--fail); font-weight: 700; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; font-size: 12px; }
+td.num { font-family: var(--mono); white-space: nowrap; }
+.matrix { display: grid; grid-template-columns: 70px 1fr 1fr; gap: 6px; align-items: stretch; margin: 8px 0; }
+.matrix .head { color: var(--muted); font-size: 12px; align-self: end; }
+.cell { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px; min-height: 58px; }
+.cell .big { font: 600 18px var(--mono); }
+.dots { display: flex; gap: 3px; flex-wrap: wrap; margin-top: 4px; }
+.effect { font-family: var(--mono); font-size: 12.5px; }
+.bar { height: 6px; border-radius: 3px; background: var(--panel-2); overflow: hidden; margin-top: 6px; }
+.bar > i { display: block; height: 100%; background: var(--accent); }
+.activity { font-family: var(--mono); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+details summary { cursor: pointer; color: var(--muted); }
+svg text { fill: var(--muted); font: 11px var(--mono); }
+.empty { color: var(--muted); font-style: italic; }
+.stale { color: var(--run); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1 id="title">tare</h1>
+    <span class="chip" id="phase"><span class="dot"></span><span>connecting</span></span>
+    <span class="chip" id="elapsed"></span>
+    <span class="muted" id="updated"></span>
+  </header>
+  <div id="app"><p class="empty">Waiting for the run to start…</p></div>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const pct = (x) => (x == null ? "–" : x.toFixed(2));
+const dur = (s) => { s = Math.max(0, Math.round(s)); const m = Math.floor(s / 60); return m ? `${m}m ${String(s % 60).padStart(2, "0")}s` : `${s}s`; };
+const dot = (status) => `<span class="dot ${status === "passed" ? "pass" : status === "failed" ? "fail" : status === "running" ? "run" : ""}"></span>`;
+
+function recipeCard(s) {
+  const r = s.recipe || {};
+  const sides = Object.entries(s.sides || {}).map(([k, v]) => {
+    const version = r.agents && r.agents[k] ? r.agents[k].version : "";
+    return `<div>agent ${esc(k)}</div><div><b>${esc(v.agent)}</b> ${esc((v.args || []).join(" "))} <span class="muted">${esc(version)}</span></div>`;
+  }).join("");
+  const p = s.params || {};
+  const params = s.kind === "cliff" ? `${esc(p.tails)} tails per probe · budget ${esc(p.budget)}` : `cuts ${esc((p.cuts || []).join(", "))} · ${esc(p.tails)} tails per cell`;
+  return `<section class="panel"><h2>Recipe</h2><div class="kv">
+    <div>task</div><div>${esc(s.task)}</div>
+    <div>check</div><div><code>${esc(s.check)}</code></div>
+    <div>project</div><div><code>${esc(s.project)}</code> <span class="muted">${esc(r.project_digest ? "digest " + r.project_digest.slice(0, 12) : "")}</span></div>
+    ${sides}
+    <div>params</div><div>${params}</div>
+    ${r.command ? `<div>repeat</div><div><code>tare rerun ${esc(r.out || "")}</code></div>` : ""}
+  </div></section>`;
+}
+
+function probesCard(s) {
+  if (!s.probes.length) return "";
+  return `<section class="panel"><h2>Probes</h2><div class="grid">${s.probes.map((p) => `
+    <div><span class="chip">${dot(p.zero ? "passed" : "failed")} ${esc(p.agent)} · ${p.zero ? "tare: 0.00" : "not zero"}</span>
+    <details><summary>reading</summary><pre>${esc(p.text)}</pre></details></div>`).join("")}</div></section>`;
+}
+
+function originalsCard(s, cliffStep) {
+  const lanes = Object.entries(s.sides || {}).map(([k, side]) => {
+    const o = s.originals[k];
+    if (!o) return `<div><b>${esc(k)} · ${esc(side.agent)}</b> <span class="muted">waiting</span></div>`;
+    if (o.running) return `<div><span class="chip">${dot("running")} ${esc(k)} · ${esc(side.agent)} · ${o.count} steps so far</span>
+      <div class="activity">${esc(o.activity || "starting…")}</div></div>`;
+    const steps = o.steps.slice(1).map((t, i) => `<span class="step ${cliffStep === i + 1 ? "cliff" : ""}" title="${esc(t)}">${i + 1}</span>`).join("");
+    return `<div><span class="chip">${dot(o.passed ? "passed" : "failed")} ${esc(k)} · ${esc(side.agent)} · ${o.passed ? "passed" : "failed"} after ${o.steps.length - 1} steps</span>
+      <div class="steps">${steps}</div></div>`;
+  }).join("");
+  return `<section class="panel"><h2>Original ${Object.keys(s.sides || {}).length > 1 ? "runs" : "run"}</h2><div class="grid">${lanes}</div></section>`;
+}
+
+function cliffCard(s) {
+  const rows = s.steps || [];
+  if (!rows.length) return "";
+  const o = s.originals.a || {};
+  const last = Math.max(1, (o.steps ? o.steps.length - 1 : 0), ...rows.map((r) => r.step));
+  const base = rows.find((r) => r.step === 0);
+  const theta = base && base.rate != null ? base.rate : null;
+  const W = 760, H = 220, L = 40, R = 14, T = 12, B = 28;
+  const x = (step) => L + (step / last) * (W - L - R), y = (v) => T + (1 - v) * (H - T - B);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px;display:block" role="img" aria-label="pass rate by step">`;
+  for (const v of [0, .5, 1]) svg += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="6" y="${y(v) + 4}">${v.toFixed(1)}</text>`;
+  if (theta != null) {
+    svg += `<line x1="${L}" x2="${W - R}" y1="${y(theta)}" y2="${y(theta)}" stroke="var(--accent)" stroke-dasharray="2 3"/>`;
+    svg += `<line x1="${L}" x2="${W - R}" y1="${y(theta / 2)}" y2="${y(theta / 2)}" stroke="var(--threshold)" stroke-dasharray="6 4"/>`;
+    svg += `<text x="${L + 6}" y="${y(theta / 2) - 5}">threshold: half of the fresh-start rate</text>`;
+  }
+  for (const r of rows) {
+    if (r.rate == null) { svg += `<circle cx="${x(r.step)}" cy="${y(.5)}" r="5" fill="none" stroke="var(--run)"/>`; continue; }
+    const high = theta == null || r.rate >= theta / 2, color = high ? "var(--pass)" : "var(--fail)";
+    svg += `<line x1="${x(r.step)}" x2="${x(r.step)}" y1="${y(r.hi)}" y2="${y(r.lo)}" stroke="${color}" stroke-width="3" opacity=".45"/>`;
+    svg += `<circle cx="${x(r.step)}" cy="${y(r.rate)}" r="5" fill="${color}"/>`;
+    svg += `<text x="${x(r.step) - 4}" y="${H - 8}">${r.step}</text>`;
+  }
+  svg += `</svg>`;
+  const table = rows.map((r) => `<tr><td class="num">${r.step}</td><td>${esc(o.steps ? o.steps[r.step] : "")}</td>
+    <td class="num">${r.passes}/${r.n}${r.running ? ` <span class="muted">+${r.running} running</span>` : ""}</td>
+    <td class="num">${pct(r.rate)}</td><td class="num">${r.n ? `${pct(r.lo)}–${pct(r.hi)}` : "–"}</td></tr>`).join("");
+  return `<section class="panel"><h2>Cliff search</h2>${svg}
+    <table><thead><tr><th>step</th><th>what the step did</th><th>tails</th><th>rate</th><th>95% interval</th></tr></thead><tbody>${table}</tbody></table></section>`;
+}
+
+function effect(e, label) {
+  if (!e) return `<div class="effect muted">${label}: waiting for every cell</div>`;
+  const [v, lo, hi] = e;
+  return `<div class="effect">${label}: <b>${v >= 0 ? "+" : ""}${v.toFixed(2)}</b> <span class="muted">[${lo.toFixed(2)}, ${hi.toFixed(2)}]</span></div>`;
+}
+
+function swapCard(s) {
+  const cuts = s.cells || [];
+  if (!cuts.length) return "";
+  const agentName = (k) => esc((s.sides[k] || {}).agent || k);
+  return `<section class="panel"><h2>Swap</h2><div class="grid">${cuts.map((c) => {
+    const cell = (r, m) => {
+      const v = c.cells[r + m], dots = "<span class='dot pass'></span>".repeat(v.passes) + "<span class='dot fail'></span>".repeat(v.n - v.passes) + "<span class='dot run'></span>".repeat(v.running);
+      return `<div class="cell"><div class="big">${v.passes}/${v.n}</div><div class="dots">${dots}</div></div>`;
+    };
+    const native = Object.entries(c.native).map(([r, v]) => `room ${r} native: ${v.passes}/${v.n}`).join(" · ");
+    return `<div><b>cut ${c.fraction.toFixed(2)}</b> <span class="muted">room a at step ${c.steps.a}, room b at step ${c.steps.b}</span>
+      <div class="matrix"><div></div><div class="head">agent a · ${agentName("a")}</div><div class="head">agent b · ${agentName("b")}</div>
+        <div class="head">room a</div>${cell("a", "a")}${cell("a", "b")}
+        <div class="head">room b</div>${cell("b", "a")}${cell("b", "b")}</div>
+      ${native ? `<div class="muted">${native}</div>` : ""}
+      ${effect(c.state, "state effect (room a better)")}${effect(c.model, "model effect (agent a better)")}</div>`;
+  }).join("")}</div></section>`;
+}
+
+function tailsCard(s) {
+  const running = s.tails.filter((t) => t.status === "running"), done = s.tails.filter((t) => t.status !== "running");
+  if (!s.tails.length) return "";
+  const fraction = (i) => (s.plan && s.plan[i] ? s.plan[i].fraction.toFixed(2) : i);
+  const where = (t) => s.kind === "cliff" ? `step ${t.step}` : `cut ${fraction(t.cut)} · room ${t.room} · agent ${t.agent}${t.kind === "native" ? " · native" : ""}`;
+  const row = (t) => `<tr><td>${dot(t.status)}</td><td class="num">${esc(where(t))}</td><td>${esc(t.agent_name)}</td>
+    <td class="num">${dur((t.ended || s.now) - t.started)}</td><td class="activity">${esc(t.status === "running" ? (t.activity || "starting…") : t.detail || t.status)}</td></tr>`;
+  const total = s.kind === "cliff" ? `${done.length} of a budget of ${esc((s.params || {}).budget)}` : `${done.length} done`;
+  return `<section class="panel"><h2>Tails · ${running.length} running · ${total}</h2>
+    <table><thead><tr><th></th><th>where</th><th>agent</th><th>time</th><th>doing / result</th></tr></thead>
+    <tbody>${running.map(row).join("")}${done.slice(0, 40).map(row).join("")}</tbody></table></section>`;
+}
+
+function render(s) {
+  $("#title").textContent = s.kind ? `tare ${s.kind}` : "tare";
+  document.title = s.kind ? `tare ${s.kind} · ${s.phase}` : "tare live";
+  const status = s.phase === "done" ? "passed" : "running";
+  $("#phase").innerHTML = `${dot(status)}<span>${esc(s.phase)}</span>`;
+  if (s.started) $("#elapsed").textContent = `${dur((s.phase === "done" ? s.updated : s.now) - s.started)}`;
+  const quiet = s.updated ? s.now - s.updated : 0;
+  $("#updated").innerHTML = s.phase !== "done" && quiet > 300 ? `<span class="stale">no journal entry for ${dur(quiet)}</span>` : "";
+  let cliffStep = null;
+  if (s.report) { const m = s.report.match(/lost at step (\d+)/); if (m) cliffStep = Number(m[1]); }
+  $("#app").innerHTML = (s.kind ? recipeCard(s) : "") + probesCard(s) + (s.kind ? originalsCard(s, cliffStep) : "")
+    + (s.report ? `<section class="panel"><h2>Report</h2><pre>${esc(s.report)}</pre></section>` : "")
+    + (s.kind === "cliff" ? cliffCard(s) : "") + (s.kind === "swap" ? swapCard(s) : "") + tailsCard(s);
+}
+
+async function tick() {
+  try {
+    const r = await fetch("/state", { cache: "no-store" });
+    render(await r.json());
+  } catch (e) {
+    $("#phase").innerHTML = `${dot("failed")}<span>disconnected</span>`;
+  }
+  setTimeout(tick, 1000);
+}
+tick();
+</script>
+</body>
+</html>

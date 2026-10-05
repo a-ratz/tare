@@ -233,7 +233,12 @@ Tare is meant to sit underneath such frameworks: their exam, Tare's clean room.
      `codex exec resume <id>`.
    - **Measured:** the resumed thread kept the original id, and from step 1 it finished the
      remaining plan. Swap now has native cells for both agents.
-9. Pi (epic #30) and Gemini CLI (epic #34).
+9. ~~Live dashboard and recipes~~. Done 2026-10-05 (epic #39).
+   - **The run directory is the source of truth:** the journal, the recipe, and the agents'
+     live output. So `tare watch` shows a finished run the same way as a live one.
+   - **Recipes** keep the command, the project digest and the CLI versions. `tare rerun`
+     repeats a run and names what changed.
+10. Pi (epic #30) and Gemini CLI (epic #34).
 
 ## Name
 

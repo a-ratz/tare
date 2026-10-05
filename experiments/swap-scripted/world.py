@@ -18,8 +18,10 @@ import uuid
 from pathlib import Path
 
 import tare.capsule as caps
+from tare import dashboard
 from tare.agents import Claude
 from tare.fake import Fake
+from tare.journal import Journal
 from tare.swap import Side, swap
 
 
@@ -99,7 +101,8 @@ real = claude.discover()
 a = Side("a", claude, real, ["--model", "claude-opus-5-5"], out / "a")
 b = Side("b", claude, real, ["--model", "claude-haiku-4-5-20251001"], out / "b")
 tails = int(sys.argv[1]) if len(sys.argv) > 1 else 4
+print("live dashboard:", dashboard.serve(out, 8777)[1], flush=True)
 with Fake(world) as fake:
     print(swap(a, b, project, "Write the answer to answer.txt.", 'test "$(cat answer.txt)" = 42', out,
-               cuts=[0, 0.5, 1], tails=tails, jobs=4, env={"ANTHROPIC_BASE_URL": fake.url}))
+               cuts=[0, 0.5, 1], tails=tails, jobs=4, env={"ANTHROPIC_BASE_URL": fake.url}, journal=Journal(out)))
 print("run directory:", out)

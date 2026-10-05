@@ -73,8 +73,9 @@ def _config(agent, home: Path) -> Path:
 
 
 def record(agent, real, project: Path, out: Path, prompt: str, args: list[str],
-           env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
-    """The original run, in a room, on a copy of the project, with a capsule per tool call."""
+           env: dict[str, str] | None = None) -> int:
+    """The original run, in a room, on a copy of the project, with a capsule per tool call.
+    Returns the agent's exit code."""
     store = out / "store"
     (store / "capsules").mkdir(parents=True)
     (store / "hook.sh").write_text(HOOK)
@@ -85,13 +86,24 @@ def record(agent, real, project: Path, out: Path, prompt: str, args: list[str],
     with room_home(agent, real) as home:
         agent.prepare_hook(_config(agent, home), HOOK_COMMAND)
         command = [agent.name, *agent.room_flags, *agent.run_args(prompt, args, hook=HOOK_COMMAND)]
-        proc = subprocess.run(bwrap(agent, real, home, work, command, env, ["--bind", str(store), RUN_MOUNT]),
-                              capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        code = _stream(bwrap(agent, real, home, work, command, env, ["--bind", str(store), RUN_MOUNT]),
+                       out / "original", None)
         session = agent.session_file(home)
         if session:
             shutil.copyfile(session, out / "original" / "session.jsonl")
-    (out / "original" / "stdout.jsonl").write_text(proc.stdout)
-    return proc
+    return code
+
+
+def _stream(argv: list[str], log_dir: Path, timeout: float | None) -> int:
+    """Run a room with the agent's stdout and stderr written to log_dir as they come (the dashboard reads them)."""
+    with (log_dir / "stdout.jsonl").open("w") as out, (log_dir / "stderr.log").open("w") as err:
+        proc = subprocess.Popen(argv, stdout=out, stderr=err, stdin=subprocess.DEVNULL)
+        try:
+            return proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+            raise
 
 
 def session_lines(out: Path) -> list[str]:
@@ -127,11 +139,9 @@ def session_id(out: Path) -> str:
     raise ValueError("no session id in the session file")
 
 
-def _run_in(agent, real, home: Path, work: Path, command: list[str], env, timeout: float) -> str:
+def _run_in(agent, real, home: Path, work: Path, command: list[str], env, timeout: float, log_dir: Path) -> str:
     try:
-        proc = subprocess.run(bwrap(agent, real, home, work, command, env), capture_output=True, text=True,
-                              timeout=timeout, stdin=subprocess.DEVNULL)
-        return f"agent exit {proc.returncode}"
+        return f"agent exit {_stream(bwrap(agent, real, home, work, command, env), log_dir, timeout)}"
     except subprocess.TimeoutExpired:
         return f"agent stopped after {int(timeout)} s"
 
@@ -159,7 +169,7 @@ def run_tail(agent, real, out: Path, capsule: Capsule, prompt: str, args: list[s
             sid = session_id(out)
             agent.place_session(home, sid, session_lines(out)[:capsule.cut])
             command = [agent.name, *agent.room_flags, *agent.resume_args(sid, CONTINUE, args)]
-        ran = _run_in(agent, real, home, work, command, env, timeout)
+        ran = _run_in(agent, real, home, work, command, env, timeout, tail_dir)
     return _finish(tail_dir, work, capsule.step, ran, check)
 
 
@@ -175,7 +185,7 @@ def run_handoff(agent, real, tail_dir: Path, capsule: Capsule, events: list[trai
     (tail_dir / "handoff.txt").write_text(handoff)
     with room_home(agent, real) as home:
         ran = _run_in(agent, real, home, work, [agent.name, *agent.room_flags, *agent.run_args(handoff, args)],
-                      env, timeout)
+                      env, timeout, tail_dir)
     return _finish(tail_dir, work, capsule.step, ran, check, {"agent_name": agent.name})
 
 
