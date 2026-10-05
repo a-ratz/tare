@@ -57,6 +57,9 @@ own machine, tare is for you.
   could log out your real session.
 - **Works like the agent you know.** Claude Code or Codex, interactive or one-shot: all of
   the agent's arguments pass through, and your project is mounted at `/work`.
+- **Shows where a failed run became lost.** `tare cliff` resumes a failed run from its own
+  steps, many times, and names the step after which it no longer succeeds as often as a
+  fresh start does, with the evidence next to it.
 
 ## When to use
 
@@ -65,6 +68,7 @@ own machine, tare is for you.
 | you compare agent runs with and without a skill, plugin or prompt | you need a sandbox against a hostile agent: the room has network access and a usable login |
 | you benchmark agents on your own machine | you are on macOS (planned, not built) |
 | you want a fresh-machine run without a fresh machine | you log in with an API key only (untested) |
+| an agent failed a task and you want to know which step lost it | you want a single run explained without rerunning it: Cliff spends tails |
 
 ## Quick Start
 
@@ -135,6 +139,38 @@ Two residuals are declared: they appear in the reading but do not block the run.
 subscription login, your account email arrives with the login. The room also holds a copy of
 your login, because the agent needs one to run.
 
+### Cliff: where did a failed run become lost
+
+```bash
+tare cliff claude "fix the failing test" --check "uv run pytest -q" -- --model sonnet
+```
+
+tare runs the task once in a room and keeps a snapshot of the workspace and the conversation
+after every tool call. If the check fails, it resumes the run from those steps in fresh
+rooms, three tails at a time. A fresh start is the baseline. The search narrows down the step
+after which the tails stop passing, until the evidence separates or the budget (`--budget`,
+default 30 tails) is spent. Everything after `--` goes to every agent run, so pin the model.
+
+This report comes from the real machinery (Claude Code, rooms, resume, check) run against a
+scripted model whose cliff is known: step 4 writes the wrong answer into a note.
+
+```text
+  step  what the step did                                      tails  pass  rate  95% interval
+     0  start                                                     3     3  1.00  0.44-1.00
+     3  Bash echo hi > scratch.txt                                6     5  0.83  0.44-0.97
+     4  Bash echo answer=41 > notes.txt                           6     0  0.00  0.00-0.39 <
+     6  Bash echo 41 > answer.txt                                 3     0  0.00  0.00-0.56
+
+  verdict   The run became lost at step 4.
+  at step 4: Bash echo answer=41 > notes.txt
+  changed   notes.txt
+  monotone  yes
+  tails     18 of a budget of 30
+```
+
+Cliff works with Claude Code for now. Each tail is a real agent run, so a search costs what
+its tails cost.
+
 ## How it works
 
 tare takes three readings, and none of them asks the agent anything. First, the real CLI runs
@@ -148,8 +184,8 @@ looks for your files and inherited secrets.
 
 ## Roadmap
 
-Next, in this order: [Cliff][epic-cliff], which finds the steps after which a failed run
-became lost, then [Swap][epic-swap], which tells whether the room or the model was to blame.
+Next: [Swap][epic-swap], which crosses two runs' workspaces with two agents at the cliff and
+tells whether the room or the model was to blame.
 
 ## Contributing
 
@@ -175,5 +211,4 @@ Crafted with [Readme Craft](https://github.com/motiful/readme-craft)
 [platform-url]: #install
 [agent-shield]: https://img.shields.io/badge/agents-Claude%20Code%20%7C%20Codex-D97757.svg
 [agent-url]: #install
-[epic-cliff]: https://github.com/AndreRatzenberger/tare/issues/11
 [epic-swap]: https://github.com/AndreRatzenberger/tare/issues/17

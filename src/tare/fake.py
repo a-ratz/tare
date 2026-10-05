@@ -3,7 +3,8 @@
 The CLI under test is pointed at it: Claude Code with ANTHROPIC_BASE_URL (Anthropic
 Messages API), Codex with `-c openai_base_url=...` (OpenAI Responses API). Every request
 body is kept in memory; headers are never stored, so the login token never leaves the
-request. Each turn is answered with the text "ok", so the CLI ends its loop at once.
+request. By default each turn is answered with the text "ok", so the CLI ends its loop at
+once; a `respond` policy can script tool calls instead (Anthropic Messages only).
 """
 import json
 import sys
@@ -11,15 +12,28 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
-def _messages_events(model: str) -> list[tuple[str, dict]]:
+OK = [{"type": "text", "text": "ok"}]
+
+
+def _stop_reason(blocks: list[dict]) -> str:
+    return "tool_use" if any(b["type"] == "tool_use" for b in blocks) else "end_turn"
+
+
+def _messages_events(model: str, blocks: list[dict]) -> list[tuple[str, dict]]:
     message = {"id": "msg_tare", "type": "message", "role": "assistant", "model": model, "content": [],
                "stop_reason": None, "stop_sequence": None, "usage": {"input_tokens": 1, "output_tokens": 1}}
-    return [
-        ("message_start", {"type": "message_start", "message": message}),
-        ("content_block_start", {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}),
-        ("content_block_delta", {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "ok"}}),
-        ("content_block_stop", {"type": "content_block_stop", "index": 0}),
-        ("message_delta", {"type": "message_delta", "delta": {"stop_reason": "end_turn", "stop_sequence": None},
+    events = [("message_start", {"type": "message_start", "message": message})]
+    for i, block in enumerate(blocks):
+        if block["type"] == "text":
+            start, delta = {"type": "text", "text": ""}, {"type": "text_delta", "text": block["text"]}
+        else:
+            start = {"type": "tool_use", "id": block["id"], "name": block["name"], "input": {}}
+            delta = {"type": "input_json_delta", "partial_json": json.dumps(block["input"])}
+        events += [("content_block_start", {"type": "content_block_start", "index": i, "content_block": start}),
+                   ("content_block_delta", {"type": "content_block_delta", "index": i, "delta": delta}),
+                   ("content_block_stop", {"type": "content_block_stop", "index": i})]
+    return events + [
+        ("message_delta", {"type": "message_delta", "delta": {"stop_reason": _stop_reason(blocks), "stop_sequence": None},
                            "usage": {"output_tokens": 1}}),
         ("message_stop", {"type": "message_stop"}),
     ]
@@ -51,7 +65,9 @@ class _QuietServer(ThreadingHTTPServer):
 class Fake:
     """Context manager: serves on a free port of 127.0.0.1 and collects request bodies."""
 
-    def __init__(self):
+    def __init__(self, respond=None):
+        # respond(body) -> content blocks of the answer (text and tool_use), for scripted runs
+        self.respond = respond or (lambda body: OK)
         self.requests: list[dict] = []
         self.other_paths: list[str] = []
         fake = self
@@ -105,10 +121,11 @@ class Fake:
                 if path.endswith("/responses"):
                     return self._stream(_responses_events())
                 model = body.get("model", "fake")
+                blocks = fake.respond(body) if body.get("tools") else OK
                 if body.get("stream"):
-                    return self._stream(_messages_events(model))
+                    return self._stream(_messages_events(model, blocks))
                 self._json(200, {"id": "msg_tare", "type": "message", "role": "assistant", "model": model,
-                                 "content": [{"type": "text", "text": "ok"}], "stop_reason": "end_turn",
+                                 "content": blocks, "stop_reason": _stop_reason(blocks),
                                  "stop_sequence": None, "usage": {"input_tokens": 1, "output_tokens": 1}})
 
         self._server = _QuietServer(("127.0.0.1", 0), Handler)

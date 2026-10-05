@@ -197,6 +197,19 @@ Tare is meant to sit underneath such frameworks: their exam, Tare's clean room.
 5. ~~Bring the `claude-naked` connector fix in~~. `tare claude` carries its own context
    layer (fresh config plus the flags). The fix stays useful for `claude-naked` itself:
    `f61aff7` on `fix/remote-plugin-isolation` in `codex-naked`, pushed, not merged.
+6. ~~Cliff~~. Done 2026-10-05 for Claude Code (`tare cliff claude`).
+   - **Capsules:** a `PostToolUse` hook from `--settings` archives the workspace after every
+     tool call, and it fires with the room flags in place.
+   - **Tails:** each tail resumes the transcript cut after that step's tool result.
+   - **Measured:**
+     - Scripted run against a model whose cliff is known: the search found step 4 with
+       separated intervals in 18 tails.
+     - Real model: a recorded run resumed from step 1, and the backend accepted the cut
+       transcript.
+   - **Open:**
+     - Cliff for Codex, which resumes differently.
+     - The cost of real searches: every tail is a full agent run.
+7. Swap (epic #17), on top of Cliff's capsules and tails.
 
 ## Name
 

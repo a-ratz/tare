@@ -2,14 +2,17 @@
 
   tare probe {claude,codex} [--project DIR]
   tare {claude,codex} [--project DIR] [--allow-dirty] [--yolo] [-- AGENT_ARGS...]
+  tare cliff claude PROMPT --check CMD [--tails N] [--budget N] [--jobs N] [-- CLAUDE_ARGS...]
 """
 import argparse
 import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from .agents import AGENTS
+from .cliff import cliff
 from .probe import probe, render
 from .room import TareError, bwrap, room_home
 
@@ -47,8 +50,18 @@ def main(argv: list[str] | None = None) -> int:
         c.add_argument("--project", type=Path, default=Path.cwd())
         c.add_argument("--allow-dirty", action="store_true", help="start even if the reading is not zero")
         c.add_argument("--yolo", action="store_true", help="skip the agent's permission prompts and sandbox")
+    k = sub.add_parser("cliff", help="find where a failed run became lost (args after -- go to every agent run)")
+    k.add_argument("agent", choices=["claude"])
+    k.add_argument("prompt", help="the task, as given to the agent")
+    k.add_argument("--check", required=True, help="shell command run in the finished workspace; exit 0 passes")
+    k.add_argument("--project", type=Path, default=Path.cwd())
+    k.add_argument("--tails", type=int, default=3, help="tails per probe (default 3)")
+    k.add_argument("--budget", type=int, default=30, help="tails in total, baseline included (default 30)")
+    k.add_argument("--jobs", type=int, default=3, help="tails run at the same time (default 3)")
+    k.add_argument("--out", type=Path, help="run directory (default ~/.local/state/tare/cliff/<project>-<time>)")
+    k.add_argument("--allow-dirty", action="store_true", help="run even if the probe reading is not zero")
     args = ap.parse_args(argv)
-    agent = AGENTS[args.agent if args.command == "probe" else args.command]
+    agent = AGENTS[args.agent if args.command in ("probe", "cliff") else args.command]
     project = args.project.resolve()
     for signum in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(signum, _exit_on)
@@ -64,6 +77,13 @@ def main(argv: list[str] | None = None) -> int:
                 print("tare: not starting; fix the leaks or pass --allow-dirty", file=sys.stderr)
                 return 1
             print("tare: --allow-dirty given, starting in a room that is not zero", file=sys.stderr)
+        if args.command == "cliff":
+            out = args.out or Path.home() / ".local/state/tare/cliff" / f"{project.name}-{time.strftime('%Y%m%d-%H%M%S')}"
+            out.mkdir(parents=True, exist_ok=False)
+            print(f"tare cliff: run directory {out}", file=sys.stderr)
+            print(cliff(agent, real, project, args.prompt, args.check, out, tails=args.tails, budget=args.budget,
+                        jobs=args.jobs, claude_args=passthrough), end="")
+            return 0
         flags = agent.room_flags + (agent.yolo if args.yolo else [])
         with room_home(agent, real) as home:
             return _run_attached(bwrap(agent, real, home, project, [agent.name, *flags, *passthrough]))
