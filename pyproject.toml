@@ -22,10 +22,10 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/AndreRatzenberger/tare"
-Repository = "https://github.com/AndreRatzenberger/tare"
-Issues = "https://github.com/AndreRatzenberger/tare/issues"
-Concept = "https://github.com/AndreRatzenberger/tare/blob/main/CONCEPT.md"
+Homepage = "https://github.com/a-ratz/tare"
+Repository = "https://github.com/a-ratz/tare"
+Issues = "https://github.com/a-ratz/tare/issues"
+Concept = "https://github.com/a-ratz/tare/blob/main/CONCEPT.md"
 
 [project.scripts]
 tare = "tare.cli:main"

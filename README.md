@@ -1,8 +1,8 @@
 <div align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/AndreRatzenberger/tare/main/.github/logo-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/AndreRatzenberger/tare/main/.github/logo-light.svg">
-    <img alt="tare" src="https://raw.githubusercontent.com/AndreRatzenberger/tare/main/.github/logo-light.svg" width="260">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/a-ratz/tare/main/.github/logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/a-ratz/tare/main/.github/logo-light.svg">
+    <img alt="tare" src="https://raw.githubusercontent.com/a-ratz/tare/main/.github/logo-light.svg" width="260">
   </picture>
 
   <p>Prove your coding agent starts without your personal setup before you measure it.</p>
@@ -19,12 +19,12 @@
 </div>
 
 <div align="center">
-  <a href="https://github.com/AndreRatzenberger/tare#install">Install</a> &middot;
+  <a href="https://github.com/a-ratz/tare#install">Install</a> &middot;
   <a href="#quick-start">Quick start</a> &middot;
   <a href="#features">Features</a> &middot;
   <a href="#how-it-works">How it works</a> &middot;
-  <a href="https://github.com/AndreRatzenberger/tare/blob/main/CONCEPT.md">Concept</a> &middot;
-  <a href="https://github.com/AndreRatzenberger/tare/issues/new?template=bug_report.md">Report Bug</a>
+  <a href="https://github.com/a-ratz/tare/blob/main/CONCEPT.md">Concept</a> &middot;
+  <a href="https://github.com/a-ratz/tare/issues/new?template=bug_report.md">Report Bug</a>
 </div>
 
 <br>
@@ -117,7 +117,7 @@ Clone the repository, then run tare from the checkout with `uv run tare ...`, or
 your `PATH` with `uv tool install .`:
 
 ```bash
-git clone https://github.com/AndreRatzenberger/tare.git && cd tare
+git clone https://github.com/a-ratz/tare.git && cd tare
 uv tool install .   # optional
 ```
 
@@ -358,7 +358,7 @@ succeed, after it the run no longer does.
 > **Experimental.** Cliff finds the known step in tare's scripted test. On real runs it has
 > never blamed a step that was not the cause. But it has not yet found a real cliff either,
 > because neither of two real test rounds had a failure that sat in one step. The rounds were a
-> [data migration](https://github.com/AndreRatzenberger/tare/blob/main/experiments/migration/RESULTS.md) and a [web page](https://github.com/AndreRatzenberger/tare/blob/main/experiments/html/RESULTS.md).
+> [data migration](https://github.com/a-ratz/tare/blob/main/experiments/migration/RESULTS.md) and a [web page](https://github.com/a-ratz/tare/blob/main/experiments/html/RESULTS.md).
 
 tare runs the task once in a room and saves the workspace and the conversation after every step.
 If the check fails, Cliff starts tails from saved steps in fresh rooms. Tails from the beginning
@@ -445,8 +445,8 @@ request is the context the agent was given. Second, the dirty twin runs the same
 real setup, so tare knows that it can see your setup at all. Third, a plain script inside the
 room looks for your files and for secret environment variables.
 
-→ [Concept: the design and the measurements behind it](https://github.com/AndreRatzenberger/tare/blob/main/CONCEPT.md)
-→ [The dirty-twin experiments that decided the probe design: Claude Code](https://github.com/AndreRatzenberger/tare/blob/main/experiments/dirty-twin/RESULTS.md), [Codex](https://github.com/AndreRatzenberger/tare/blob/main/experiments/dirty-twin-codex/RESULTS.md), [Pi](https://github.com/AndreRatzenberger/tare/blob/main/experiments/dirty-twin-pi/RESULTS.md), [Antigravity CLI](https://github.com/AndreRatzenberger/tare/blob/main/experiments/dirty-twin-agy/RESULTS.md)
+→ [Concept: the design and the measurements behind it](https://github.com/a-ratz/tare/blob/main/CONCEPT.md)
+→ [The dirty-twin experiments that decided the probe design: Claude Code](https://github.com/a-ratz/tare/blob/main/experiments/dirty-twin/RESULTS.md), [Codex](https://github.com/a-ratz/tare/blob/main/experiments/dirty-twin-codex/RESULTS.md), [Pi](https://github.com/a-ratz/tare/blob/main/experiments/dirty-twin-pi/RESULTS.md), [Antigravity CLI](https://github.com/a-ratz/tare/blob/main/experiments/dirty-twin-agy/RESULTS.md)
 
 ## Roadmap
 
@@ -455,21 +455,21 @@ macOS is not supported. A room for macOS is an idea, not yet planned.
 ## Contributing
 
 Every change starts as an issue. Larger work is an epic, split into features, and one epic
-becomes one branch and one pull request. [AGENTS.md](https://github.com/AndreRatzenberger/tare/blob/main/AGENTS.md) describes the process, the checks
+becomes one branch and one pull request. [AGENTS.md](https://github.com/a-ratz/tare/blob/main/AGENTS.md) describes the process, the checks
 and the conventions. Run the tests with `uv run pytest`.
 
 ## License
 
-MIT. See [LICENSE](https://github.com/AndreRatzenberger/tare/blob/main/LICENSE).
+MIT. See [LICENSE](https://github.com/a-ratz/tare/blob/main/LICENSE).
 
 ---
 
 Crafted with [Readme Craft](https://github.com/motiful/readme-craft)
 
 [license-shield]: https://img.shields.io/badge/license-MIT-blue.svg
-[license-url]: https://github.com/AndreRatzenberger/tare/blob/main/LICENSE
+[license-url]: https://github.com/a-ratz/tare/blob/main/LICENSE
 [version-shield]: https://img.shields.io/badge/version-0.1.0-informational.svg
-[version-url]: https://github.com/AndreRatzenberger/tare/blob/main/pyproject.toml
+[version-url]: https://github.com/a-ratz/tare/blob/main/pyproject.toml
 [python-shield]: https://img.shields.io/badge/python-3.11%2B-3776AB.svg
 [python-url]: https://www.python.org/
 [platform-shield]: https://img.shields.io/badge/platform-Linux%20%7C%20WSL-555555.svg
