@@ -139,7 +139,9 @@ class Claude:
         pass  # passed with --settings in run_args
 
     def resume_args(self, session: str, prompt: str, extra: list[str]) -> list[str] | None:
-        return ["--dangerously-skip-permissions", *extra, "-p", "--resume", session, prompt]
+        # the same event stream as a fresh start, so a resumed tail shows what it did
+        return ["--dangerously-skip-permissions", *extra, "-p", "--resume", session, prompt,
+                "--output-format", "stream-json", "--verbose"]
 
     def session_file(self, home: Path) -> Path | None:
         sessions = sorted((home / ".claude-config" / "projects").rglob("*.jsonl"), key=lambda p: p.stat().st_size)
