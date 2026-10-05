@@ -1,8 +1,8 @@
 """tare: zero the scale before you weigh.
 
-  tare probe {claude,codex,pi} [--project DIR]
-  tare {claude,codex,pi} [--project DIR] [--allow-dirty] [--yolo] [-- AGENT_ARGS...]
-  tare cliff {claude,codex,pi} PROMPT --check CMD [--tails N] [--budget N] [--jobs N] [-- AGENT_ARGS...]
+  tare probe {claude,codex,pi,agy} [--project DIR]
+  tare {claude,codex,pi,agy} [--project DIR] [--allow-dirty] [--yolo] [-- AGENT_ARGS...]
+  tare cliff {claude,codex,pi,agy} PROMPT --check CMD [--tails N] [--budget N] [--jobs N] [-- AGENT_ARGS...]
   tare swap PROMPT --check CMD [--a claude] [--b codex] [--a-args ARGS] [--b-args ARGS] [--cuts 0,0.5,1]
   tare calibrate PROMPT --check CMD --side "claude --model haiku" --side "codex" [--runs N]
   tare judge [DIR] --rubric FILE --threshold N [--judge "claude --model sonnet"]   a check: exit 0 at or above N
