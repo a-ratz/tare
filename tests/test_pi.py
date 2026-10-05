@@ -75,3 +75,16 @@ def test_extension_tools_and_parent_files_are_named(tmp_path):
     dirty = score(Pi(), r, twin, Capture(f"{rule}", {"bash", "read", "web_search"}, {}), "", "", bare=bare, project=project)
     found = {(f.kind, f.what) for f in dirty.leaks}
     assert ("extensions", "web_search") in found and ("parent files", "instructions above the project") in found
+
+
+def test_the_dirty_twin_keeps_relative_skill_links_working(tmp_path):
+    r = real(tmp_path, {"zai": {"type": "api_key", "key": "k"}}, {"defaultProvider": "zai"})
+    shared = tmp_path / ".agents" / "skills" / "linked-skill"
+    shared.mkdir(parents=True)
+    (shared / "SKILL.md").write_text("---\nname: linked-skill\n---\n")
+    (r.config / "skills").mkdir()
+    (r.config / "skills" / "linked-skill").symlink_to("../../.agents/skills/linked-skill")
+    assert (r.config / "skills" / "linked-skill" / "SKILL.md").exists()
+    with Pi().twin(r, "http://fake") as env:
+        copied = Path(env["PI_CODING_AGENT_DIR"]) / "skills" / "linked-skill"
+        assert copied.is_symlink() and (copied / "SKILL.md").exists()
