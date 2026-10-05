@@ -134,9 +134,11 @@ def swap(a: Side, b: Side, project: Path, prompt: str, check: str, out: Path, *,
 
 
 def _leader(state: tuple[float, float, float], model: tuple[float, float, float]) -> str:
-    """Which explains more of the gap at a cut: the room, the model, or neither (both near zero)."""
+    """Which explains more of the gap at a cut: the room, the model, both alike, or neither (both near zero)."""
     if abs(state[0]) < 0.1 and abs(model[0]) < 0.1:
         return "neither"
+    if abs(abs(state[0]) - abs(model[0])) < 0.1:
+        return "tie"
     return "room" if abs(state[0]) > abs(model[0]) else "model"
 
 
@@ -175,7 +177,7 @@ def report(sides: dict[str, Side], plan: list[Cut], prompt: str, check: str, pro
                 lines.append(f"    foreignness {side} {_sign(cost)}  (native resume {sum(native)}/{len(native)} "
                              "against the handoff on its own room)")
         dominant.append(_leader(state, model))
-        deciding.append(state if dominant[-1] == "room" else model)
+        deciding.append(state if dominant[-1] in ("room", "tie") else model)
     lines.append("")
     first = plan[0]
     if first.fraction == 0:
@@ -185,7 +187,11 @@ def report(sides: dict[str, Side], plan: list[Cut], prompt: str, check: str, pro
                                           f"FAILED: a state effect at cut 0 ({_sign(first.state())}), where both rooms "
                                           "are the same; the effects above are not to be trusted"))
     shown = [i for i, d in enumerate(dominant) if d != "neither"]
-    if "room" in dominant and "model" in dominant[:dominant.index("room")]:
+    late = next((i for i, d in enumerate(dominant) if d in ("room", "tie") and "model" in dominant[:i]), None)
+    if late is not None and dominant[late] == "tie" and "room" not in dominant:
+        verdict = (f"the model explains more than the room until cut {plan[late - 1].fraction:.2f}; from cut "
+                   f"{plan[late].fraction:.2f} on, room and model weigh alike")
+    elif "room" in dominant and "model" in dominant[:dominant.index("room")]:
         at = dominant.index("room")
         before = max(i for i in range(at) if dominant[i] == "model")
         verdict = (f"blame passes from the model to the room between cut {plan[before].fraction:.2f} "
