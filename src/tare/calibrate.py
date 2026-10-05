@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import capsule as caps
+from . import usage as usages
 from .cliff import wilson
 from .journal import Journal
 
@@ -46,7 +47,8 @@ def calibrate(sides: list[Side], project: Path, prompt: str | None, check: str |
     journal = journal or Journal(None)
     keep = keep or check is None  # without a check the workspaces are what is scored
     journal("start", kind="calibrate", task=prompt, check=check, project=str(project), tails=runs,
-            sides={s.key: {"agent": s.agent.name, "args": s.args, "dir": ".", "prompt": s.prompt} for s in sides})
+            sides={s.key: {"agent": s.agent.name, "args": s.args, "dir": ".", "prompt": s.prompt,
+                           "billing": usages.billing(s.agent, s.real)} for s in sides})
     work = out / "project"
     shutil.copytree(project, work, symlinks=True)
     caps.archive(work, out / "start.tar")
@@ -62,7 +64,8 @@ def calibrate(sides: list[Side], project: Path, prompt: str | None, check: str |
         began = time.monotonic()
         tail = caps.run_tail(side.agent, side.real, out, start, side.prompt or prompt, side.args, check, i, env,
                              tail_dir=out / "calibrate" / name, keep=keep)
-        journal("tail", id=name, status="passed" if tail.passed else "failed", detail=tail.detail)
+        journal("tail", id=name, status="passed" if tail.passed else "failed", detail=tail.detail,
+                usage=tail.usage, check_usage=tail.check_usage)
         return side, tail, time.monotonic() - began
 
     with ThreadPoolExecutor(max_workers=jobs) as pool:
@@ -88,7 +91,7 @@ def calibrate(sides: list[Side], project: Path, prompt: str | None, check: str |
         lo, hi = wilson(x, n)
         lines.append(f"  {s.key:<4}  {s.label():<{width}}{x:>2}/{n:<2} {x / n:.2f}  {lo:.2f}-{hi:.2f}"
                      + (f"   scores {' '.join(map(str, sorted(s.scores)))}" if s.scores else ""))
-    text = "\n".join(lines) + "\n"
+    text = "\n".join(lines + usages.report(out)) + "\n"
     (out / "report.txt").write_text(text)
     journal("report", text=text)
     journal("phase", phase="done")

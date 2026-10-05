@@ -17,6 +17,7 @@ from pathlib import Path
 from . import trail as trails
 from .fake import FAKE_MODEL
 from .room import ROOM_HOME, ROOM_PROJECT, TareError
+from .usage import Usage
 
 PROMPT = "say ok"
 
@@ -61,6 +62,20 @@ def _which(name: str) -> Path:
     if not found:
         raise TareError(f"{name} is not on PATH")
     return Path(found).resolve()
+
+
+def _json(path: Path) -> dict | None:
+    """A JSON file of the agent's setup, read for its field names and flags, never printed."""
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def _one_run(u: Usage) -> Usage:
+    """A run's usage is summed from several events, but it is one run."""
+    u.runs, u.unpriced = 1, 1 if u.cost_usd is None else 0
+    return u
 
 
 def _lifetime_error(path: Path) -> TareError:
@@ -156,6 +171,22 @@ class Claude:
     def trail(self, lines: list[str]) -> trails.Trail:
         return trails.claude(lines)
 
+    def usage(self, stdout: str) -> Usage:
+        """From the `result` events: input_tokens leaves out the cache, so the cache is added."""
+        u = Usage(cost_usd=None)
+        for e in events(stdout):
+            if e.get("type") != "result":
+                continue
+            n = e.get("usage") or {}
+            models = e.get("modelUsage") or {}
+            top = max(models.values(), key=lambda m: m.get("costUSD") or 0, default={})
+            u = u + Usage(n.get("input_tokens", 0) + n.get("cache_creation_input_tokens", 0)
+                          + n.get("cache_read_input_tokens", 0), n.get("cache_read_input_tokens", 0),
+                          n.get("cache_creation_input_tokens", 0), n.get("output_tokens", 0),
+                          sum(m.get("thinkingTokens", 0) for m in models.values()), e.get("total_cost_usd"),
+                          top.get("canonicalModel"))
+        return _one_run(u)
+
     def activity(self, event: dict) -> str | None:
         """What one line of the live stream (stream-json) shows, for the dashboard."""
         if event.get("type") == "result":
@@ -181,6 +212,11 @@ class Claude:
             return json.loads(self.state(real).read_text())["oauthAccount"]["emailAddress"]
         except (OSError, ValueError, KeyError, TypeError):
             return None
+
+    def billing(self, real: Real) -> str | None:
+        """How the login pays: a subscription makes the reported cost notional."""
+        data = _json(real.config / self.credentials)
+        return None if data is None else "subscription" if "claudeAiOauth" in data else "api key"
 
 
 class Codex:
@@ -276,6 +312,17 @@ class Codex:
     def trail(self, lines: list[str]) -> trails.Trail:
         return trails.codex(lines)
 
+    def usage(self, stdout: str) -> Usage:
+        """From the `turn.completed` events: input_tokens includes the cached ones. No cost."""
+        u = Usage(cost_usd=None)
+        for e in events(stdout):
+            if e.get("type") == "turn.completed":
+                n = e.get("usage") or {}
+                u = u + Usage(n.get("input_tokens", 0), n.get("cached_input_tokens", 0),
+                              n.get("cache_write_input_tokens", 0), n.get("output_tokens", 0),
+                              n.get("reasoning_output_tokens", 0))
+        return _one_run(u)
+
     def activity(self, event: dict) -> str | None:
         """What one line of the live stream (--json) shows, for the dashboard."""
         if event.get("type") == "turn.completed":
@@ -297,6 +344,10 @@ class Codex:
 
     def email(self, real: Real) -> str | None:
         return None
+
+    def billing(self, real: Real) -> str | None:
+        data = _json(real.config / self.credentials)
+        return None if data is None else "api key" if data.get("OPENAI_API_KEY") else "subscription"
 
 
 class Pi:
@@ -397,6 +448,11 @@ class Pi:
     def email(self, real: Real) -> str | None:
         return None
 
+    def billing(self, real: Real) -> str | None:
+        auth = _json(real.config / self.credentials) or {}
+        entry = auth.get(self._settings(real).get("defaultProvider", ""))
+        return None if not entry else "subscription" if entry.get("type") == "oauth" else "api key"
+
     # unattended runs (Cliff, Swap)
     def run_args(self, prompt: str, extra: list[str], hook: str | None = None) -> list[str]:
         loaded = ["-e", f"{self.room_config}/{self.snapshot}"] if hook else []
@@ -427,6 +483,19 @@ export default function (pi: any) {{
 
     def trail(self, lines: list[str]) -> trails.Trail:
         return trails.pi(lines)
+
+    def usage(self, stdout: str) -> Usage:
+        """From the assistant messages: input leaves out the cache, and each message names its cost."""
+        u = Usage(cost_usd=None)
+        for e in events(stdout):
+            message = e.get("message") or {}
+            if e.get("type") != "message_end" or message.get("role") != "assistant":
+                continue
+            n = message.get("usage") or {}
+            cost = (n.get("cost") or {}).get("total")
+            u = u + Usage(n.get("input", 0) + n.get("cacheRead", 0) + n.get("cacheWrite", 0), n.get("cacheRead", 0),
+                          n.get("cacheWrite", 0), n.get("output", 0), n.get("reasoning", 0), cost, message.get("model"))
+        return _one_run(u)
 
     def activity(self, event: dict) -> str | None:
         """What one line of the live stream (--mode json) shows, for the dashboard."""
@@ -537,6 +606,10 @@ class Antigravity:
     def email(self, real: Real) -> str | None:
         return None  # the account's email and name did not reach the prompt
 
+    def billing(self, real: Real) -> str | None:
+        data = _json(real.config / self.credentials)
+        return None if data is None else "subscription" if data.get("auth_method") == "consumer" else "api key"
+
     # unattended runs (Cliff, Swap)
     def run_args(self, prompt: str, extra: list[str], hook: str | None = None) -> list[str]:
         return ["--dangerously-skip-permissions", *extra, "-p", prompt, "--output-format", "stream-json"]
@@ -559,6 +632,16 @@ class Antigravity:
 
     def trail(self, lines: list[str]) -> trails.Trail:
         return trails.agy(lines)
+
+    def usage(self, stdout: str) -> Usage:
+        """From the `result` event, as the CLI reports it. No cost, no model."""
+        u = Usage(cost_usd=None)
+        for e in events(stdout):
+            if e.get("event") == "result":
+                n = (e.get("result") or {}).get("usage") or {}
+                u = u + Usage(n.get("input_tokens", 0), n.get("cache_read_tokens", 0), 0, n.get("output_tokens", 0),
+                              n.get("thinking_tokens", 0))
+        return _one_run(u)
 
     def activity(self, event: dict) -> str | None:
         """What one line of the live stream (--output-format stream-json) shows, for the dashboard."""

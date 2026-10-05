@@ -146,7 +146,7 @@ def test_cliff_continues_by_handoff_when_the_agent_cannot_resume(tmp_path, monke
     caps.archive(tmp_path / "w", tmp_path / "empty.tar")
     steps = [caps.Capsule(i, None, tmp_path / "empty.tar", 0, 0, f"step {i}") for i in range(3)]
     monkeypatch.setattr(caps, "record", lambda *a, **k: None)
-    monkeypatch.setattr(caps, "run_check", lambda check, work: (False, "check exit 1"))
+    monkeypatch.setattr(caps, "run_check", lambda check, work, **_: (False, "check exit 1"))
     monkeypatch.setattr(caps, "capsules", lambda out, agent: steps)
     monkeypatch.setattr(caps, "session_lines", lambda out: [])
     monkeypatch.setattr(caps, "run_tail", lambda *a, **k: used.append(("native", a[3].step)) or caps.Tail(a[3].step, True, ""))

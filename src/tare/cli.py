@@ -9,8 +9,10 @@
   tare judge-noise DIR... --rubric FILE --times K [--threshold N]                  how far the judge's scores vary
   tare watch DIR... [--port N]   the dashboard of a run, live or finished (several runs on one page)
   tare rerun DIR [--out DIR]     repeat a run from its recipe
+  tare prices [update]           the price tables for costs that an agent does not report
 """
 import argparse
+import json
 import shlex
 import threading
 import signal
@@ -20,6 +22,7 @@ import time
 from pathlib import Path
 
 from . import dashboard, recipe
+from . import usage as usages
 from .agents import AGENTS
 from . import calibrate as calibration
 from .cliff import cliff
@@ -58,6 +61,8 @@ def main(argv: list[str] | None = None) -> int:
         return _watch(argv[1:])
     if argv[:1] == ["rerun"]:
         return _rerun(argv[1:])
+    if argv[:1] == ["prices"]:
+        return _prices(argv[1:])
     if argv[:1] in (["judge"], ["judge-noise"]):
         return _judge(argv[0], argv[1:])
     passthrough: list[str] = []
@@ -126,6 +131,7 @@ def main(argv: list[str] | None = None) -> int:
                        "built it (usable as --check)")
     sub.add_parser("judge-noise", help="score the same pages repeatedly, to see how far the judge's scores vary")
     sub.add_parser("rerun", help="repeat a run from its recipe (tare rerun DIR)")
+    sub.add_parser("prices", help="the price tables for costs that an agent does not report (tare prices update)")
     args = ap.parse_args(argv)
     if args.command == "swap":
         names = [args.a, args.b]
@@ -255,6 +261,25 @@ def _judge(command: str, argv: list[str]) -> int:
         return 2
 
 
+def _prices(argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(prog="tare prices", description="the price tables for costs that an agent does not "
+                                 f"report. Your own file {usages.config_dir() / 'prices.json'} overrides single models.")
+    ap.add_argument("action", nargs="?", choices=["show", "update"], default="show")
+    ap.add_argument("--url", default=usages.LITELLM_URL, help="where to fetch the table from (default: LiteLLM)")
+    args = ap.parse_args(argv)
+    if args.action == "update":
+        try:
+            print(f"tare prices: {usages.update_prices(args.url)}")
+        except (OSError, ValueError) as err:
+            print(f"tare prices: could not fetch {args.url}: {err}", file=sys.stderr)
+            return 2
+        return 0
+    tables = usages.tables_summary()
+    print("\n".join(f"tare prices: {line}" for line in tables) if tables else
+          "tare prices: no price table yet. Run `tare prices update` to fetch LiteLLM's.")
+    return 0
+
+
 def _rerun(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="tare rerun", description="repeat a Calibrate, Cliff or Swap run from its recipe")
     ap.add_argument("dir", type=Path)
@@ -273,6 +298,10 @@ def _rerun(argv: list[str]) -> int:
             pass
     for note in recipe.drift(r, reals):
         print(f"tare rerun: note: {note}", file=sys.stderr)
+    spent = args.dir / "usage.json"
+    if spent.exists():
+        before = usages.Usage.from_dict(json.loads(spent.read_text()).get("total"))
+        print(f"tare rerun: the run being repeated used {usages.describe(before)}", file=sys.stderr)
     command = recipe.with_out(r["argv"], args.out) if args.out else r["argv"]
     print(f"tare rerun: tare {shlex.join(command)}", file=sys.stderr)
     return main(command)

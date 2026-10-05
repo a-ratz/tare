@@ -180,6 +180,7 @@ tare probe codex                   # the same for Codex, Pi and the Antigravity 
 tare codex -- exec -m MODEL "..."  # one-shot Codex run: arguments after -- go to codex
 tare pi                            # Pi in a room
 tare agy                           # the Antigravity CLI in a room
+tare prices update                 # fetch the price table for costs an agent does not report
 ```
 
 `tare claude`, `tare codex`, `tare pi` and `tare agy` mount your project at `/work` directly. The
@@ -397,6 +398,26 @@ own saved session. The Antigravity CLI stores its sessions in a format that tare
 Cliff continues it with a handoff, as Swap does. Each tail is a real agent run, so a search costs
 as much as its tails.
 
+### Tokens and cost
+
+Every Calibrate, Swap and Cliff report ends with the tokens and the cost of each side, of the
+check (a judge agent costs tokens too) and of the whole run:
+
+```text
+  usage     a claude --model haiku: 1 run, 42.3k in (34.8k cached), 352 out, $0.020. Subscription login, so the cost is notional
+            b codex -m gpt-6.1-sol: 1 run, 42.1k in (38.5k cached), 129 out, about $0.012 (estimated from LiteLLM prices fetched 2026-10-05). Subscription login, so the cost is notional
+            check (the judge): 2 runs, 102.0k in (92.7k cached), 471 out, $0.061
+            total: 4 runs, 186.4k in (166.0k cached), 952 out, about $0.093 (estimated from LiteLLM prices fetched 2026-10-05)
+```
+
+Claude Code and Pi report their cost themselves. Codex and the Antigravity CLI report only
+tokens, so tare estimates their cost from a price table, and only when it knows the model: pass
+it with `-m` or `--model`. `tare prices update` fetches LiteLLM's public price table, and
+`~/.config/tare/prices.json` overrides single models with your own prices (in dollars per million
+tokens, with a source and a date). With a subscription login the cost is what the same tokens
+would cost through the API, so the report calls it notional. The dashboard shows the same
+totals while the run goes on, and the run directory keeps them in `usage.json`.
+
 ### Watch it live, repeat it
 
 The live dashboard of `tare calibrate`, `tare swap` and `tare cliff` runs at
@@ -412,7 +433,8 @@ tare rerun ~/.local/state/tare/cliff/myproject-20261005-142000   # the same run 
 
 Every run directory holds a `recipe.json` with the command, the task and the check, a fingerprint
 of the project, the agents with their versions and arguments, and the settings. `tare rerun`
-repeats the run in a new directory with the same settings and says what has changed since.
+repeats the run in a new directory with the same settings and says what has changed since and
+what the repeated run used.
 Agent runs are not deterministic, so a repeated run can still come out differently.
 
 ## How it works

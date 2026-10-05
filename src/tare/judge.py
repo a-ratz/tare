@@ -8,6 +8,7 @@ the same pages repeatedly: a threshold inside a page's spread would measure the 
 dice, not the agent.
 """
 import json
+import os
 import re
 import shutil
 import statistics
@@ -75,7 +76,16 @@ def judge(work: Path, rubric: Path, page: str = "index.html", agent_name: str = 
             argv = rooms.bwrap(agent, real, home, bench, [agent.name, *agent.room_flags,
                                                          *agent.run_args(PROMPT, agent_args or [])])
             proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
+    _log_usage(agent, proc.stdout)
     return _score(proc.stdout)
+
+
+def _log_usage(agent, stdout: str):
+    """When tare runs this judge as a check, it names a file for the judge agent's usage."""
+    log = os.environ.get("TARE_USAGE_LOG")
+    if log:
+        with open(log, "a") as f:
+            f.write(json.dumps(agent.usage(stdout).to_dict()) + "\n")
 
 
 def noise(pages: list[Path], rubric: Path, times: int, threshold: float | None, page: str = "index.html",

@@ -72,3 +72,24 @@ def test_side_prompts_must_name_a_side_and_every_side_needs_a_prompt():
         main(["calibrate", "task", "--side", "claude", "--side", "codex", "--side-prompt", "c=x"])
     with pytest.raises(SystemExit):
         main(["calibrate", "--side", "claude", "--side", "codex", "--side-prompt", "a=x"])
+
+
+def test_the_report_ends_with_usage_per_side_the_judge_and_the_total(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "README.md").write_text("x")
+    out = tmp_path / "run"
+    out.mkdir()
+
+    def fake_tail(agent, real, out_, capsule, prompt, args, check, i, env=None, timeout=1800, tail_dir=None, keep=False):
+        cost = 0.01 if agent.name == "claude" else None
+        return caps.Tail(0, True, "check exit 0: score 70", {"input": 1000, "cached": 400, "output": 50, "cost_usd": cost},
+                         {"input": 300, "output": 20, "cost_usd": 0.002})
+
+    monkeypatch.setattr(caps, "run_tail", fake_tail)
+    sides = [cal.Side("a", Named("claude"), None, []), cal.Side("b", Named("codex"), None, [])]
+    text = cal.calibrate(sides, project, "task", "tare judge", out, runs=2, jobs=2, journal=Journal(out))
+    assert "  usage     a claude: 2 runs, 2.0k in (800 cached), 100 out, $0.020" in text
+    assert "            b codex: 2 runs, 2.0k in (800 cached), 100 out, cost unknown" in text
+    assert "            check (the judge): 4 runs, 1.2k in (0 cached), 80 out, $0.008" in text
+    assert "total: 8 runs" in text and (out / "usage.json").exists()

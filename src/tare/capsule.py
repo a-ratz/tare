@@ -9,6 +9,7 @@ started with the trail rendered up to the step; every agent).
 """
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import tarfile
@@ -16,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import trail as trails
+from . import usage as usages
 from .room import ROOM_HOME, bwrap, room_home
 
 RUN_MOUNT = "/tare-run"
@@ -45,6 +47,8 @@ class Tail:
     step: int
     passed: bool
     detail: str
+    usage: dict | None = None  # the agent's tokens and cost
+    check_usage: dict | None = None  # what the check spent, for example a judge agent
 
 
 def _contents(path: Path) -> dict[str, str]:
@@ -148,15 +152,32 @@ def _run_in(agent, real, home: Path, work: Path, command: list[str], env, timeou
         return f"agent stopped after {int(timeout)} s"
 
 
+def read_usage(agent, log_dir: Path) -> dict | None:
+    """The tokens and cost of the run whose stream is in log_dir (None for an agent that cannot tell)."""
+    stream = log_dir / "stdout.jsonl"
+    if not hasattr(agent, "usage"):
+        return None
+    return agent.usage(stream.read_text(errors="replace") if stream.exists() else "").to_dict()
+
+
+def read_check_usage(path: Path) -> dict | None:
+    if not path.exists():
+        return None
+    found = usages.total(json.loads(line) for line in path.read_text().splitlines() if line.strip())
+    return found.to_dict() if found else None
+
+
 def _finish(tail_dir: Path, work: Path, step: int, ran: str, check: str, extra: dict | None = None,
-            keep: bool = False) -> Tail:
+            keep: bool = False, usage: dict | None = None) -> Tail:
     # without a check (calibrate only) a run counts when its agent ended normally
-    passed, detail = run_check(check, work) if check else (ran == "agent exit 0", "no check")
+    log = tail_dir / "check-usage.jsonl"
+    passed, detail = run_check(check, work, usage_log=log) if check else (ran == "agent exit 0", "no check")
+    check_usage = read_check_usage(log)
     (tail_dir / "result.json").write_text(json.dumps({"step": step, "passed": passed, "agent": ran, "check": detail,
-                                                      **(extra or {})}))
+                                                      "usage": usage, "check_usage": check_usage, **(extra or {})}))
     if not keep:
         shutil.rmtree(work, ignore_errors=True)
-    return Tail(step, passed, f"{ran}; {detail}")
+    return Tail(step, passed, f"{ran}; {detail}", usage, check_usage)
 
 
 def run_tail(agent, real, out: Path, capsule: Capsule, prompt: str, args: list[str], check: str,
@@ -176,7 +197,14 @@ def run_tail(agent, real, out: Path, capsule: Capsule, prompt: str, args: list[s
             agent.place_session(home, sid, session_lines(out)[:capsule.cut])
             command = [agent.name, *agent.room_flags, *agent.resume_args(sid, CONTINUE, args)]
         ran = _run_in(agent, real, home, work, command, env, timeout, tail_dir)
-    return _finish(tail_dir, work, capsule.step, ran, check, keep=keep)
+    return _finish(tail_dir, work, capsule.step, ran, check, keep=keep, usage=read_usage(agent, tail_dir))
+
+
+def check_original(agent, out: Path, check: str) -> tuple[bool, str, dict]:
+    """The check on the original run's workspace, and the usage of that run and of its check."""
+    log = out / "original" / "check-usage.jsonl"
+    passed, detail = run_check(check, out / "original" / "work", usage_log=log)
+    return passed, detail, {"usage": read_usage(agent, out / "original"), "check_usage": read_check_usage(log)}
 
 
 def run_handoff(agent, real, tail_dir: Path, capsule: Capsule, events: list[trails.Event], task: str,
@@ -192,14 +220,20 @@ def run_handoff(agent, real, tail_dir: Path, capsule: Capsule, events: list[trai
     with room_home(agent, real) as home:
         ran = _run_in(agent, real, home, work, [agent.name, *agent.room_flags, *agent.run_args(handoff, args)],
                       env, timeout, tail_dir)
-    return _finish(tail_dir, work, capsule.step, ran, check, {"agent_name": agent.name})
+    return _finish(tail_dir, work, capsule.step, ran, check, {"agent_name": agent.name},
+                   usage=read_usage(agent, tail_dir))
 
 
-def run_check(check: str, work: Path, timeout: float = 600) -> tuple[bool, str]:
+# a check that runs an agent itself (tare judge) appends that agent's usage to this file
+USAGE_LOG = "TARE_USAGE_LOG"
+
+
+def run_check(check: str, work: Path, timeout: float = 600, usage_log: Path | None = None) -> tuple[bool, str]:
     """The user's check, outside the room: exit code 0 passes."""
+    env = {**os.environ, USAGE_LOG: str(usage_log)} if usage_log else None
     try:
         proc = subprocess.run(check, shell=True, cwd=work, capture_output=True, text=True, timeout=timeout,
-                              stdin=subprocess.DEVNULL)
+                              stdin=subprocess.DEVNULL, env=env)
     except subprocess.TimeoutExpired:
         return False, f"check timed out after {int(timeout)} s"
     last = next((line.strip() for line in reversed(proc.stdout.splitlines()) if line.strip()), "")

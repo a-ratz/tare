@@ -34,6 +34,7 @@ The README explains these words for users. Contributors also meet these terms in
 | `src/tare/dashboard.py`, `dashboard.html` | the live dashboard: state from the run directory, one page |
 | `src/tare/recipe.py` | recipes: how to repeat a run, and what has changed since |
 | `src/tare/calibrate.py` | Calibrate: fresh-start pass rates per side |
+| `src/tare/usage.py` | tokens and cost: the shape every adapter reads its stream into, totals, price tables and estimates |
 | `src/tare/judge.py` | the judge check: render the page in a room, score it in a room without agent or model names (so the judge cannot favour either), measure how far the scores vary |
 | `src/tare/fake.py` | the fake model server (Anthropic Messages for Claude Code and Pi, OpenAI Responses for Codex, Google's Cloud Code API for the Antigravity CLI) |
 | `tests/` | pytest. Needs no agent, no login and no network. |

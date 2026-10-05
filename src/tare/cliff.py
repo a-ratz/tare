@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import capsule as caps
+from . import usage as usages
 from .journal import Journal
 
 Z = 1.96  # 95 % intervals
@@ -113,13 +114,13 @@ def cliff(agent, real, project: Path, prompt: str, check: str, out: Path, *, tai
     claude_args = claude_args or []
     journal = journal or Journal(None)
     journal("start", kind="cliff", task=prompt, check=check, project=str(project), tails=tails, budget=budget,
-            sides={"a": {"agent": agent.name, "args": claude_args, "dir": "."}})
+            sides={"a": {"agent": agent.name, "args": claude_args, "dir": ".", "billing": usages.billing(agent, real)}})
     journal("phase", phase="original run")
     caps.record(agent, real, project, out, prompt, claude_args, env)
-    passed, detail = caps.run_check(check, out / "original" / "work")
+    passed, detail, spent = caps.check_original(agent, out, check)
     header = [f"tare cliff · {agent.name} · {project}", f"  task      {prompt}", f"  check     {check}"]
     steps = caps.capsules(out, agent)
-    journal("original", side="a", passed=passed, detail=detail, steps=[s.tool for s in steps])
+    journal("original", side="a", passed=passed, detail=detail, steps=[s.tool for s in steps], **spent)
     if passed:
         return _write(out, header + [f"  original  passed ({detail}): there is no cliff to find"], journal)
     header.append(f"  original  failed ({detail}) after {len(steps) - 1} steps")
@@ -140,7 +141,8 @@ def cliff(agent, real, project: Path, prompt: str, check: str, out: Path, *, tai
         else:
             result = caps.run_handoff(agent, real, out / "tails" / name, steps[step], events, prompt,
                                       claude_args, check, env)
-        journal("tail", id=name, status="passed" if result.passed else "failed", detail=result.detail)
+        journal("tail", id=name, status="passed" if result.passed else "failed", detail=result.detail,
+                usage=result.usage, check_usage=result.check_usage)
         return result
 
     def probe(step: int, n: int) -> list[bool]:
@@ -174,7 +176,7 @@ def report(s: Search, steps: list, budget: int) -> list[str]:
 
 
 def _write(out: Path, lines: list[str], journal: Journal) -> str:
-    text = "\n".join(lines) + "\n"
+    text = "\n".join(lines + usages.report(out)) + "\n"
     (out / "report.txt").write_text(text)
     journal("report", text=text)
     journal("phase", phase="done")
