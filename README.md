@@ -190,6 +190,20 @@ a fresh start sometimes passes, or where one side mostly fails and the other mos
 Cliff now declares a model gap only when the baseline's upper bound is below `--gap-below`
 (default 0.2), so 0 of 3 is no longer read as "never".
 
+### Judge: when tests cannot decide
+
+```bash
+tare judge-noise good-page/ bad-page/ --rubric rubric.md --times 10 --threshold 60
+tare cliff claude "build the page" --check "tare judge --rubric $PWD/rubric.md --threshold 60" -- --model haiku
+```
+
+For work like a web page, a judge model scores the result. tare renders the page headless in a
+room of its own and gives a judge agent the screenshot, the source and your rubric, in a fresh,
+blind room: no agent or model names. `tare judge` is a check (exit 0 at or above the threshold);
+its score line shows up in the dashboard. A judge has its own noise: one test page scored 55, 60,
+58, 58, 66 and 62 on six runs. So `tare judge-noise` scores the same pages repeatedly and refuses a
+threshold that falls inside a page's spread.
+
 ### Watch it live, repeat it exactly
 
 `tare cliff` and `tare swap` start a live dashboard and print its URL

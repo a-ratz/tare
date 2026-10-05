@@ -266,6 +266,13 @@ Tare is meant to sit underneath such frameworks: their exam, Tare's clean room.
     - Swap reports a tie as a tie.
     - **Measured** on the migration task: Haiku passed 0/4 and Codex with gpt-6.1-sol passed
       4/4. Across all runs so far, Haiku passed about 1 in 14.
+13. ~~Judge check~~. Done 2026-10-05 (epic #56).
+    - The page is rendered by headless Chrome in a room: workspace read-only, no home.
+    - A judge agent scores it in a blind tare room from the screenshot, the source and a
+      rubric.
+    - **Measured** on a test page with a sonnet judge: six scores from 55 to 66 (sd about 3).
+      The judge found a real one-cent rounding bug and an overflow.
+    - `tare judge-noise` refuses a threshold inside such a spread.
 
 ## Name
 
