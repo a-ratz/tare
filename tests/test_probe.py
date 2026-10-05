@@ -209,6 +209,20 @@ def test_codex_plugin_skills_and_mcp_namespaces_are_seen_and_named_in_a_room(tmp
                      ("plugin", "ponytail", "Codex plugin")}
 
 
+def test_codex_custom_agents_are_seen_and_named_in_a_room(tmp_path):
+    real = Real(home=tmp_path, config=tmp_path / ".codex", binary=tmp_path / "codex")
+    (real.config / "agents" / "pack").mkdir(parents=True)
+    (real.config / "agents" / "pack" / "reviewer.toml").write_text('name = "ce-reviewer"\ndescription = "Reviews code."\n')
+    (real.config / "agents" / "explorer.toml").write_text('name = "explorer"\ndescription = "My own explorer."\n')
+    twin = Capture("Available roles:\nce-reviewer: {\nReviews code.\n}\nexplorer: {\nMy own explorer.\n}", set(), {})
+    builtin = Capture("Available roles:\nexplorer: {\nExplores the codebase.\n}", set(), {})
+    clean = score(Codex(), real, twin, builtin, "", "")
+    assert clean.zero and "agents" in clean.seen  # Codex's own explorer is not the user's
+    dirty = score(Codex(), real, twin, twin, "", "")
+    assert [(f.kind, f.what, f.source) for f in dirty.leaks] == [("agents", "2 agents", str(real.config / "agents"))]
+    assert "agents" in score(Codex(), real, builtin, builtin, "", "").blind
+
+
 def agy_real(tmp_path):
     gemini = tmp_path / ".gemini"
     (gemini / "config" / "skills" / "own-skill").mkdir(parents=True)

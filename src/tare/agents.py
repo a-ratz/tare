@@ -11,6 +11,7 @@ import re
 import shutil
 import tempfile
 import time
+import tomllib
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
@@ -369,6 +370,19 @@ class Codex:
 
     def extra_markers(self, real: Real) -> list[tuple[str, Path]]:
         return [("memories", real.config / "memories" / "memory_summary.md")]
+
+    def custom_agents(self, real: Real) -> tuple[Path, dict[str, str]]:
+        """The user's custom agents: a .toml file each, anywhere under agents/. By name, the first
+        line of each description. Codex lists them as roles of its spawn_agent tool."""
+        folder = real.config / "agents"
+        found = {}
+        for path in sorted(folder.rglob("*.toml")) if folder.is_dir() else []:
+            try:
+                data = tomllib.loads(path.read_text())
+            except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
+                continue
+            found[data.get("name") or path.stem] = (str(data.get("description") or "").splitlines() or [""])[0]
+        return folder, found
 
     def email(self, real: Real) -> str | None:
         return None
