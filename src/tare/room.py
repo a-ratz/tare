@@ -46,7 +46,8 @@ def room_env(agent, extra: dict[str, str] | None = None) -> dict[str, str]:
     return env | (extra or {})
 
 
-def bwrap(agent, real, home: Path, project: Path, command: list[str], extra_env: dict[str, str] | None = None) -> list[str]:
+def bwrap(agent, real, home: Path, project: Path, command: list[str], extra_env: dict[str, str] | None = None,
+          extra_binds: list[str] | None = None) -> list[str]:
     """The bwrap command for one room. `command[0]` may be the agent's own name."""
     binds, executable = agent.binds(real)
     if command and command[0] == agent.name:
@@ -57,7 +58,7 @@ def bwrap(agent, real, home: Path, project: Path, command: list[str], extra_env:
         # WSL keeps the resolver behind a symlink into /mnt/wsl; without it DNS fails.
         argv += ["--ro-bind", "/mnt/wsl", "/mnt/wsl"]
     argv += ["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--tmpfs", "/home",
-             "--bind", str(home), ROOM_HOME, *binds,
+             "--bind", str(home), ROOM_HOME, *binds, *(extra_binds or []),
              "--bind", str(project), ROOM_PROJECT, "--chdir", ROOM_PROJECT,
              "--unshare-user", "--unshare-pid", "--unshare-ipc", "--unshare-uts", "--die-with-parent",
              "--clearenv"]
