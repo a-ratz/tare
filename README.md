@@ -61,9 +61,9 @@ your own machine, tare is for you.
   task (Claude Code against Codex, or two models) and lets each continue the other's work
   at several points. You see whether a run failed because of what its workspace had become
   or because of the agent continuing it.
-- **Shows where a failed run became lost.** `tare cliff` resumes a failed run from its own
-  steps, many times, and names the step after which it no longer succeeds as often as a
-  fresh start does, with the evidence next to it.
+- **Shows where a failed run became lost** (experimental). `tare cliff` resumes a failed run
+  from its own steps, many times, and names the step after which it no longer succeeds as
+  often as a fresh start does, with the evidence next to it.
 
 ## When to use
 
@@ -145,6 +145,12 @@ subscription login, your account email arrives with the login. The room also hol
 your login, because the agent needs one to run.
 
 ### Cliff: where did a failed run become lost
+
+> **Experimental.** Cliff finds a known cliff in a scripted run, and on real runs it has not
+> raised a false alarm. But it has not yet found a cliff in a real run: neither real round had
+> a failure that sat in one step ([migration](experiments/migration/RESULTS.md),
+> [HTML](experiments/html/RESULTS.md)). Swap's cells where an agent continues its own room
+> are a coarse Cliff at three cuts; when they drop between two cuts, Cliff can zoom in.
 
 ```bash
 tare cliff claude "fix the failing test" --check "uv run pytest -q" -- --model sonnet

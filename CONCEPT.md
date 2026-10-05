@@ -284,6 +284,8 @@ Tare is meant to sit underneath such frameworks: their exam, Tare's clean room.
       post-hoc, the same page scored 88 five times.
     - Swap: model effect -0.83 at cut 0. At cut 1 Sol finished Haiku's page 3/3 and Haiku kept
       Sol's 3/3: no anchoring on inherited work.
+    - Cliff stays experimental: two real rounds without a failure that sat in one step. No
+      further Cliff experiments until a Swap shows a run's own cells dropping between cuts.
 
 ## Name
 
