@@ -88,3 +88,21 @@ def test_the_dirty_twin_keeps_relative_skill_links_working(tmp_path):
     with Pi().twin(r, "http://fake") as env:
         copied = Path(env["PI_CODING_AGENT_DIR"]) / "skills" / "linked-skill"
         assert copied.is_symlink() and (copied / "SKILL.md").exists()
+
+
+def pi_skills_block(location):
+    # the shape of Pi's formatSkillsForPrompt
+    return ("<available_skills>\n  <skill>\n    <name>own-skill</name>\n    <description>The user's skill</description>\n"
+            f"    <location>{location}/own-skill/SKILL.md</location>\n  </skill>\n</available_skills>")
+
+
+def test_pi_lists_skills_as_xml_and_the_probe_reads_them(tmp_path):
+    r = real(tmp_path, {"zai": {"type": "api_key", "key": "k"}}, {"defaultProvider": "zai"})
+    (r.config / "skills" / "own-skill").mkdir(parents=True)
+    twin = Capture(pi_skills_block(r.config / "skills"), {"read"}, {})
+    clean = score(Pi(), r, twin, Capture("no skills here", {"read"}, {}), "", "")
+    assert "skills" in clean.seen and "skills" not in clean.blind and not clean.leaks
+    leaked = score(Pi(), r, twin, Capture(pi_skills_block("/home/tare/.pi/agent/skills"), {"read"}, {}), "", "")
+    assert ("skills", "1 skill") in {(f.kind, f.what) for f in leaked.leaks}
+    blind = score(Pi(), r, Capture("no skills", {"read"}, {}), Capture("", {"read"}, {}), "", "")
+    assert "skills" in blind.blind

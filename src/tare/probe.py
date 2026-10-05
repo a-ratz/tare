@@ -86,6 +86,21 @@ def _without_paths(text: str) -> str:
     return re.sub(r" \([^)\n]*\)", "", text)
 
 
+def _skill_entry(text: str, name: str) -> str | None:
+    """How a request lists one skill: a "- name: description" line (agy writes "- name (path): ..."),
+    or a <skill> element with name, description and location (Pi). Paths are left out, because the
+    room's differ from the user's for the same skill."""
+    line = re.search(rf"^- {re.escape(name)}(?:[:( ].*)?$", text, re.M)
+    if line:
+        return _without_paths(line.group(0))[:160]
+    escaped = name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    element = re.search(rf"<skill>\s*<name>{re.escape(escaped)}</name>(.*?)</skill>", text, re.S)
+    if element:
+        inner = re.sub(r"<location>.*?</location>", "", element.group(1), flags=re.S)
+        return f"<skill> {name}: {' '.join(inner.split())}"[:160]
+    return None
+
+
 def _server_prefix(name: str) -> str:
     return "mcp__" + re.sub(r"[^A-Za-z0-9_-]", "_", name) + "__"
 
@@ -150,21 +165,19 @@ def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_
         if skill_dir.is_dir():
             own |= {d.name: skill_dir for d in skill_dir.iterdir() if d.is_dir() and not d.name.startswith(".")}
     names = {s for s in twin.init.get("skills", []) if ":" in s and s.split(":")[0] not in builtin} | set(own)
-    listed = {}
+    listed: dict[str, tuple[str, str]] = {}  # skill name -> how the twin lists it, and its source
     for name in sorted(names):
-        # the skills listing has one "- name: description" line per skill ("- name (path): ..." in agy)
-        match = re.search(rf"^- {re.escape(name)}(?:[:( ].*)?$", twin.text, re.M)
-        if match:
+        entry = _skill_entry(twin.text, name)
+        if entry:
             namespace = name.split(":")[0] if ":" in name else None
             source = (str(own[name]) if namespace is None
                       else f"plugin {namespace}" if namespace in user_plugins else "login (account skills)")
-            listed[_without_paths(match.group(0))[:160]] = source
+            listed[name] = (entry, source)
     if names:
         (r.seen if listed else r.blind).append("skills")
     counts: dict[str, int] = {}
-    room_lines = _without_paths(room.text)
-    for line, source in listed.items():
-        if line in room_lines:
+    for name, (entry, source) in listed.items():
+        if _skill_entry(room.text, name) == entry:
             counts[source] = counts.get(source, 0) + 1
     r.leaks += [Finding("skills", f"{n} skill{'s' if n != 1 else ''}", source) for source, n in sorted(counts.items())]
     if user_plugins:
