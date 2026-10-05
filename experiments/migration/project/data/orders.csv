@@ -1,0 +1,201 @@
+Bestellnr;Kunde;Betrag;Datum;Notiz
+1001;Zoë Brühl;105,25;28.04.2026;
+1002;Jürgen Müller;181,23;21.01.2026;""
+1003;Renée Hoß;2.450,28;13.12.2026;
+1004;Maëlle Hoß;1.826,23;04.07.2026;Geschenk – nicht öffnen
+1005;Björn Weiß;1.559,57;03.10.2026;Rabatt 5 €
+1006;Käthe Weiß;1.529,55;20.12.2026;„Abholung“ im Laden
+1007;Zoë Ångström;1.468,77;17.11.2026;"Rückruf erbeten; Tel. hinterlegt"
+1008;Ida Straßer;-497,19;04.12.2026;
+1009;Björn Schäfer;1.059,99;01.09.2026;""
+1010;Zoë Weiß;1.028,01;06.03.2026;Geschenk – nicht öffnen
+1011;Ida Krüger;1.235,15 €;05.07.2026;"Rabatt 5 €"
+1012;Jürgen Groß;317,71;11.05.2026;Gutschrift 12,50 €
+1013;Renée Müller;1.063,19 €;13.08.2026;"Geschenk – nicht öffnen"
+1014;Annegret Ångström;2.392,43 €;28.11.2026;Gutschrift 12,50 €
+1015;Jörg Meyer;-2.449,08;25.06.2026;Rabatt 5 €
+1016;Jürgen Weiß;379,84;20.10.2026;""
+1017;Lukas Müller;48,80;24.11.2026;
+1018;Zoë Lindqvist;963,13 €;01.07.2026;
+1019;Ida Meyer;669,37;06.05.2026;""
+1020;Søren Ångström;938,64;28.10.2026;
+1021;Søren Lindqvist;629,80;14.08.2026;Rabatt 5 €
+1022;Björn Hoß;1.485,93 €;08.07.2026;„Abholung“ im Laden
+1023;Renée Lindqvist;2.194,76 €;07.10.2026;Geschenk – nicht öffnen
+1024;Käthe Schäfer;964,77;20.07.2026;"Größe XL"
+1025;Søren Brühl;826,56;07.03.2026;„Express“ gewünscht
+1026;Lukas Hoß;2.132,16 €;02.03.2026;""
+1027;Maëlle Groß;56,91;25.04.2026;
+1028;Renée Weiß;6,73;16.05.2026;"Rückruf erbeten; Tel. hinterlegt"
+1029;Lukas Schäfer;1.039,28;12.06.2026;
+1030;Zoë Groß;2.456,44;04.02.2026;"„Abholung“ im Laden"
+1031;Lukas Schäfer;914,47 €;24.12.2026;""
+1032;Søren Brühl;-51,74;23.07.2026;
+1033;Ida Brühl;2.303,54;27.09.2026;Rabatt 5 €
+1034;Søren Schäfer;-2.344,00;9.1.2026;
+1035;Jürgen Öztürk;809,98;20.01.2026;""
+1036;Lukas Ångström;952,62;28.11.2026;„Abholung“ im Laden
+1037;Annegret Straßer;973,43;17.03.2026;
+1038;Zoë Ångström;2.083,66;24.03.2026;Gutschrift 12,50 €
+1039;Björn Öztürk;844,49;28.06.2026;Geschenk – nicht öffnen
+1040;Jörg Brühl;510,69;22.03.2026;
+1041;Renée Brühl;1.466,33;04.05.2026;
+1042;Günther Weiß;1.495,99;16.02.2026;
+1043;Günther Meyer;1.492,26;27.01.2026;Geschenk – nicht öffnen
+1044;Björn Groß;479,40;07.07.2026;"Lieferung; bitte klingeln"
+1045;Zoë Straßer;1.325,48;11.07.2026;"Rückruf erbeten; Tel. hinterlegt"
+1046;Käthe Hoß;1.751,92;11.12.2026;"Lieferung; bitte klingeln"
+1047;Jörg Groß;1.996,25;28.03.2026;"Größe XL"
+1048;Maëlle Müller;1.337,65;01.11.2026;""
+1049;Jürgen Öztürk;2.130,18;27.03.2026;Größe XL
+1050;Björn Meyer;1.097,58;21.05.2026;
+1051;Zoë Brühl;252,52;25.05.2026;Geschenk – nicht öffnen
+1052;Ida Schäfer;777,53;18.05.2026;""
+1053;Maëlle Straßer;557,41;23.10.2026;„Express“ gewünscht
+1054;Ida Weiß;2.369,81;05.04.2026;"Gutschrift 12,50 €"
+1055;Annegret Weiß;-427,78 €;28.01.2026;Geschenk – nicht öffnen
+1056;Maëlle Krüger;1.321,99;21.04.2026;"Gutschrift 12,50 €"
+1057;Annegret Ångström;605,41;28.04.2026;""
+1058;Jürgen Weiß;182,11;13.10.2026;„Express“ gewünscht
+1059;Renée Groß;72,97;26.07.2026;""
+1060;Jürgen Schäfer;407,76;24.03.2026;"Lieferung; bitte klingeln"
+1061;Lukas Brühl;2.140,37;16.11.2026;Rabatt 5 €
+1062;Ida Öztürk;1.031,85;09.11.2026;
+1063;Björn Öztürk;2.252,13;10.03.2026;
+1064;Renée Straßer;-368,37;7.11.2026;
+1065;Lukas Ångström;285,66;07.04.2026;
+1066;Jürgen Meyer;1.960,54;11.11.2026;"Rückruf erbeten; Tel. hinterlegt"
+1067;Ida Krüger;559,14 €;11.11.2026;„Express“ gewünscht
+1068;Günther Ångström;1.837,20;14.03.2026;""
+1069;Lukas Krüger;2.014,08;21.10.2026;„Express“ gewünscht
+1070;Jörg Meyer;1.936,61;02.10.2026;""
+1071;Søren Krüger;1.012,54;20.09.2026;"Gutschrift 12,50 €"
+1072;Søren Öztürk;1.517,20;06.12.2026;"Geschenk – nicht öffnen"
+1073;Björn Krüger;2.291,92;10.01.2026;
+1074;Käthe Groß;1.342,66;21.07.2026;
+1075;Maëlle Weiß;1.065,86;07.06.2026;
+1076;Maëlle Straßer;341,92;08.08.2026;
+1077;Renée Brühl;1.485,44 €;8.10.2026;
+1078;Maëlle Krüger;474,98;13.09.2026;""
+1079;Jürgen Öztürk;2.147,24;27.07.2026;„Express“ gewünscht
+1080;Björn Hoß;84,44;04.10.2026;""
+1081;Björn Müller;830,01 €;20.12.2026;"„Abholung“ im Laden"
+1082;Zoë Groß;133,81;11.12.2026;""
+1083;Annegret Ångström;106,17;9.9.2026;„Abholung“ im Laden
+1084;Annegret Brühl;1.009,56;22.12.2026;Größe XL
+1085;Günther Müller;151,85;03.11.2026;Rabatt 5 €
+1086;Jörg Lindqvist;1.030,78;24.07.2026;„Abholung“ im Laden
+1087;Jörg Schäfer;891,54;03.10.2026;"„Express“ gewünscht"
+1088;Günther Öztürk;1.860,91;13.04.2026;""
+1089;Günther Öztürk;-703,33;8.12.2026;„Express“ gewünscht
+1090;Maëlle Brühl;1.654,93;20.08.2026;""
+1091;Käthe Lindqvist;1.365,01;23.3.2026;"Gutschrift 12,50 €"
+1092;Renée Brühl;989,52;05.04.2026;"Größe XL"
+1093;Annegret Groß;752,26;25.09.2026;
+1094;Annegret Hoß;2.336,06;18.10.2026;"Rabatt 5 €"
+1095;Maëlle Öztürk;2.340,98;26.09.2026;Geschenk – nicht öffnen
+1096;Käthe Ångström;277,31;14.10.2026;„Express“ gewünscht
+1097;Käthe Hoß;1.624,39;20.10.2026;"Größe XL"
+1098;Jürgen Müller;-478,82;17.12.2026;"„Abholung“ im Laden"
+1099;Renée Ångström;2.310,70;25.04.2026;"Lieferung; bitte klingeln"
+1100;Søren Groß;679,87;25.10.2026;
+1101;Ida Groß;-1.263,86 €;05.04.2026;
+1102;Maëlle Brühl;465,40;16.09.2026;"Lieferung; bitte klingeln"
+1103;Søren Krüger;877,82 €;26.11.2026;"„Express“ gewünscht"
+1104;Käthe Schäfer;1.986,16;03.08.2026;„Abholung“ im Laden
+1105;Käthe Meyer;-907,31;10.4.2026;""
+1106;Jörg Ångström;1.653,91;04.05.2026;Geschenk – nicht öffnen
+1107;Günther Öztürk;1.811,29 €;16.11.2026;"Rabatt 5 €"
+1108;Renée Hoß;779,03;28.05.2026;
+1109;Ida Ångström;-2.054,26 €;17.04.2026;
+1110;Günther Müller;43,14;25.11.2026;
+1111;Maëlle Weiß;339,12 €;06.10.2026;
+1112;Annegret Weiß;1.377,91;23.02.2026;
+1113;Käthe Straßer;2.373,63;10.06.2026;Größe XL
+1114;Björn Groß;1.170,22;05.06.2026;
+1115;Jörg Öztürk;1.755,00;17.08.2026;Rabatt 5 €
+1116;Käthe Groß;2.031,69;19.01.2026;
+1117;Käthe Weiß;141,89;2.1.2026;
+1118;Lukas Brühl;807,18;11.06.2026;""
+1119;Käthe Öztürk;686,63;22.01.2026;"Lieferung; bitte klingeln"
+1120;Renée Schäfer;2.110,80;22.05.2026;„Express“ gewünscht
+1121;Søren Krüger;2.044,62;02.09.2026;
+1122;Zoë Straßer;212,75;25.10.2026;"Lieferung; bitte klingeln"
+1123;Jörg Hoß;340,11;13.05.2026;Größe XL
+1124;Ida Hoß;1.840,19;7.10.2026;"„Abholung“ im Laden"
+1125;Jörg Ångström;2.055,17 €;12.11.2026;"„Express“ gewünscht"
+1126;Jörg Öztürk;763,39;25.09.2026;Rabatt 5 €
+1127;Jürgen Groß;1.637,07;27.08.2026;""
+1128;Björn Krüger;856,51;08.03.2026;Geschenk – nicht öffnen
+1129;Lukas Müller;503,25;03.01.2026;
+1130;Zoë Hoß;1.096,10;08.11.2026;"„Express“ gewünscht"
+1131;Ida Meyer;2.245,10;23.5.2026;"Rückruf erbeten; Tel. hinterlegt"
+1132;Annegret Meyer;-1.369,57;27.11.2026;„Express“ gewünscht
+1133;Jürgen Brühl;1.489,90;16.02.2026;
+1134;Jürgen Ångström;1.463,43;22.04.2026;"Rückruf erbeten; Tel. hinterlegt"
+1135;Jürgen Müller;-270,75;25.11.2026;
+1136;Jörg Öztürk;14,09;01.10.2026;Geschenk – nicht öffnen
+1137;Lukas Groß;2.006,07;12.7.2026;Geschenk – nicht öffnen
+1138;Zoë Meyer;1.299,10;24.12.2026;"Geschenk – nicht öffnen"
+1139;Renée Meyer;2.243,15;21.10.2026;"Lieferung; bitte klingeln"
+1140;Käthe Groß;2.297,14 €;18.09.2026;
+1141;Ida Straßer;99,27;12.11.2026;Größe XL
+1142;Lukas Straßer;1.513,54;13.2.2026;
+1143;Käthe Brühl;1.214,92 €;24.03.2026;Rabatt 5 €
+1144;Maëlle Brühl;-2.329,48 €;16.07.2026;"Rückruf erbeten; Tel. hinterlegt"
+1145;Björn Ångström;2.228,72;11.04.2026;
+1146;Käthe Öztürk;1.413,82;25.05.2026;"Lieferung; bitte klingeln"
+1147;Käthe Krüger;-844,67;21.06.2026;
+1148;Renée Ångström;317,72;06.02.2026;
+1149;Søren Krüger;1.285,35;09.10.2026;""
+1150;Lukas Brühl;48,39 €;04.02.2026;„Express“ gewünscht
+1151;Käthe Müller;2.080,91;20.01.2026;"Rabatt 5 €"
+1152;Renée Müller;362,94;02.07.2026;
+1153;Maëlle Schäfer;607,65;25.04.2026;"Größe XL"
+1154;Jörg Straßer;650,62;16.07.2026;Rabatt 5 €
+1155;Jörg Hoß;1.467,68 €;11.01.2026;
+1156;Käthe Brühl;1.948,52;06.12.2026;"„Express“ gewünscht"
+1157;Günther Schäfer;1.235,09;26.09.2026;"Lieferung; bitte klingeln"
+1158;Jürgen Hoß;229,66;14.09.2026;""
+1159;Lukas Öztürk;373,49;28.05.2026;"„Abholung“ im Laden"
+1160;Zoë Weiß;1.522,90 €;26.10.2026;Rabatt 5 €
+1161;Björn Straßer;2.309,40;17.04.2026;"Lieferung; bitte klingeln"
+1162;Günther Straßer;-327,56;09.10.2026;"„Abholung“ im Laden"
+1163;Annegret Lindqvist;-2.295,46;20.2.2026;
+1164;Lukas Schäfer;1.004,98;5.12.2026;Größe XL
+1165;Lukas Meyer;197,97;26.04.2026;"Gutschrift 12,50 €"
+1166;Zoë Krüger;724,48;26.02.2026;Größe XL
+1167;Käthe Lindqvist;877,72;27.05.2026;
+1168;Maëlle Schäfer;1.382,06;26.03.2026;""
+1169;Zoë Groß;540,79;12.05.2026;
+1170;Jürgen Ångström;999,26;26.12.2026;
+1171;Björn Krüger;1.097,58;17.2.2026;
+1172;Renée Müller;925,68;26.12.2026;„Abholung“ im Laden
+1173;Jürgen Öztürk;1.131,52;10.12.2026;""
+1174;Annegret Lindqvist;738,34;08.04.2026;""
+1175;Jörg Weiß;-2.173,63;16.8.2026;
+1176;Käthe Groß;1.114,74;17.11.2026;
+1177;Jürgen Krüger;2.447,78;14.05.2026;Größe XL
+1178;Zoë Öztürk;2.348,16;17.5.2026;
+1179;Käthe Groß;582,25;11.04.2026;
+1180;Jürgen Groß;2.050,36;04.04.2026;""
+1181;Lukas Öztürk;-1.640,04;4.3.2026;"„Express“ gewünscht"
+1182;Jörg Krüger;685,59 €;04.02.2026;""
+1183;Annegret Brühl;1.802,81;23.02.2026;"Rabatt 5 €"
+1184;Lukas Ångström;132,15;13.05.2026;""
+1185;Jörg Öztürk;179,26;12.05.2026;„Abholung“ im Laden
+1186;Zoë Brühl;1.938,12;10.11.2026;
+1187;Jürgen Weiß;2.162,99;18.09.2026;"Geschenk – nicht öffnen"
+1188;Maëlle Hoß;829,05;25.09.2026;"Lieferung; bitte klingeln"
+1189;Annegret Lindqvist;1.762,28 €;20.10.2026;""
+1190;Jörg Lindqvist;1.694,17 €;14.09.2026;"Lieferung; bitte klingeln"
+1191;Günther Weiß;2.006,41 €;01.01.2026;"Gutschrift 12,50 €"
+1192;Ida Müller;1.394,92 €;13.01.2026;
+1193;Käthe Straßer;2.471,89;15.03.2026;Größe XL
+1194;Jörg Hoß;1.248,69;24.04.2026;Rabatt 5 €
+1195;Zoë Straßer;2.499,52;25.05.2026;Größe XL
+1196;Annegret Lindqvist;1.702,50 €;02.07.2026;„Abholung“ im Laden
+1197;Günther Ångström;4,53;14.04.2026;
+1198;Ida Krüger;1.096,12;01.03.2026;"Rückruf erbeten; Tel. hinterlegt"
+1199;Jürgen Müller;1.417,03 €;04.09.2026;
+1200;Renée Straßer;2.010,50;12.06.2026;"Gutschrift 12,50 €"
