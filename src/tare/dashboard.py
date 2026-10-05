@@ -52,6 +52,8 @@ def state(out: Path) -> dict:
         if kind == "start":
             s.update({k: e.get(k) for k in ("kind", "task", "check", "project", "sides")})
             s["params"] = {k: e.get(k) for k in ("cuts", "tails", "budget")}
+            if s["kind"] == "calibrate":
+                s["originals"] = {k: {"passed": None, "detail": "", "steps": []} for k in s["sides"]}  # no original runs
         elif kind == "phase":
             s["phase"] = e["phase"]
         elif kind == "probe":
@@ -83,6 +85,8 @@ def state(out: Path) -> dict:
         s["steps"] = _cliff_steps(tails.values())
     elif s["kind"] == "swap":
         s["cells"] = _swap_cells(tails.values(), s["plan"])
+    elif s["kind"] == "calibrate":
+        s["rates"] = _rates(tails.values(), s["sides"])
     return s
 
 
@@ -97,6 +101,17 @@ def _cliff_steps(tails) -> list[dict]:
         rows.append({"step": step, "passes": sum(done), "n": len(done), "running": sum(t["status"] == "running" for t in ts),
                      "rate": sum(done) / len(done) if done else None, "lo": lo, "hi": hi})
     return rows
+
+
+def _rates(tails, sides) -> dict:
+    rates = {}
+    for key in sides:
+        ts = [t for t in tails if t.get("side") == key]
+        done = [t["status"] == "passed" for t in ts if t["status"] != "running"]
+        lo, hi = wilson(sum(done), len(done))
+        rates[key] = {"passes": sum(done), "n": len(done), "running": sum(t["status"] == "running" for t in ts),
+                      "rate": sum(done) / len(done) if done else None, "lo": lo, "hi": hi}
+    return rates
 
 
 def _swap_cells(tails, plan) -> list[dict]:

@@ -79,7 +79,8 @@ function recipeCard(s) {
     return `<div>agent ${esc(k)}</div><div><b>${esc(v.agent)}</b> ${esc((v.args || []).join(" "))} <span class="muted">${esc(version)}</span></div>`;
   }).join("");
   const p = s.params || {};
-  const params = s.kind === "cliff" ? `${esc(p.tails)} tails per probe · budget ${esc(p.budget)}` : `cuts ${esc((p.cuts || []).join(", "))} · ${esc(p.tails)} tails per cell`;
+  const params = s.kind === "cliff" ? `${esc(p.tails)} tails per probe · budget ${esc(p.budget)}`
+    : s.kind === "calibrate" ? `${esc(p.tails)} fresh starts per side` : `cuts ${esc((p.cuts || []).join(", "))} · ${esc(p.tails)} tails per cell`;
   return `<section class="panel"><h2>Recipe</h2><div class="kv">
     <div>task</div><div>${esc(s.task)}</div>
     <div>check</div><div><code>${esc(s.check)}</code></div>
@@ -166,11 +167,24 @@ function swapCard(s) {
   }).join("")}</div></section>`;
 }
 
+function calibrateCard(s) {
+  const rates = s.rates || {};
+  const rows = Object.entries(s.sides || {}).map(([k, side]) => {
+    const r = rates[k] || { passes: 0, n: 0, running: 0 };
+    const dots = "<span class='dot pass'></span>".repeat(r.passes) + "<span class='dot fail'></span>".repeat(r.n - r.passes) + "<span class='dot run'></span>".repeat(r.running);
+    const band = r.n ? `<div class="bar" style="position:relative"><i style="margin-left:${(r.lo * 100).toFixed(1)}%;width:${((r.hi - r.lo) * 100).toFixed(1)}%"></i></div>` : "";
+    return `<tr><td class="num">${esc(k)}</td><td><b>${esc(side.agent)}</b> ${esc((side.args || []).join(" "))}<div class="dots">${dots}</div></td>
+      <td class="num">${r.passes}/${r.n}</td><td class="num">${pct(r.rate)}</td><td class="num" style="min-width:160px">${r.n ? `${pct(r.lo)}–${pct(r.hi)}` : "–"}${band}</td></tr>`;
+  }).join("");
+  return `<section class="panel"><h2>Pass rates</h2><table><thead><tr><th>side</th><th>agent</th><th>pass</th><th>rate</th><th>95% interval</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+}
+
 function tailsCard(s) {
   const running = s.tails.filter((t) => t.status === "running"), done = s.tails.filter((t) => t.status !== "running");
   if (!s.tails.length) return "";
   const fraction = (i) => (s.plan && s.plan[i] ? s.plan[i].fraction.toFixed(2) : i);
-  const where = (t) => s.kind === "cliff" ? `step ${t.step}` : `cut ${fraction(t.cut)} · room ${t.room} · agent ${t.agent}${t.kind === "native" ? " · native" : ""}`;
+  const where = (t) => s.kind === "cliff" ? `step ${t.step}` : s.kind === "calibrate" ? `side ${t.side} · fresh start`
+    : `cut ${fraction(t.cut)} · room ${t.room} · agent ${t.agent}${t.kind === "native" ? " · native" : ""}`;
   const row = (t) => `<tr><td>${dot(t.status)}</td><td class="num">${esc(where(t))}</td><td>${esc(t.agent_name)}</td>
     <td class="num">${dur((t.ended || s.now) - t.started)}</td><td class="activity">${esc(t.status === "running" ? (t.activity || "starting…") : t.detail || t.status)}</td></tr>`;
   const total = s.kind === "cliff" ? `${done.length} of a budget of ${esc((s.params || {}).budget)}` : `${done.length} done`;
@@ -189,8 +203,9 @@ function render(s) {
   $("#updated").innerHTML = s.phase !== "done" && quiet > 300 ? `<span class="stale">no journal entry for ${dur(quiet)}</span>` : "";
   let cliffStep = null;
   if (s.report) { const m = s.report.match(/lost at step (\d+)/); if (m) cliffStep = Number(m[1]); }
-  $("#app").innerHTML = (s.kind ? recipeCard(s) : "") + probesCard(s) + (s.kind ? originalsCard(s, cliffStep) : "")
+  $("#app").innerHTML = (s.kind ? recipeCard(s) : "") + probesCard(s) + (s.kind && s.kind !== "calibrate" ? originalsCard(s, cliffStep) : "")
     + (s.report ? `<section class="panel"><h2>Report</h2><pre>${esc(s.report)}</pre></section>` : "")
+    + (s.kind === "calibrate" ? calibrateCard(s) : "")
     + (s.kind === "cliff" ? cliffCard(s) : "") + (s.kind === "swap" ? swapCard(s) : "") + tailsCard(s);
 }
 

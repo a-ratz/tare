@@ -4,6 +4,7 @@
   tare {claude,codex,pi} [--project DIR] [--allow-dirty] [--yolo] [-- AGENT_ARGS...]
   tare cliff {claude,codex,pi} PROMPT --check CMD [--tails N] [--budget N] [--jobs N] [-- AGENT_ARGS...]
   tare swap PROMPT --check CMD [--a claude] [--b codex] [--a-args ARGS] [--b-args ARGS] [--cuts 0,0.5,1]
+  tare calibrate PROMPT --check CMD --side "claude --model haiku" --side "codex" [--runs N]
   tare watch DIR [--port N]      the live dashboard of a Cliff or Swap run, also a finished one
   tare rerun DIR [--out DIR]     repeat a run from its recipe
 """
@@ -18,6 +19,7 @@ from pathlib import Path
 
 from . import dashboard, recipe
 from .agents import AGENTS
+from . import calibrate as calibration
 from .cliff import cliff
 from .journal import Journal
 from .swap import Side, swap
@@ -95,13 +97,29 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--project", type=Path, default=Path.cwd())
     w.add_argument("--out", type=Path, help="run directory (default ~/.local/state/tare/swap/<project>-<time>)")
     w.add_argument("--allow-dirty", action="store_true", help="run even if a probe reading is not zero")
-    for parser in (k, w):
+    c = sub.add_parser("calibrate", help="pass rates of agents on a task, before Cliff or Swap")
+    c.add_argument("prompt", help="the task, as given to every side")
+    c.add_argument("--check", required=True, help="shell command run in the finished workspace; exit 0 passes")
+    c.add_argument("--side", action="append", required=True,
+                   help="an agent and its arguments, e.g. 'claude --model haiku' (repeat for each side)")
+    c.add_argument("--runs", type=int, default=10, help="fresh starts per side (default 10)")
+    c.add_argument("--jobs", type=int, default=3, help="runs at the same time (default 3)")
+    c.add_argument("--project", type=Path, default=Path.cwd())
+    c.add_argument("--out", type=Path, help="run directory (default ~/.local/state/tare/calibrate/<project>-<time>)")
+    c.add_argument("--allow-dirty", action="store_true", help="run even if a probe reading is not zero")
+    for parser in (k, w, c):
         parser.add_argument("--port", type=int, default=8777, help="dashboard port on localhost (default 8777)")
     sub.add_parser("watch", help="the live dashboard of a run directory (tare watch DIR)")
     sub.add_parser("rerun", help="repeat a run from its recipe (tare rerun DIR)")
     args = ap.parse_args(argv)
     if args.command == "swap":
         names = [args.a, args.b]
+    elif args.command == "calibrate":
+        sides = [shlex.split(side) for side in args.side]
+        unknown = [side[0] for side in sides if side[0] not in AGENTS]
+        if unknown:
+            ap.error(f"unknown agent: {', '.join(unknown)} (known: {', '.join(sorted(AGENTS))})")
+        names = [side[0] for side in sides]
     else:
         names = [args.agent if args.command in ("probe", "cliff") else args.command]
     project = args.project.resolve()
@@ -111,7 +129,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         reals = {name: AGENTS[name].discover() for name in dict.fromkeys(names)}
         journal = Journal(None)
-        if args.command in ("cliff", "swap"):
+        if args.command in ("cliff", "swap", "calibrate"):
             out = args.out or (Path.home() / ".local/state/tare" / args.command
                                / f"{project.name}-{time.strftime('%Y%m%d-%H%M%S')}")
             out.mkdir(parents=True, exist_ok=False)
@@ -119,6 +137,9 @@ def main(argv: list[str] | None = None) -> int:
             if args.command == "cliff":
                 agents = {"a": (AGENTS[args.agent], reals[args.agent], passthrough)}
                 params = {"tails": args.tails, "budget": args.budget, "jobs": args.jobs}
+            elif args.command == "calibrate":
+                agents = {chr(97 + i): (AGENTS[side[0]], reals[side[0]], side[1:]) for i, side in enumerate(sides)}
+                params = {"runs": args.runs, "jobs": args.jobs}
             else:
                 agents = {"a": (AGENTS[args.a], reals[args.a], shlex.split(args.a_args)),
                           "b": (AGENTS[args.b], reals[args.b], shlex.split(args.b_args))}
@@ -143,6 +164,12 @@ def main(argv: list[str] | None = None) -> int:
             print(cliff(agent, real, project, args.prompt, args.check, out, tails=args.tails, budget=args.budget,
                         jobs=args.jobs, claude_args=passthrough, journal=journal), end="")
             print(f"tare cliff: see it again with  tare watch {out}", file=sys.stderr)
+            return 0
+        if args.command == "calibrate":
+            runs = [calibration.Side(key, agent_, real_, list(extra)) for key, (agent_, real_, extra) in agents.items()]
+            print(calibration.calibrate(runs, project, args.prompt, args.check, out, runs=args.runs, jobs=args.jobs,
+                                        journal=journal), end="")
+            print(f"tare calibrate: see it again with  tare watch {out}", file=sys.stderr)
             return 0
         if args.command == "swap":
             a = Side("a", AGENTS[args.a], reals[args.a], shlex.split(args.a_args), out / "a")
