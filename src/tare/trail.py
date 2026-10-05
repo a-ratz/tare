@@ -110,7 +110,7 @@ def codex(lines: list[str]) -> Trail:
                 trail.events.append(Event("result", _short(_text(payload.get("output")))))
                 call = calls.get(payload.get("call_id"))
                 if call:
-                    trail.steps.append(Step(call["inner"], len(trail.events), None, call["tool"]))
+                    trail.steps.append(Step(call["inner"], len(trail.events), i + 1, call["tool"]))
                 current = None
         elif kind == "event_msg" and payload.get("type") == "item_completed" and current:
             item = payload.get("item") or {}

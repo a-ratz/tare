@@ -165,7 +165,7 @@ class Codex:
     # Account plugins can restore personal skills after login (CONCEPT.md, adapters).
     room_flags = ["--disable", "remote_plugin"]
     yolo = ["--dangerously-bypass-approvals-and-sandbox"]
-    native_resume = False
+    native_resume = True
 
     def discover(self) -> Real:
         home = Path.home()
@@ -229,14 +229,18 @@ class Codex:
             {"matcher": "", "hooks": [{"type": "command", "command": hook}]}]}}))
 
     def resume_args(self, session: str, prompt: str, extra: list[str]) -> list[str] | None:
-        return None  # continued by handoff only
+        return ["exec", "resume", "--dangerously-bypass-approvals-and-sandbox", "--skip-git-repo-check", "--json",
+                *extra, session, prompt]
 
     def session_file(self, home: Path) -> Path | None:
         rollouts = sorted((home / ".codex" / "sessions").rglob("rollout-*.jsonl"))
         return rollouts[-1] if rollouts else None
 
     def place_session(self, home: Path, session: str, lines: list[str]):
-        raise TareError("codex continues by handoff only")
+        # Codex finds a session by the id at the end of its rollout's file name
+        target = home / ".codex" / "sessions" / "2026" / "01" / "01"
+        target.mkdir(parents=True, exist_ok=True)
+        (target / f"rollout-2026-01-01T00-00-00-{session}.jsonl").write_text("\n".join(lines) + "\n")
 
     def trail(self, lines: list[str]) -> trails.Trail:
         return trails.codex(lines)
