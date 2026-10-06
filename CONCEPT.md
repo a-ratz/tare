@@ -64,7 +64,9 @@ your instructions, memories, plugins, hooks and skills. That is not enough.
   credential files, and called it reconnaissance. That is correct behaviour, but useless for a
   probe. The probe must not depend on the agent's cooperation or honesty.
 - **Reach:** a plain script runs inside the room and looks for your files and inherited
-  environment variables.
+  environment variables. On macOS it also looks for `~/Library` (Keychains, Preferences,
+  Application Support), your directory under `/var/folders`, Claude Code's temporary files in
+  `/private/tmp`, and whether the pasteboard can be read.
 - **Context:** tare points the real agent CLI at a fake model server on your machine. The
   server keeps the request, which is the context the agent CLI put together, and answers "ok".
   The idea is the blank run from analytical chemistry, which runs the whole procedure without a
@@ -83,12 +85,37 @@ your instructions, memories, plugins, hooks and skills. That is not enough.
 
 ### Room
 
-A room is a bubblewrap sandbox for one agent run: an empty `/home` with the room's own home
+A backend builds the room, and every path the agent sees comes from the room it built: its
+home, the project and a run's store. On Linux and WSL the backend is bubblewrap, which mounts
+them at fixed paths. A backend that cannot mount, such as Seatbelt on macOS, uses the host paths
+instead, and the adapters follow (the trust entry, the session directories, the config
+variables).
+
+A bubblewrap room is a sandbox for one agent run: an empty `/home` with the room's own home
 directory at `/home/tare`, a fresh copy of the login, the agent's executable, the project at
 `/work`, and the environment allowlist. `tare claude` and the other agent commands mount your
 project directly, so the agent changes your real files. Calibrate, Swap and Cliff give every run
 its own copy of the project. The room has network access and a working login. It keeps your setup out of the measurement. It does not protect your machine from a hostile
 agent.
+
+A Seatbelt room (macOS) cannot mount anything. It is one directory under `/private/tmp` that
+holds the room's home, an APFS clone of the project and clones of the agent's executable, placed
+where bubblewrap would mount them (`opt/agent/...`). A clone shares the original's disk blocks,
+so it costs next to nothing. The profile (`sandbox-exec`) denies your home directory, your
+directory under `/var/folders` (other programs' temporary files and caches), the rest of
+`/private/tmp` (where Claude Code keeps its temporary files), `/private/var/tmp`,
+`/Users/Shared` and the pasteboard. Then it allows the room. When the room closes, the run's
+changes to the clone are copied back to the project. A file the run did not touch stays as it
+is. On macOS, Claude Code keeps its login in the Keychain. tare reads it there the way Claude
+Code does and gives the room a copy as a file, which Claude Code uses when the room has no
+Keychain item. No further Seatbelt profile can start inside a Seatbelt room, so the agents' own
+sandboxes do not work there. Codex runs without its sandbox anyway, and tare turns Claude Code's
+off in a macOS room, because a project that turns it on would make every Bash call fail there.
+On macOS, `tar` stores extended attributes as `._` files, so the snapshot hook runs it with
+`COPYFILE_DISABLE=1`. **Measured** on macOS 27.0 (Claude Code 2.1.289, Codex CLI 0.159.0,
+Pi 0.99.1): each agent answered in such a room with its real login. Afterwards the room was
+gone and the Keychain item unchanged, and nothing under the home directory was readable from
+inside (epic #85).
 
 Claude Code may replace its login token when it renews it, which could log out your real
 session. This has not been tested, so tare refuses to start when the copy would need renewal
@@ -197,7 +224,9 @@ read `tare: 0.00`, including a skill that started `claude -p` inside the room (s
 
 The judge scores results that no test can decide, such as a web page. tare opens the page in
 headless Google Chrome inside a room with the workspace read-only and no home directory, and
-takes a screenshot. A judge agent (Claude Code with Sonnet by default) then scores the page from
+takes a screenshot. On macOS it uses Chrome, Chromium or Microsoft Edge from `/Applications`, in
+a Seatbelt room with a browser profile of its own and a mock keychain. Edge keeps running after
+its screenshot, so tare ends it once the file is written. A judge agent (Claude Code with Sonnet by default) then scores the page from
 the screenshot, the source and a rubric, in a fresh room without any agent or model names.
 **Measured:** one test page scored 55, 60, 58, 58, 66 and 62 in six judgements. `tare judge-noise`
 therefore refuses a threshold that lies inside a page's range of scores. On the same page the
@@ -256,7 +285,8 @@ names what has changed since.
 
 ## Measurements
 
-All measurements ran on WSL2 on 2026-10-04 and 2026-10-05.
+All measurements ran on WSL2 on 2026-10-04 and 2026-10-05. The rows that name macOS ran on
+macOS 27.0 (arm64) on 2026-10-05 and 2026-10-06.
 
 | What | Agent and version | Result | Source |
 |---|---|---|---|
@@ -269,6 +299,10 @@ All measurements ran on WSL2 on 2026-10-04 and 2026-10-05.
 | Real task 1: a data migration | Claude Code with Sonnet and Haiku, Codex | Deleting the source file after a wrong-encoding import was planned as the point of no return. Swap showed that the workspace could still be repaired. Haiku passed about 1 in 14 runs, Codex with gpt-6.1-sol 4 of 4 | [results](experiments/migration/RESULTS.md) |
 | Real task 2: a web page judged by Sonnet | Claude Code with Haiku, Codex with gpt-6.1-sol | Swap confirmed all four predictions of the plan written before the runs. Cliff called a failed run unlucky, and a later rescoring of the same page confirmed it | [results](experiments/html/RESULTS.md) |
 | Field test: two ideation skills compared | Claude Code 2.1.289 with Opus 5.5 | all 18 rooms read `tare: 0.00`, including a skill that started `claude -p` inside the room | not published |
+| macOS: what a Seatbelt room has to handle | Claude Code 2.1.289, Codex CLI 0.159.0, Pi 0.99.1 | Claude Code's login is in the Keychain. With only the home directory denied, `/var/folders`, `/private/tmp` and the pasteboard stayed readable. Agents' own sandboxes fail inside a room (`sandbox_apply: Operation not permitted`) | comments on epic #85 |
+| macOS: a Seatbelt room with the real login | same | each agent answered one prompt. The room and its login copy were removed afterwards, and the Keychain item was unchanged (digest before and after). `tare probe` read `tare: 0.00` for all three | comments on epic #85 |
+| macOS: dirty twin, Seatbelt room, and parts of the real setup copied into the room | same | every room read `tare: 0.00`. Each copied part that reached the request was named with its source, and nothing under the home directory, under `/var/folders`, in `/private/tmp` or on the pasteboard was reachable from inside. Two kinds of Codex context are invisible to the probe on any system (#109) | [results](experiments/dirty-twin-macos/RESULTS.md) |
+| macOS: scripted Cliff and Swap, the judge | Claude Code 2.1.290 against scripted models; Microsoft Edge for the judge's screenshot | Cliff found step 4. Swap passed the null check and found the blame passing from the model to the workspace between cut 0 and cut 0.5. `tare judge` rendered a page and scored it. With a project that turns Claude Code's sandbox on, every Bash call failed in a Seatbelt room until tare turned it off | comments on epic #85 |
 
 ## Open questions and ideas
 
@@ -281,8 +315,9 @@ All measurements ran on WSL2 on 2026-10-04 and 2026-10-05.
 - **Codex handoffs:** Codex can run several commands in one tool call, which makes its handoffs
   long.
 - **Cost:** every tail is a full agent run, so a Cliff search or a Swap costs as much as its tails.
-- **macOS:** a room built on Seatbelt (`sandbox-exec`), which Claude Code and Codex already use
-  for their own sandboxes. In progress (epic #85), not in a release yet.
+- **macOS:** the room is built on Seatbelt, in progress (epic #85) and not in a release yet.
+  Not done: the Antigravity CLI, whose dirty twin needs Linux's overlay; tare stops with a message. Not tested: whether a
+  program started through launchd or XPC runs outside the room's profile.
 - **Other probes, not built:** weighing the first request's input tokens before and after adding
   junk to the real setup, and file tripwires that report which secret files a run opened.
 - **Docker:** could contain files where bubblewrap is missing, but does nothing against context

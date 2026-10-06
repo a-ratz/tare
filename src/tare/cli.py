@@ -29,11 +29,11 @@ from .cliff import cliff
 from .journal import Journal
 from .swap import Side, swap
 from .probe import probe, render
-from .room import TareError, bwrap, room_home
+from .room import TareError, backend
 
 
 def _exit_on(signum, _frame):
-    # SystemExit unwinds through room_home, so the login copy is removed
+    # SystemExit unwinds through the room, so the login copy is removed
     raise SystemExit(128 + signum)
 
 
@@ -212,8 +212,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"tare swap: see it again with  tare watch {out}", file=sys.stderr)
             return 0
         flags = agent.room_flags + (agent.yolo if args.yolo else [])
-        with room_home(agent, real) as home:
-            return _run_attached(bwrap(agent, real, home, project, [agent.name, *flags, *passthrough]))
+        rooms = backend()
+        with rooms.open(agent, real, project) as room:
+            return _run_attached(rooms.argv(room, agent, real, [agent.name, *flags, *passthrough]))
     except TareError as err:
         print(f"tare: {err}", file=sys.stderr)
         return 2
