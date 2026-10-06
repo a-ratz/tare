@@ -265,3 +265,8 @@ def test_claude_code_keeps_its_own_sandbox_off_in_a_macos_room(monkeypatch, mac)
     monkeypatch.setattr(sys, "platform", "linux")
     assert "--settings" not in Claude().room_flags
     assert "sandbox" not in Claude().run_args("task", [], hook="/bin/sh /run/hook.sh")[2]
+
+
+def test_the_antigravity_cli_says_it_is_not_supported_on_macos(mac):
+    with pytest.raises(TareError, match="not supported on macOS"):
+        agents.AGENTS["agy"].discover()

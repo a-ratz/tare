@@ -316,7 +316,7 @@ macOS 27.0 (arm64) on 2026-10-05 and 2026-10-06.
   long.
 - **Cost:** every tail is a full agent run, so a Cliff search or a Swap costs as much as its tails.
 - **macOS:** the room is built on Seatbelt, in progress (epic #85) and not in a release yet.
-  Not done: the Antigravity CLI, whose dirty twin needs Linux's overlay. Not tested: whether a
+  Not done: the Antigravity CLI, whose dirty twin needs Linux's overlay; tare stops with a message. Not tested: whether a
   program started through launchd or XPC runs outside the room's profile.
 - **Other probes, not built:** weighing the first request's input tokens before and after adding
   junk to the real setup, and file tripwires that report which secret files a run opened.

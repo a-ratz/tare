@@ -640,6 +640,9 @@ class Antigravity:
     native_resume = False
 
     def discover(self) -> Real:
+        if sys.platform == "darwin":
+            raise TareError("the Antigravity CLI is not supported on macOS yet: its dirty twin needs Linux's overlay "
+                            "over ~/.gemini (epic #85)")
         home = Path.home()
         return Real(home, home / ".gemini" / "antigravity-cli", _which("agy"))
 

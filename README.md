@@ -13,7 +13,7 @@
 [![License: MIT][license-shield]][license-url]
 [![PyPI][version-shield]][version-url]
 [![Python 3.11+][python-shield]][python-url]
-[![Linux | WSL][platform-shield]][platform-url]
+[![Linux | WSL | macOS][platform-shield]][platform-url]
 [![Claude Code | Codex | Pi | Antigravity][agent-shield]][agent-url]
 
 </div>
@@ -47,7 +47,7 @@ environment, and none of them checks it.
 tare starts the agent in a clean environment and proves that it is clean before every run. It
 works with four coding agents on Linux and WSL: Claude Code, Codex, Pi
 ([`@earendil-works/pi-coding-agent`](https://www.npmjs.com/package/@earendil-works/pi-coding-agent))
-and Google's Antigravity CLI (`agy`).
+and Google's Antigravity CLI (`agy`). On macOS it works with Claude Code, Codex and Pi.
 
 ## The words tare uses
 
@@ -56,7 +56,7 @@ something. tare does the same for an agent before you measure it.
 
 | Word | Meaning |
 |---|---|
-| room | An isolated environment for one agent run. It has an empty home directory, a fresh copy of your login (the file in which the agent keeps your sign-in) and only four basic environment variables from your shell (an allowlist), plus its own `HOME` and `PATH`. Your project appears at `/work`. tare builds the room with [bubblewrap](https://github.com/containers/bubblewrap). |
+| room | An isolated environment for one agent run. It has an empty home directory, a fresh copy of your login (the file in which the agent keeps your sign-in) and only four basic environment variables from your shell (an allowlist), plus its own `HOME` and `PATH`. Your project appears at `/work`. tare builds the room with [bubblewrap](https://github.com/containers/bubblewrap). On macOS it builds the room with Seatbelt, the sandbox built into macOS: the agent works on a copy of your project inside the room, and its changes are copied back to your project when the room closes. |
 | probe | The test that tare runs before an agent starts. It makes no paid model calls. The agent talks to a fake model server on your machine, which records what the agent sends. |
 | reading | The result of a probe, one of three. A clean room reads `tare: 0.00`, the zeroed scale. A room with leaks reads, for example, `tare: 4 leaks`. A probe that could not see your setup reads `tare: not proven (blind)`. There are no values in between. |
 | leak | Something of your personal setup that reaches the room, for example your global instructions. The reading names each leak and the file it came from. |
@@ -99,7 +99,7 @@ something. tare does the same for an agent before you measure it.
 | Use tare when | Look elsewhere when |
 |---|---|
 | you compare agent runs with and without a skill, plugin or prompt | you need protection from a hostile agent, because the room has network access and a working login |
-| you benchmark agents on your own machine | you are on macOS (a room is in progress, not released yet) |
+| you benchmark agents on your own machine | you use the Antigravity CLI on macOS (not supported there yet) |
 | you want a fresh-machine run without a fresh machine | you log in with an API key only (untested) |
 | an agent failed a task and you want to know which step lost it | you want a single run explained without running the agent again, because Cliff runs it many times |
 
@@ -107,10 +107,10 @@ something. tare does the same for an agent before you measure it.
 
 | Requirement | Notes |
 |---|---|
-| Linux or WSL2 | tare builds the room with user namespaces |
-| [bubblewrap](https://github.com/containers/bubblewrap) | `sudo apt install bubblewrap` |
-| at least one of the four agents | on `PATH` and logged in. Codex must resolve to a path under `/usr` for now, because tare mounts Codex's npm package and Node.js from there. If `which codex` points elsewhere, for example into nvm, install it with the system's npm (`sudo npm install -g @openai/codex`) and put `/usr/bin` first on `PATH`. The other agents can live anywhere on `PATH`. |
-| Google Chrome, only for `tare judge` | `google-chrome` on `PATH`, installed under `/usr` or `/opt`. `tare judge` scores web pages and takes their screenshots with it. |
+| Linux or WSL2, or macOS | on Linux tare builds the room with user namespaces, on macOS with Seatbelt (`sandbox-exec`, part of macOS). On macOS the project must be on an APFS volume for the room's copy to be instant; elsewhere tare copies it in full. |
+| [bubblewrap](https://github.com/containers/bubblewrap), Linux and WSL only | `sudo apt install bubblewrap` |
+| at least one of the agents | on `PATH` and logged in. On Linux, Codex must resolve to a path under `/usr` for now, because tare mounts Codex's npm package and Node.js from there. If `which codex` points elsewhere, for example into nvm, install it with the system's npm (`sudo npm install -g @openai/codex`) and put `/usr/bin` first on `PATH`. The other agents, and every agent on macOS, can live anywhere on `PATH`. On macOS, Claude Code keeps its login in the Keychain: tare reads it there the way Claude Code does and gives the room a copy. |
+| a Chromium browser, only for `tare judge` | Linux: `google-chrome` on `PATH`, installed under `/usr` or `/opt`. macOS: Google Chrome, Chromium or Microsoft Edge in `/Applications`. `tare judge` scores web pages and takes their screenshots with it. |
 | [uv](https://docs.astral.sh/uv/) or [pipx](https://pipx.pypa.io/) | Python 3.11 or newer |
 
 Install tare from PyPI. The package is `tare-cli`, the command is `tare`:
@@ -448,12 +448,12 @@ real setup, so tare knows that it can see your setup at all. Third, a plain scri
 room looks for your files and for secret environment variables.
 
 → [Concept: the design and the measurements behind it](https://github.com/a-ratz/tare/blob/main/CONCEPT.md)
-→ [The dirty-twin experiments that decided the probe design: Claude Code](https://github.com/a-ratz/tare/blob/main/experiments/dirty-twin/RESULTS.md), [Codex](https://github.com/a-ratz/tare/blob/main/experiments/dirty-twin-codex/RESULTS.md), [Pi](https://github.com/a-ratz/tare/blob/main/experiments/dirty-twin-pi/RESULTS.md), [Antigravity CLI](https://github.com/a-ratz/tare/blob/main/experiments/dirty-twin-agy/RESULTS.md)
+→ [The dirty-twin experiments that decided the probe design: Claude Code](https://github.com/a-ratz/tare/blob/main/experiments/dirty-twin/RESULTS.md), [Codex](https://github.com/a-ratz/tare/blob/main/experiments/dirty-twin-codex/RESULTS.md), [Pi](https://github.com/a-ratz/tare/blob/main/experiments/dirty-twin-pi/RESULTS.md), [Antigravity CLI](https://github.com/a-ratz/tare/blob/main/experiments/dirty-twin-agy/RESULTS.md), [the three agents on macOS](https://github.com/a-ratz/tare/blob/main/experiments/dirty-twin-macos/RESULTS.md)
 
 ## Roadmap
 
-A room for macOS, built on Seatbelt, is in progress ([epic #85](https://github.com/a-ratz/tare/issues/85)).
-Until it is released, tare runs on Linux and WSL.
+The Antigravity CLI on macOS: its dirty twin uses an overlay over `~/.gemini`, which macOS does not
+have, so tare stops with a message there for now.
 
 ## Contributing
 
@@ -475,7 +475,7 @@ Crafted with [Readme Craft](https://github.com/motiful/readme-craft)
 [version-url]: https://github.com/a-ratz/tare/blob/main/pyproject.toml
 [python-shield]: https://img.shields.io/badge/python-3.11%2B-3776AB.svg
 [python-url]: https://www.python.org/
-[platform-shield]: https://img.shields.io/badge/platform-Linux%20%7C%20WSL-555555.svg
+[platform-shield]: https://img.shields.io/badge/platform-Linux%20%7C%20WSL%20%7C%20macOS-555555.svg
 [platform-url]: #install
 [agent-shield]: https://img.shields.io/badge/agents-Claude%20Code%20%7C%20Codex%20%7C%20Pi%20%7C%20Antigravity-D97757.svg
 [agent-url]: #install
