@@ -1,6 +1,6 @@
 [project]
 name = "tare-cli"
-version = "0.2.0"
+version = "0.3.0"
 description = "Prove your coding agent starts without your personal setup before you measure it."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -13,6 +13,7 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Developers",
+    "Operating System :: MacOS",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",

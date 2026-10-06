@@ -4,7 +4,7 @@ tare starts a coding agent in an isolated room without your personal setup, and 
 clean before the run. It prints `tare: 0.00`, names every leak and where it came from, or says
 that it could not see your setup (`tare: not proven (blind)`). It refuses to start the agent
 until the reading is `tare: 0.00`, unless you pass `--allow-dirty`. It supports Claude Code, Codex, Pi
-and the Antigravity CLI (`agy`) on Linux and WSL.
+and the Antigravity CLI (`agy`) on Linux and WSL, and Claude Code, Codex and Pi on macOS.
 
 This document describes the design and the measurements behind it. The [README](README.md)
 explains the words this document uses: room, probe, reading, leak, declared, dirty twin, check, tail and
@@ -315,9 +315,9 @@ macOS 27.0 (arm64) on 2026-10-05 and 2026-10-06.
 - **Codex handoffs:** Codex can run several commands in one tool call, which makes its handoffs
   long.
 - **Cost:** every tail is a full agent run, so a Cliff search or a Swap costs as much as its tails.
-- **macOS:** the room is built on Seatbelt, in progress (epic #85) and not in a release yet.
-  Not done: the Antigravity CLI, whose dirty twin needs Linux's overlay; tare stops with a message. Not tested: whether a
-  program started through launchd or XPC runs outside the room's profile.
+- **macOS:** the room is built on Seatbelt, released in 0.3.0 (epic #85). Not done: the
+  Antigravity CLI, whose dirty twin needs Linux's overlay, so tare stops with a message there.
+  Not tested: whether a program started through launchd or XPC runs outside the room's profile.
 - **Other probes, not built:** weighing the first request's input tokens before and after adding
   junk to the real setup, and file tripwires that report which secret files a run opened.
 - **Docker:** could contain files where bubblewrap is missing, but does nothing against context
