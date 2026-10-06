@@ -1,10 +1,11 @@
 # tare
 
 tare starts a coding agent (Claude Code, Codex, Pi or the Antigravity CLI) in a room without the
-user's personal setup, and proves the room clean before the run. The room is a bubblewrap
-sandbox with an empty home directory, a fresh copy of the login and a cleared environment. The
-proof is a probe that asks the agent nothing. The real agent CLI runs in the room against a fake
-model server, which keeps the request. That request is the context the agent CLI put together.
+user's personal setup, and proves the room clean before the run. The room is a sandbox
+(bubblewrap on Linux and WSL, Seatbelt on macOS) with an empty home directory, a fresh copy of
+the login and a cleared environment. The proof is a probe that asks the agent nothing. The real
+agent CLI runs in the room against a fake model server, which keeps the request. That request
+is the context the agent CLI put together.
 The same run in the user's real setup (the dirty twin) checks that the probe can see the user's
 setup at all. A plain script checks what the room can reach. tare is built for skill and agent
 evaluations, where a run that carries the user's own context measures the user's machine
@@ -127,8 +128,8 @@ test, a fix next door) becomes a new issue or a question, not part of the PR.
 - Python through uv (`uv run`, `uv add`). tare itself has no runtime dependencies.
 - Write like the surrounding code: its naming, its comment density, its idiom.
 - A user-visible change updates README.md and CONCEPT.md in the same PR.
-- The room uses bubblewrap on Linux and WSL and Seatbelt on macOS. The macOS room is in progress
-  (epic #85) and not in a release yet. Tests describe Linux unless they say otherwise:
+- The room uses bubblewrap on Linux and WSL and Seatbelt on macOS (since 0.3.0). The
+  Antigravity CLI is not supported on macOS. Tests describe Linux unless they say otherwise:
   `tests/conftest.py` pins the platform and keeps the tests away from the Keychain.
 - Commits use the `a-ratz` identity (`44863088+a-ratz@users.noreply.github.com`). Pushes go
   through that GitHub account.
