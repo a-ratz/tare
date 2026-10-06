@@ -48,9 +48,11 @@ jobs:
       - run: uv publish --trusted-publishing always dist/*
       - name: Install from PyPI and run it
         run: |
-          for _ in 1 2 3 4 5 6; do
-            uv tool run --from "tare-cli==${GITHUB_REF_NAME#v}" tare --version && exit 0
-            sleep 20  # a new release takes a moment to appear in the index
+          # PyPI's index can lag minutes behind the upload, and uv would answer every later try
+          # from the stale page it cached on the first one. So each try skips uv's cache.
+          for _ in $(seq 20); do
+            uv tool run --no-cache --from "tare-cli==${GITHUB_REF_NAME#v}" tare --version && exit 0
+            sleep 30
           done
           exit 1
 
