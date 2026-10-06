@@ -173,6 +173,56 @@ def test_codex_capture_reads_input_items_and_additional_tools():
     assert Codex().capture("", []) is None
 
 
+def codex_body(*skill_lines, mcp=True):
+    """A first request as Codex 0.159 sends it: tools in namespaces, plugin skills in a developer message."""
+    namespaces = [{"type": "namespace", "name": "functions", "tools": [{"type": "function", "name": "exec"}]}]
+    if mcp:
+        namespaces.append({"type": "namespace", "name": "mcp__cua_repl",
+                           "tools": [{"type": "function", "name": "js"}, {"type": "function", "name": "js_reset"}]})
+    text = "\n".join(["## Skills", "- imagegen: bundled", *skill_lines])
+    return {"input": [{"type": "additional_tools", "tools": namespaces},
+                      {"type": "message", "role": "developer", "content": [{"type": "input_text", "text": text}]}]}
+
+
+PLUGIN_SKILLS = ["- limitless:james: review a plan", "- limitless:learn-anything: teach a topic",
+                 "- ponytail:ponytail-help: show the modes"]
+
+
+def test_codex_capture_names_mcp_namespaces_and_plugin_skills():
+    capture = Codex().capture("", [codex_body(*PLUGIN_SKILLS)])
+    assert {"mcp__cua_repl__js", "mcp__cua_repl__js_reset", "functions"} <= capture.tools
+    assert "functions__exec" not in capture.tools  # only an MCP server's namespace is renamed
+    assert capture.init["skills"] == ["limitless:james", "limitless:learn-anything", "ponytail:ponytail-help"]
+    assert [p["name"] for p in capture.init["plugins"]] == ["limitless", "ponytail"]
+    assert Codex().capture("", [codex_body(mcp=False)]).init == {}
+
+
+def test_codex_plugin_skills_and_mcp_namespaces_are_seen_and_named_in_a_room(tmp_path):
+    real = Real(home=tmp_path, config=tmp_path / ".codex", binary=tmp_path / "codex")
+    twin = Codex().capture("", [codex_body(*PLUGIN_SKILLS)])
+    clean = score(Codex(), real, twin, Codex().capture("", [codex_body(mcp=False)]), "", "")
+    assert clean.zero and {"mcp", "skills", "plugins"} <= set(clean.seen)
+    dirty = score(Codex(), real, twin, twin, "", "")
+    found = {(f.kind, f.what, f.source) for f in dirty.leaks}
+    assert found == {("mcp", "cua_repl", "MCP server"), ("skills", "2 skills", "plugin limitless"),
+                     ("skills", "1 skill", "plugin ponytail"), ("plugin", "limitless", "Codex plugin"),
+                     ("plugin", "ponytail", "Codex plugin")}
+
+
+def test_codex_custom_agents_are_seen_and_named_in_a_room(tmp_path):
+    real = Real(home=tmp_path, config=tmp_path / ".codex", binary=tmp_path / "codex")
+    (real.config / "agents" / "pack").mkdir(parents=True)
+    (real.config / "agents" / "pack" / "reviewer.toml").write_text('name = "ce-reviewer"\ndescription = "Reviews code."\n')
+    (real.config / "agents" / "explorer.toml").write_text('name = "explorer"\ndescription = "My own explorer."\n')
+    twin = Capture("Available roles:\nce-reviewer: {\nReviews code.\n}\nexplorer: {\nMy own explorer.\n}", set(), {})
+    builtin = Capture("Available roles:\nexplorer: {\nExplores the codebase.\n}", set(), {})
+    clean = score(Codex(), real, twin, builtin, "", "")
+    assert clean.zero and "agents" in clean.seen  # Codex's own explorer is not the user's
+    dirty = score(Codex(), real, twin, twin, "", "")
+    assert [(f.kind, f.what, f.source) for f in dirty.leaks] == [("agents", "2 agents", str(real.config / "agents"))]
+    assert "agents" in score(Codex(), real, builtin, builtin, "", "").blind
+
+
 def agy_real(tmp_path):
     gemini = tmp_path / ".gemini"
     (gemini / "config" / "skills" / "own-skill").mkdir(parents=True)
