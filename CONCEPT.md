@@ -291,7 +291,9 @@ judge read 186.4k tokens in and $0.093 in total, the Codex part estimated from L
 
 Calibrate, Swap and Cliff write everything into a run directory: a journal (one JSON line per
 event), a `recipe.json`, a `usage.json` with the totals, and the live output of every agent. The dashboard reads only the run
-directory, so `tare watch` shows a finished run the same way as a live one. The recipe holds the
+directory, so `tare watch` shows a finished run the same way as a live one. Each run page opens with
+the answer: a sentence from fixed templates per verdict, worked out from the run directory the way
+Calibrate, Swap and Cliff decide, so a run recorded by an older tare reads like a new one. The recipe holds the
 command, a fingerprint of the project and the agent versions. `tare rerun` repeats a run and
 names what has changed since.
 

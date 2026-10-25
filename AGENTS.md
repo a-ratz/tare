@@ -44,7 +44,9 @@ Contributors also meet these terms in the code:
 | `src/tare/trail.py` | the trail: a run record in the same format for every agent, and the handoff written from it |
 | `src/tare/swap.py` | Swap: each agent continues each run's workspace. Workspace effect, agent effect, note cost, the report |
 | `src/tare/journal.py` | the run journal: one JSON line per event of a Calibrate, Cliff or Swap run |
-| `src/tare/dashboard.py`, `dashboard.html` | the live dashboard: state from the run directory, one page |
+| `src/tare/dashboard.py`, `dashboard.html`, `overview.html` | the live dashboard: state from the run directory, a page per run and an overview of several |
+| `src/tare/answer.py` | the answer at the top of a run page: its sentence per verdict, figures and trust line, worked out from the state |
+| `src/tare/assets/` | the dashboard's style (`tare.css`, from the design system's tokens), IBM Plex fonts with their license, the logos |
 | `src/tare/recipe.py` | recipes: how to repeat a run, and what has changed since |
 | `src/tare/calibrate.py` | Calibrate: fresh-start pass rates per side |
 | `src/tare/usage.py` | tokens and cost: the shape every adapter reads its stream into, totals, price tables and estimates |

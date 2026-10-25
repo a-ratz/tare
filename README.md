@@ -68,6 +68,14 @@ On Linux and WSL, tare also needs bubblewrap (`sudo apt install bubblewrap`). Th
 platform, and [Reading a probe](https://github.com/a-ratz/tare/blob/main/docs/probe.md) explains
 every line of the output above.
 
+To compare agents, skills or models, `tare calibrate`, `tare swap` and `tare cliff` start many runs
+and open a live dashboard that leads with the answer:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/a-ratz/tare/main/docs/assets/dashboard-calibrate-dark.png">
+  <img alt="tare's dashboard for a Calibrate run: Claude Code scored higher, 68 against 15 out of 100, with the scores of every run" src="https://raw.githubusercontent.com/a-ratz/tare/main/docs/assets/dashboard-calibrate-light.png">
+</picture>
+
 ## Features
 
 - **Measures what the model receives.** The probe records the request the agent sends to a fake
@@ -93,8 +101,8 @@ every line of the output above.
 - **Finds the step where a failed run was lost** (experimental). `tare cliff` restarts the run
   from its saved steps and names the step after which it no longer passes.
   [Cliff](https://github.com/a-ratz/tare/blob/main/docs/cliff.md)
-- **Live dashboard, cost and reruns.** A dashboard follows every run, each report ends with tokens
-  and cost, and `tare rerun` repeats a run from its recipe.
+- **Live dashboard, cost and reruns.** The dashboard leads with each run's answer and follows it
+  live, each report ends with tokens and cost, and `tare rerun` repeats a run from its recipe.
   [Dashboard and rerun](https://github.com/a-ratz/tare/blob/main/docs/dashboard.md) ·
   [Tokens and cost](https://github.com/a-ratz/tare/blob/main/docs/tokens-and-cost.md)
 

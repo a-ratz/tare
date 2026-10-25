@@ -13,6 +13,11 @@ tare calibrate "fix the failing test" --check "uv run pytest -q" \
 Each `--side` is an agent with its arguments. tare starts every side `--runs` times from a fresh
 copy of the project and reports each side's pass rate with its [likely range](measuring.md#the-likely-range).
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/dashboard-calibrate-dark.png">
+  <img alt="A Calibrate run in the dashboard" src="assets/dashboard-calibrate-light.png">
+</picture>
+
 Calibrate also tells you whether a task suits Swap or Cliff. [Swap](swap.md) needs a task where
 one side mostly fails and the other mostly passes. [Cliff](cliff.md) needs a task where a fresh
 start passes at least sometimes.

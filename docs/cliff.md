@@ -15,6 +15,11 @@ tare cliff claude "fix the failing test" --check "uv run pytest -q" -- --model s
 > either, because neither of two real test rounds had a failure that sat in one step. The rounds
 > were a [data migration](../experiments/migration/RESULTS.md) and a [web page](../experiments/html/RESULTS.md).
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/dashboard-cliff-dark.png">
+  <img alt="A Cliff run in the dashboard: the run went wrong at step 4" src="assets/dashboard-cliff-light.png">
+</picture>
+
 ## How the search works
 
 tare runs the task once in a room and saves the workspace and the conversation after every step.
