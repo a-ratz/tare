@@ -15,6 +15,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -28,8 +29,11 @@ SEATBELT_ROOMS = "/private/tmp"
 # Copied from the caller when set; everything else stays outside.
 PASS_ENV = ("TERM", "COLORTERM", "LANG", "LC_ALL")
 # The room must not refresh the login: a refresh may rotate the token family the real
-# session depends on (CONCEPT.md, layer 2). An hour covers ordinary runs.
+# session depends on (CONCEPT.md, layer 2). An hour covers ordinary runs; a shorter run may
+# ask for less, but never so little that the copy starts close to its renewal.
 MIN_TOKEN_LIFETIME = 3600
+MIN_LOGIN_ENV = "TARE_MIN_LOGIN_MINUTES"
+MIN_LOGIN_FLOOR = 10  # minutes
 
 
 class TareError(Exception):
@@ -61,11 +65,26 @@ class Room:
         return f"{self.inside_home}/{agent.config_dir}"
 
 
+def _min_lifetime() -> int:
+    """Seconds the login copy must still hold: an hour, or what TARE_MIN_LOGIN_MINUTES asks for."""
+    minutes = os.environ.get(MIN_LOGIN_ENV)
+    if minutes is None:
+        return MIN_TOKEN_LIFETIME
+    if not minutes.isdigit() or int(minutes) < MIN_LOGIN_FLOOR:
+        raise TareError(f"{MIN_LOGIN_ENV} must be a whole number of minutes, at least {MIN_LOGIN_FLOOR}")
+    return int(minutes) * 60
+
+
 def _check_login(agent, real):
     left = agent.token_lifetime(real)
-    if left < MIN_TOKEN_LIFETIME:
-        raise TareError(f"the {agent.name} login token expires in {max(0, int(left // 60))} min: "
-                        f"start any {agent.name} session to refresh it, then retry")
+    if left < _min_lifetime():
+        # the agent renews only close to expiry, so a session started earlier changes nothing
+        # with the zone: on the night the clocks go back, a bare 02:04 reads as already past
+        minutes, at = max(0, int(left // 60)), time.strftime("%H:%M %Z", time.localtime(time.time() + left)).strip()
+        shorter = (f"; a run that ends well before then can start now with {MIN_LOGIN_ENV}={minutes} or less"
+                   if minutes >= MIN_LOGIN_FLOOR else "")
+        raise TareError(f"the {agent.name} login token expires in {minutes} min, at {at}: to renew it, start "
+                        f"{agent.name} outside tare after {at}, then retry{shorter}")
 
 
 def room_env(agent, room: Room | None = None, extra: dict[str, str] | None = None) -> dict[str, str]:

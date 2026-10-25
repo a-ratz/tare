@@ -122,6 +122,14 @@ session. This has not been tested, so tare refuses to start when the copy would 
 within the next hour. **Measured:** the Antigravity CLI's Google login keeps its refresh token
 when it renews, so a room may renew its own copy.
 
+**Measured** on Ubuntu on WSL2 with Claude Code 2.1.310: Claude Code renews its token only in
+the last minutes before it expires. A session started outside tare with 57 minutes left, and
+another with 7 minutes left, kept the old token; one started with under 6 minutes left renewed
+it, and the new token held for 8 hours. So for most of the refused hour no session outside tare
+can renew the login, and the refusal names the expiry time instead of asking for one. A run
+known to be shorter may ask for less with `TARE_MIN_LOGIN_MINUTES`, never below 10 minutes, so
+the copy does not start inside the renewal window (#126).
+
 ### Probe and reading
 
 The probe has the three parts of layer 3: the agent in the room against the fake model server,
