@@ -22,6 +22,34 @@ def test_claude_transcript_becomes_a_trail_with_steps():
     assert len(t.steps) == 1 and t.steps[0].ids == ["t1"] and t.steps[0].trail_cut == 3 and t.steps[0].native_cut == 3
 
 
+def test_claude_transcript_skips_the_request_log_of_2_1_310():
+    # 2.1.310 logs each API request with the whole conversation so far (#145)
+    def use(i, command):
+        return {"type": "tool_use", "id": i, "name": "Bash", "input": {"command": command}}
+
+    def result(i):
+        return {"type": "tool_result", "tool_use_id": i, "content": "ok"}
+
+    lines = jl(
+        {"type": "queue-operation"},
+        {"type": "user", "message": {"role": "user", "content": "do it"}},
+        {"type": "attachment", "attachment": {}},
+        {"type": "assistant", "message": {"role": "assistant", "content": [use("t1", "ls")]}},
+        {"type": "user", "message": {"role": "user", "content": [result("t1")]}},
+        {"type": "api-request-blob", "message": {"role": "assistant", "content": [use("t1", "ls")]}},
+        {"type": "api-request-blob", "message": {"role": "user", "content": [result("t1")]}},
+        {"type": "api-request"},
+        {"type": "assistant", "message": {"role": "assistant", "content": [use("t2", "pwd")]}},
+        {"type": "user", "message": {"role": "user", "content": [result("t2")]}},
+        {"type": "api-request-blob", "message": {"role": "assistant", "content": [use("t1", "ls"), use("t2", "pwd")]}},
+        {"type": "api-request-blob", "message": {"role": "user", "content": [result("t1"), result("t2")]}},
+    )
+    t = trail.claude(lines)
+    assert [s.ids for s in t.steps] == [["t1"], ["t2"]]
+    assert [s.native_cut for s in t.steps] == [5, 10]
+    assert [e.kind for e in t.events] == ["call", "result", "call", "result"]
+
+
 def test_codex_rollout_becomes_a_trail_and_a_step_carries_its_inner_commands():
     lines = jl(
         {"type": "session_meta", "payload": {"id": "s"}},
