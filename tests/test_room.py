@@ -60,6 +60,35 @@ def test_room_refuses_a_login_that_would_need_a_refresh(tmp_path, make, agent):
             pass
 
 
+def test_refusal_names_the_expiry_and_how_a_shorter_run_starts(tmp_path):
+    real = claude_real(tmp_path, expires_in=1800)
+    with pytest.raises(TareError, match=r"expires in 29 min, at \d\d:\d\d.*: to renew it, start claude outside "
+                                        r"tare after \d\d:\d\d.*, then retry; .* TARE_MIN_LOGIN_MINUTES=29 or less"):
+        with room_home(Claude(), real):
+            pass
+
+
+def test_no_shorter_run_is_offered_below_the_floor(tmp_path):
+    with pytest.raises(TareError) as refused:
+        with room_home(Claude(), claude_real(tmp_path, expires_in=300)):
+            pass
+    assert "TARE_MIN_LOGIN_MINUTES" not in str(refused.value)
+
+
+def test_a_shorter_run_starts_with_less_than_an_hour_left(tmp_path, monkeypatch):
+    monkeypatch.setenv("TARE_MIN_LOGIN_MINUTES", "15")
+    with room_home(Claude(), claude_real(tmp_path, expires_in=1200)) as home:
+        assert (home / ".claude-config" / ".credentials.json").exists()
+
+
+@pytest.mark.parametrize("minutes", ["9", "0", "-5", "ten", ""])
+def test_the_minimum_never_drops_below_the_floor(tmp_path, monkeypatch, minutes):
+    monkeypatch.setenv("TARE_MIN_LOGIN_MINUTES", minutes)
+    with pytest.raises(TareError, match="TARE_MIN_LOGIN_MINUTES must be a whole number of minutes, at least 10"):
+        with room_home(Claude(), claude_real(tmp_path)):
+            pass
+
+
 def test_codex_api_key_login_never_expires(tmp_path):
     real = codex_real(tmp_path)
     (real.config / "auth.json").write_text(json.dumps({"OPENAI_API_KEY": "sk-test"}))

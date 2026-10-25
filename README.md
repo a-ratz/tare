@@ -80,8 +80,8 @@ something. tare does the same for an agent before you measure it.
 - **Keeps your own login working.** Each room gets a fresh copy of your login, which tare deletes
   after the run. Claude Code may replace its login token when it renews it, which could log you
   out outside tare. That has not been tested, so tare refuses to start when the copy would need
-  renewal within the next hour. Start the agent once outside tare, which renews
-  your login, and try again.
+  renewal within the next hour. The refusal says when starting the agent outside tare renews
+  your login, and how a shorter run can start anyway (see [Usage](#usage)).
 - **Passes all your arguments to the agent.** Interactive or one-shot, the agent runs as it does
   outside tare.
 - **Compares skills, plugins and models.** `tare calibrate` starts each side (an agent with its
@@ -196,6 +196,17 @@ commands refuse to start with exit code 1 unless the reading is `tare: 0.00` or 
 
 The room starts with the agent's defaults, not with your settings. Codex, for example, runs its
 default model unless you pass `-m`. Set the model explicitly when you compare runs.
+
+tare starts a room only while your login token holds for at least another hour, so the room never
+has to renew its copy. Claude Code renews the token only in its last few minutes, so starting it
+outside tare does not help before then; the refusal names the time after which it does. A run
+that ends sooner can start anyway with `TARE_MIN_LOGIN_MINUTES` (whole minutes, at least 10):
+
+```bash
+TARE_MIN_LOGIN_MINUTES=15 tare claude -- -p "fix the tests"   # a short run: 15 minutes are enough
+```
+
+Pick the run's length plus ten minutes, so the run ends before the copy needs renewal.
 
 When a room is not clean, the reading names each leak and where it came from. The excerpt below
 shows a room that was given copies of real settings on purpose, with the home path shortened.
