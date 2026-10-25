@@ -55,7 +55,12 @@ def claude(lines: list[str]) -> Trail:
     described: dict[str, str] = {}
     waiting: dict[int, set[str]] = {}
     for i, line in enumerate(lines):
-        message = json.loads(line).get("message") or {}
+        entry = json.loads(line)
+        # 2.1.310 also logs each API request with the whole conversation so far (api-request-blob,
+        # #145); only the conversation's own entries count
+        if entry.get("type", "user") not in ("user", "assistant"):
+            continue
+        message = entry.get("message") or {}
         content = message.get("content")
         if not isinstance(content, list):
             continue
