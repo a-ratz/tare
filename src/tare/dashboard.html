@@ -3,266 +3,356 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>tare live</title>
-<style>
-:root {
-  --bg: #0e1116; --panel: #161b22; --panel-2: #1c222b; --line: #2a313c; --text: #e6edf3; --muted: #8b96a5;
-  --pass: #3fb950; --fail: #f85149; --run: #d29922; --accent: #79c0ff; --threshold: #a371f7;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-}
-@media (prefers-color-scheme: light) {
-  :root { --bg: #f6f8fa; --panel: #ffffff; --panel-2: #f0f3f6; --line: #d0d7de; --text: #1f2328; --muted: #59636e;
-          --pass: #1a7f37; --fail: #cf222e; --run: #9a6700; --accent: #0969da; --threshold: #8250df; }
-}
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-main { max-width: 1180px; margin: 0 auto; padding: 20px 16px 60px; }
-header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 16px; }
-h1 { font: 600 22px/1 var(--mono); margin: 0; letter-spacing: .5px; }
-h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
-.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: var(--panel-2);
-        border: 1px solid var(--line); font-size: 12px; white-space: nowrap; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; flex: none; }
-.dot.pass { background: var(--pass); } .dot.fail { background: var(--fail); } .dot.run { background: var(--run); animation: pulse 1.2s infinite; }
-@keyframes pulse { 50% { opacity: .35; } }
-.muted { color: var(--muted); }
-.grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
-section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
-.kv { display: grid; grid-template-columns: 90px 1fr; gap: 4px 12px; }
-.kv div:nth-child(odd) { color: var(--muted); }
-code, pre, .mono { font-family: var(--mono); font-size: 12.5px; }
-pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
-.steps { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
-.step { min-width: 26px; padding: 2px 6px; border-radius: 6px; background: var(--panel-2); border: 1px solid var(--line);
-        font: 11px var(--mono); text-align: center; }
-.step.cliff { border-color: var(--fail); color: var(--fail); font-weight: 700; }
-table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { color: var(--muted); font-weight: 500; font-size: 12px; }
-td.num { font-family: var(--mono); white-space: nowrap; }
-.matrix { display: grid; grid-template-columns: 96px 1fr 1fr; gap: 6px; align-items: stretch; margin: 8px 0; }
-.matrix .head { color: var(--muted); font-size: 12px; align-self: end; }
-.cell { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px; min-height: 58px; }
-.cell .big { font: 600 18px var(--mono); }
-.dots { display: flex; gap: 3px; flex-wrap: wrap; margin-top: 4px; }
-.effect { font-family: var(--mono); font-size: 12.5px; }
-.bar { height: 6px; border-radius: 3px; background: var(--panel-2); overflow: hidden; margin-top: 6px; }
-.bar > i { display: block; height: 100%; background: var(--accent); }
-.activity { font-family: var(--mono); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
-details summary { cursor: pointer; color: var(--muted); }
-svg text { fill: var(--muted); font: 11px var(--mono); }
-.empty { color: var(--muted); font-style: italic; }
-.stale { color: var(--run); }
-</style>
+<title>tare</title>
+<link rel="stylesheet" href="/assets/tare.css">
+<link rel="icon" href="/assets/logo-light.svg">
+<script>
+// the theme follows the system; set before the first paint
+(() => {
+  const dark = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => document.documentElement.dataset.theme = dark.matches ? "dark" : "light";
+  apply();
+  dark.addEventListener("change", apply);
+})();
+</script>
 </head>
-<body>
-<main>
-  <header>
-    <a id="back" href="../../" style="display:none;color:var(--accent);text-decoration:none">← all runs</a>
-    <h1 id="title">tare</h1>
-    <span class="chip" id="phase"><span class="dot"></span><span>connecting</span></span>
-    <span class="chip" id="elapsed"></span>
-    <span class="muted" id="updated"></span>
+<body class="body">
+<main class="page">
+  <header class="run-head">
+    <a id="home" href="../../" aria-label="All runs"><img class="logo logo-light" src="/assets/logo-light.svg" alt="tare"><img class="logo logo-dark" src="/assets/logo-dark.svg" alt="tare"></a>
+    <nav class="crumbs" id="crumbs"></nav>
+    <div class="end" id="status"><span class="status"><i class="cell waiting"></i>Connecting</span></div>
   </header>
-  <div id="app"><p class="empty">Waiting for the run to start…</p></div>
+  <div id="app"><section class="answer"><h1 class="lead">Waiting for the run to start.</h1></section></div>
 </main>
 <script>
-const $ = (s) => document.querySelector(s);
+const $ = (sel) => document.querySelector(sel);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const pct = (x) => (x == null ? "–" : x.toFixed(2));
-const dur = (s) => { s = Math.max(0, Math.round(s)); const m = Math.floor(s / 60); return m ? `${m}m ${String(s % 60).padStart(2, "0")}s` : `${s}s`; };
-const dot = (status) => `<span class="dot ${status === "passed" ? "pass" : status === "failed" ? "fail" : status === "running" ? "run" : ""}"></span>`;
+// a sentence from answer.py marks commands with backticks
+const prose = (v) => esc(v).replace(/`([^`]+)`/g, '<span class="mono">$1</span>');
+const pct = (x) => `${Math.round(x * 100)}%`;
+const dur = (s) => { s = Math.max(0, Math.round(s)); if (s >= 3600) return `${Math.floor(s / 3600)}h ${String(Math.floor(s % 3600 / 60)).padStart(2, "0")}m`;
+  return s >= 60 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s` : `${s}s`; };
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+const join = (items) => items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+const multi = location.pathname.startsWith("/run/");
+const PRODUCTS = { claude: "Claude Code", codex: "Codex", pi: "Pi", agy: "Antigravity CLI" };
+const KINDS = { mcp: "MCP servers", reach: "files", "parent files": "your parent folder's files", env: "environment",
+  "home path": "home path", instructions: "instructions", skills: "skills", plugins: "plugins", email: "email",
+  memories: "memories", agents: "agents", extensions: "extensions" };
 
-function recipeCard(s) {
-  const r = s.recipe || {};
-  const sides = Object.entries(s.sides || {}).map(([k, v]) => {
-    const version = r.agents && r.agents[k] ? r.agents[k].version : "";
-    const own = v.prompt ? `<div class="muted">prompt: ${esc(v.prompt)}</div>` : "";
-    return `<div>${s.kind === "calibrate" ? "side" : "agent"} ${esc(k)}</div><div><b>${esc(v.agent)}</b> ${esc((v.args || []).join(" "))} <span class="muted">${esc(version)}</span>${own}</div>`;
-  }).join("");
-  const p = s.params || {};
-  const params = s.kind === "cliff" ? `${esc(p.tails)} restarts per step tried · budget ${esc(p.budget)}`
-    : s.kind === "calibrate" ? `${esc(p.tails)} fresh starts per side` : `handovers at ${esc((p.cuts || []).join(", "))} · ${esc(p.tails)} restarts per cell`;
-  return `<section class="panel"><h2>Recipe</h2><div class="kv">
-    <div>task</div><div>${s.task ? esc(s.task) : `<span class="muted">a prompt per side</span>`}</div>
-    <div>check</div><div>${s.check ? `<code>${esc(s.check)}</code>` : `<span class="muted">none. A run counts as finished when its agent exits 0. Workspaces are kept.</span>`}</div>
-    <div>project</div><div><code>${esc(s.project)}</code> <span class="muted">${esc(r.project_digest ? "fingerprint " + r.project_digest.slice(0, 12) : "")}</span></div>
-    ${sides}
-    <div>settings</div><div>${params}</div>
-    ${r.command ? `<div>repeat</div><div><code>tare rerun ${esc(r.out || "")}</code></div>` : ""}
-  </div></section>`;
+// ---- small parts -------------------------------------------------------------------------------
+
+const cell = (state) => `<i class="cell${state === "failed" ? " failed" : state === "running" ? " running" : state === "waiting" ? " waiting" : ""}"></i>`;
+const status = (t) => t.status === "passed" ? "passed" : t.status === "failed" ? "failed" : "running";
+function tally(passes, n, running = 0) {
+  const cells = cell("passed").repeat(passes) + cell("failed").repeat(Math.max(0, n - passes)) + cell("running").repeat(running);
+  return `<span class="tally"><span class="cells">${cells}</span><span class="data">${passes} of ${n}</span></span>`;
+}
+function track(lo, hi, point) {
+  return `<div class="track" role="img" aria-label="Likely between ${pct(lo)} and ${pct(hi)}"><i class="band" style="left:${lo * 100}%;width:${(hi - lo) * 100}%"></i>`
+    + (point == null ? "" : `<i class="point" style="left:${point * 100}%"></i>`) + `</div>`;
+}
+function rate(r) {
+  if (!r.n) return `<span class="caption muted">no run finished yet</span>`;
+  return `<div class="rate"><b class="data">${pct(r.passes / r.n)}</b>${track(r.lo, r.hi, r.passes / r.n)}<span class="caption">likely ${Math.round(r.lo * 100)}–${Math.round(r.hi * 100)}%</span></div>`;
+}
+function section(question, caption, body) {
+  return `<section class="section"><header><h2 class="heading">${question}</h2>${caption ? `<p class="caption">${caption}</p>` : ""}</header>${body}</section>`;
+}
+const term = (word, tip) => `<span class="term" tabindex="0">${word}<span class="tip caption" role="tooltip">${tip}</span></span>`;
+const LIKELY = term("likely range", "<b>Likely range.</b> The true pass rate lies in this range with 95% confidence. Few runs give a wide range.");
+const JUDGE = term("judge", "<b>Judge.</b> A second agent that scores each finished result from 0 to 100 by your rubric. It never learns which agent made it.");
+function sideName(s, k) { return (s.names && s.names[k] ? s.names[k].full : k); }
+function sideArgs(s, k) {
+  const side = s.sides[k] || {}, r = s.recipe || {};
+  const raw = r.agents && r.agents[k] ? r.agents[k].version || "" : "";
+  const version = (raw.match(/\d+(\.\d+)+/) || [raw])[0];  // "2.1.289 (Claude Code)", "codex-cli 0.160.0"
+  return `${esc([side.agent, ...(side.args || [])].join(" "))}${version ? ` · ${esc(version)}` : ""}`;
 }
 
-function probesCard(s) {
+// ---- the answer --------------------------------------------------------------------------------
+
+function answer(a) {
+  const figures = (a.figures || []).map((f) => `<div><span class="figure">${esc(f.value)}${f.unit ? `<span class="data muted"> ${esc(f.unit)}</span>` : ""}</span>`
+    + `<span class="caption muted">${f.label.map(esc).join("<br>")}</span></div>`).join("");
+  const trust = (a.trust || []).map((t) => `<span${t.cell === "failed" ? ' class="signal"' : ""}>${cell(t.cell === "ok" ? "passed" : t.cell === "limit" ? "waiting" : t.cell)}${esc(t.text)}</span>`).join("");
+  return `<section class="answer"><p class="label muted">${esc(a.kicker)}</p><h1 class="lead">${prose(a.sentence)}</h1>`
+    + (a.detail ? `<p class="body">${prose(a.detail)}</p>` : "")
+    + (figures ? `<div class="figures">${figures}</div>` : "") + (trust ? `<p class="trust caption">${trust}</p>` : "") + `</section>`;
+}
+
+// ---- was the room clean? -----------------------------------------------------------------------
+
+function reading(p) {
+  const lines = (p.text || "").split("\n");
+  const version = (lines[0].match(/· \S+ (\S+) ·/) || [])[1];
+  const agent = `${PRODUCTS[p.agent] || p.agent}${version ? " " + version : ""}`;
+  const seen = ((lines.find((l) => l.trim().startsWith("control")) || "").split(":").slice(1).join(":"))
+    .split(",").map((x) => x.trim()).filter((x) => x && x !== "nothing").map((x) => KINDS[x] || x);
+  const rows = (head) => { const out = []; let on = false;
+    for (const l of lines) { if (/^ {2}\S/.test(l)) on = l.trim() === head; else if (on && /^ {4}\S/.test(l)) out.push(l.trim().split(/\s{2,}/)); }
+    return out; };
+  const leaks = rows("leaks"), declared = rows("declared");
+  const blind = lines.filter((l) => l.trim().startsWith("BLIND")).map((l) => l.trim().replace(/^BLIND\s+/, ""));
+  const held = [...new Set(declared.map((d) => d[1] === "account email" ? "your account email, which comes with a subscription login" : "a copy of your login"))];
+  const checked = `<details class="disclosure caption" data-key="probe-${esc(p.agent)}"><summary>What tare checked</summary><div class="inner">
+    <p>A control run in your real setup showed your ${esc(join(seen) || "setup")}. ${leaks.length ? "Some of them reached the room." : "None of them reached the room."}</p>
+    ${held.length ? `<p>Held on purpose: ${esc(join(held))}.</p>` : ""}</div></details>`;
+  if (p.zero) return `<div class="reading" data-state="clean"><div class="value"><span class="label muted">tare:</span><span class="display">0.00</span></div>
+    <div class="what"><h3 class="heading">Clean</h3><p class="body">Nothing of your setup reached ${esc(agent)}.</p>${checked}</div></div>`;
+  if (leaks.length) return `<div class="reading" data-state="leaks"><div class="value"><span class="label muted">tare:</span><span class="display">${leaks.length}</span></div>
+    <div class="what"><h3 class="heading">${plural(leaks.length, "part")} of your setup reached ${esc(agent)}</h3>
+    <p class="body">tare ran it anyway, because the run was started with --allow-dirty.</p>
+    <table class="table body"><thead class="label"><tr><th>What</th><th>Which</th><th>From</th></tr></thead><tbody>
+    ${leaks.map((l) => `<tr><td>${esc(KINDS[l[0]] || l[0])}</td><td>${esc(l[1] || "")}</td><td class="data">${esc(l[2] || "")}</td></tr>`).join("")}</tbody></table></div></div>`;
+  return `<div class="reading" data-state="blind"><div class="value"><span class="label muted">tare:</span><span class="display">–.––</span></div>
+    <div class="what"><h3 class="heading">Not proven</h3><p class="body">The control run did not show your ${esc(join(blind.map((b) => KINDS[b.split(":")[0]] || b.split(":")[0])))}, so a clean room would prove nothing about ${blind.length > 1 ? "them" : "it"}.</p>${checked}</div></div>`;
+}
+function rooms(s) {
   if (!s.probes.length) return "";
-  return `<section class="panel"><h2>Probes</h2><div class="grid">${s.probes.map((p) => `
-    <div><span class="chip">${dot(p.zero ? "passed" : "failed")} ${esc(p.agent)} · ${p.zero ? "tare: 0.00" : esc((p.text || "").trim().split("\n").pop())}</span>
-    <details><summary>reading</summary><pre>${esc(p.text)}</pre></details></div>`).join("")}</div></section>`;
+  return section(s.probes.length > 1 ? "Were the rooms clean?" : "Was the room clean?", "Before the runs, tare started each agent against a fake model on your machine and read everything it would have sent. Nothing of your personal setup may arrive. This costs no model calls.",
+    `<div class="readings">${s.probes.map(reading).join("")}</div>`);
 }
 
-function originalsCard(s, cliffStep) {
-  const lanes = Object.entries(s.sides || {}).map(([k, side]) => {
-    const o = s.originals[k];
-    if (!o) return `<div><b>${esc(k)} · ${esc(side.agent)}</b> <span class="muted">waiting</span></div>`;
-    if (o.running) return `<div><span class="chip">${dot("running")} ${esc(k)} · ${esc(side.agent)} · ${o.count} steps so far</span>
-      <div class="activity">${esc(o.activity || "starting…")}</div></div>`;
-    const steps = o.steps.slice(1).map((t, i) => `<span class="step ${cliffStep === i + 1 ? "cliff" : ""}" title="${esc(t)}">${i + 1}</span>`).join("");
-    return `<div><span class="chip">${dot(o.passed ? "passed" : "failed")} ${esc(k)} · ${esc(side.agent)} · ${o.passed ? "passed" : "failed"} after ${o.steps.length - 1} steps</span>
-      <div class="steps">${steps}</div></div>`;
+// ---- what ran, what it cost, the report ---------------------------------------------------------
+
+function facts(s, extra) {
+  const r = s.recipe || {};
+  const judged = (s.tails || []).find((t) => t.threshold != null);
+  const prompts = Object.entries(s.sides).filter(([, v]) => v.prompt);
+  const many = Object.keys(s.sides).length > 1;
+  const rows = [
+    ["Task", s.task ? esc(s.task) : prompts.map(([k, v]) => `<div><b>${esc(sideName(s, k))}</b>: ${esc(v.prompt)}</div>`).join("")],
+    ["Passes when", s.check ? `<span class="data">${esc(s.check)}</span>` + (judged && judged.threshold === 0 ? `<div class="caption muted">A judge scores the result; any score passes, so the score is the result.</div>`
+      : `<div class="caption muted">exits with 0 in the finished workspace</div>`) : `<span class="muted">no check: a run counts as finished when its agent exits with 0, and tare keeps the workspace</span>`],
+    ["Project", `<span class="data">${esc(s.project)}</span>${r.project_digest ? ` <span class="muted data">· fingerprint ${esc(r.project_digest.slice(0, 12))}</span>` : ""}`],
+    [many ? "Agents" : "Agent", Object.keys(s.sides).map((k) => `<div class="data">${many ? `${esc(k)} · ` : ""}${sideArgs(s, k)}</div>`).join("")],
+    ...extra,
+    ...(r.out ? [["Run it again", `<span class="data">tare rerun ${esc(r.out)}</span>`]] : []),
+  ];
+  return section("What ran", "Everything needed to run it again. <code>tare rerun</code> repeats it and says what has changed since.",
+    `<dl class="facts body">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>`);
+}
+function cost(s) {
+  const u = s.usage || {};
+  if (!u.total) return section("What did it cost?", "Not recorded: this run is older than tare's token count. Newer runs show tokens and cost per agent here, for the judge too.", "");
+  const n = (x) => x >= 1e6 ? `${(x / 1e6).toFixed(2)}M` : x >= 1e3 ? `${(x / 1e3).toFixed(1)}k` : `${x}`;
+  const money = (v) => v.cost_usd == null ? `<span class="muted">unknown</span>` : `${v.estimated ? "about " : ""}$${v.cost_usd < 10 ? v.cost_usd.toFixed(3) : v.cost_usd.toFixed(2)}`;
+  const row = (name, v, cls = "") => `<tr class="${cls}"><td>${name}</td><td class="num data">${v.runs}</td><td class="num data">${n(v.input)} <span class="muted">(${n(v.cached)} cached)</span></td><td class="num data">${n(v.output)}</td><td class="num data">${money(v)}</td></tr>`;
+  const sides = Object.entries(u.sides || {}).filter(([, v]) => v.usage);
+  const notional = sides.some(([, v]) => v.billing === "subscription");
+  const estimated = [u.total, ...sides.map(([, v]) => v.usage)].find((v) => v && v.estimated);
+  const caption = [notional ? "With a subscription login the cost is what the same tokens would cost through the API." : "",
+    estimated ? `Costs marked "about" are estimated from ${esc(estimated.estimated)}.` : ""].filter(Boolean).join(" ");
+  return section("What did it cost?", caption, `<div class="table-wrap"><table class="table body"><thead class="label"><tr><th>Who</th><th class="num">Runs</th><th class="num">Tokens in</th><th class="num">Tokens out</th><th class="num">Cost</th></tr></thead><tbody>
+    ${sides.map(([k, v]) => row(`<b>${esc(sideName(s, k))}</b>`, v.usage)).join("")}${u.check ? row("The judge", u.check) : ""}${row("Total", u.total, "total")}</tbody></table></div>`);
+}
+function report(s) {
+  if (!s.report) return "";
+  return `<section class="section"><details class="disclosure report caption" data-key="report"><summary>The full report, as tare printed it</summary>
+    <div class="inner"><pre class="data" id="report-text">${esc(s.report)}</pre><div><button class="btn" type="button" data-copy="report-text">Copy</button></div></div></details></section>`;
+}
+function story(title, items) {
+  return section(title, "", `<ol class="story body">${items.filter(Boolean).map((i) => `<li>${i}</li>`).join("")}</ol>`);
+}
+function stepTrack(o, lostAt, label) {
+  const steps = (o.steps || []).slice(1);
+  if (!steps.length) return `${label}<p class="caption muted">${o.running ? `Still going: ${plural(o.count || 0, "step")} so far. ${esc(o.activity || "")}` : "No steps recorded."}</p>`;
+  const n = steps.length;
+  const segs = steps.map((t, i) => `<i class="${lostAt == null ? "" : i + 1 === lostAt ? "lost" : i + 1 > lostAt ? "after" : ""}" title="${i + 1} · ${esc(t)}"></i>`).join("");
+  const marks = [`<span class="at label" style="grid-column:1">step 1</span>`];
+  if (lostAt != null && lostAt > 1 && lostAt < n) marks.push(`<span class="at label lost" style="grid-column:${lostAt}">step ${lostAt} · lost here</span>`);
+  if (n > 1) marks.push(`<span class="at label end" style="grid-column:${n}">step ${n} · ${o.passed ? "passed" : "failed"}</span>`);
+  return `${label}<div class="steps" style="--n:${n}">${segs}${marks.join("")}</div>`;
+}
+
+// ---- calibrate ---------------------------------------------------------------------------------
+
+function calibrate(s) {
+  const keys = Object.keys(s.sides), rates = s.rates || {};
+  const judged = keys.some((k) => (rates[k] || {}).scores && rates[k].scores.length);
+  const thresholds = (s.tails || []).filter((t) => t.threshold != null).map((t) => t.threshold);
+  const everyScorePasses = judged && thresholds.length > 0 && thresholds.every((t) => t === 0);
+  let result;
+  if (!s.check) {
+    const rows = keys.map((k) => { const r = rates[k] || { passes: 0, n: 0, running: 0, times: [] }; const times = [...(r.times || [])].sort((a, b) => a - b);
+      const mid = times.length ? times[Math.floor((times.length - 1) / 2)] : null;
+      return `<tr><td><b>${esc(sideName(s, k))}</b><div class="data muted">${sideArgs(s, k)}</div></td><td>${tally(r.passes, r.n, r.running)}</td>
+        <td class="num data">${mid == null ? "–" : dur(mid)}</td><td class="data muted">${times.length ? `${dur(times[0])} to ${dur(times[times.length - 1])}` : ""}</td></tr>`; }).join("");
+    result = section("How long did each agent take?", "Each cell is one run: filled when the agent exited with 0. Without a check tare keeps every finished workspace.",
+      `<div class="table-wrap"><table class="table body"><thead class="label"><tr><th>Agent</th><th>Finished</th><th class="num">Median</th><th>Fastest to slowest</th></tr></thead><tbody>${rows}</tbody></table></div>`);
+  } else {
+    const head = `<tr><th>Agent</th>${judged ? `<th style="width:30%">Scores, 0 to 100</th><th class="num">Average</th>` : ""}<th>Passed</th>${everyScorePasses ? "" : `<th style="width:24%">Pass rate</th>`}</tr>`;
+    const rows = keys.map((k) => { const r = rates[k] || { passes: 0, n: 0, running: 0, scores: [] }; const sc = r.scores || [];
+      const strip = sc.length ? `<div class="scores" role="img" aria-label="Scores ${sc.join(", ")}; average ${Math.round(r.mean)}">${sc.map((v) => `<i class="run" style="left:${v}%"></i>`).join("")}<i class="mean" style="left:${r.mean}%"></i></div><div class="data muted">${[...sc].sort((a, b) => a - b).join(" ")}</div>` : `<span class="muted">–</span>`;
+      return `<tr><td><b>${esc(sideName(s, k))}</b><div class="data muted">${sideArgs(s, k)}</div></td>${judged ? `<td>${strip}</td><td class="num data"><b>${sc.length ? Math.round(r.mean) : "–"}</b></td>` : ""}
+        <td>${tally(r.passes, r.n, r.running)}</td>${everyScorePasses ? "" : `<td>${rate(r)}</td>`}</tr>`; }).join("");
+    const caption = judged ? (everyScorePasses ? "Each tick is one run's score from the judge, the long line is the average. Every score passes the check, so the scores are the result."
+      : `Each tick is one run's score from the judge, the long line is the average. The bar on the right is the ${LIKELY} of each pass rate.`)
+      : `Each cell is one run: filled when it passed, in the one hue when it failed. The bar is the ${LIKELY} of each pass rate.`;
+    result = section(judged ? "How did each agent score?" : "How often does each agent pass?", caption,
+      `<div class="table-wrap"><table class="table body"><thead class="label">${head}</thead><tbody>${rows}</tbody></table></div>`);
+  }
+  const finished = (s.tails || []).filter((t) => t.status !== "running").sort((a, b) => (b.ended || 0) - (a.ended || 0));
+  const running = (s.tails || []).filter((t) => t.status === "running");
+  const runRows = [...running, ...finished].map((t) => `<tr><td>${cell(status(t))}</td><td>${esc(sideName(s, t.side))}</td>
+    <td class="num data">${dur((t.ended || s.now) - t.started)}</td>${judged ? `<td class="num data">${t.score ?? "–"}</td>` : ""}
+    <td><span class="clamp muted">${esc(t.status === "running" ? (t.activity || "starting…") : (t.reason || (t.detail || "").replace(/^agent exit 0; /, "")))}</span></td></tr>`).join("");
+  const runs = runRows ? section("Every run", running.length ? "Running ones first, then newest first." : `Newest first.${judged ? " What the judge said is shortened; the full text is in the report below." : ""}`,
+    `<div class="table-wrap"><table class="table body"><thead class="label"><tr><th></th><th>Agent</th><th class="num">Time</th>${judged ? `<th class="num">Score</th><th>What the ${JUDGE} said</th>` : "<th>Result</th>"}</tr></thead><tbody>${runRows}</tbody></table></div>`) : "";
+  return result + rooms(s) + facts(s, [["Runs", `${(s.params || {}).tails} per agent, each from a fresh copy of the project`]]) + runs + cost(s) + report(s);
+}
+
+// ---- swap --------------------------------------------------------------------------------------
+
+const POINT = (f) => ({ 0: "Start", 0.5: "Halfway", 1: "End" }[Math.round(f * 100) / 100] || `${Math.round(f * 100)}% of the way`);
+const AT = (f) => { const p = POINT(f); return p === "Halfway" ? "halfway" : p.endsWith("way") ? `at ${p}` : `at the ${p.toLowerCase()}`; };
+function effectBlock(e, kind, s) {
+  const a = sideName(s, "a"), b = sideName(s, "b");
+  const who = kind === "agent" ? [a, b] : [`${a}'s workspace`, `${b}'s workspace`];
+  const axis = kind === "agent" ? [a, b] : [`${a}'s`, `${b}'s`];
+  if (!e) return `<div class="effect"><p class="body muted">${kind === "agent" ? "Agents" : "Workspaces"}: waiting for every box.</p></div>`;
+  const [v, lo, hi] = e, pts = (x) => Math.round(Math.abs(x) * 100);
+  const side = (x) => `${pts(x)} points ${x < 0 ? "worse" : "better"}`;
+  const ahead = who[v > 0 ? 0 : 1], range = `likely ${pts(v > 0 ? lo : hi)} to ${pts(v > 0 ? hi : lo)} points`;
+  const text = lo <= 0 && 0 <= hi
+    ? `No clear difference between ${kind === "agent" ? "the agents" : "the workspaces"}: for ${who[0]} the likely range runs from ${side(lo)} to ${side(hi)} and includes zero.`
+    : kind === "agent" ? `The agent decides: ${ahead} passes ${pts(v)} points more often in the same workspaces (${range}).`
+    : `The workspace decides: restarts in ${ahead} pass ${pts(v)} points more often with the same agents (${range}).`;
+  const x = (val) => (val + 1) / 2;
+  return `<div class="effect"><p class="body">${esc(text)}</p><div class="track"><i class="zero"></i><i class="band" style="left:${x(lo) * 100}%;width:${(x(hi) - x(lo)) * 100}%"></i><i class="point" style="left:${x(v) * 100}%"></i></div>
+    <div class="axis-labels label"><span>${esc(axis[1])} better</span><span class="mid">no difference</span><span>${esc(axis[0])} better</span></div></div>`;
+}
+function swap(s) {
+  const a = sideName(s, "a"), b = sideName(s, "b");
+  const cuts = s.cells || [], tails = (s.params || {}).tails || 0;
+  const parts = cuts.map((c) => {
+    const box = (room, agent) => { const v = c.cells[room + agent]; return `<div class="box">${tally(v.passes, v.n, v.running)}</div>`; };
+    const where = c.fraction === 0 ? "both workspaces are the untouched project" : `${esc(a)}'s run at step ${c.steps.a}, ${esc(b)}'s at step ${c.steps.b}`;
+    const own = Object.entries(c.native || {}).filter(([, v]) => v.n || v.running).map(([r, v]) => `${esc(sideName(s, r))} in its own session: ${v.passes} of ${v.n}`);
+    return `<div class="part"><p class="body"><b>${POINT(c.fraction)}</b> <span class="muted">· handover at ${c.fraction.toFixed(2)} · ${where}</span></p>
+      <div class="swap"><span></span><span class="head label">Continued by ${esc(a)}</span><span class="head label">Continued by ${esc(b)}</span>
+        <span class="side label">${esc(a)}'s workspace</span>${box("a", "a")}${box("a", "b")}
+        <span class="side label">${esc(b)}'s workspace</span>${box("b", "a")}${box("b", "b")}</div>
+      ${own.length ? `<p class="caption muted" style="margin-top:var(--space-2)">${own.join(" · ")}</p>` : ""}
+      <div class="swap-effects">${effectBlock(c.model, "agent", s)}${effectBlock(c.state, "workspace", s)}</div></div>`;
   }).join("");
-  return `<section class="panel"><h2>Original ${Object.keys(s.sides || {}).length > 1 ? "runs" : "run"}</h2><div class="grid">${lanes}</div></section>`;
+  const matrix = cuts.length ? section("Workspace or agent: which decided?", `At each handover point both runs stopped and each agent continued each workspace ${tails} times. Read across a row: the same workspace, a different agent. Read down a column: the same agent, a different workspace.`, parts) : "";
+  const o = s.originals || {};
+  const restarts = cuts.reduce((n, c) => n + Object.values(c.cells).reduce((m, v) => m + v.n, 0) + Object.values(c.native || {}).reduce((m, v) => m + v.n, 0), 0);
+  const told = ["a", "b"].map((k) => o[k] && o[k].passed != null ? `${esc(sideName(s, k))}'s run ${o[k].passed ? "passed" : "failed"} after ${plural((o[k].steps || []).length - 1, "step")}` : null).filter(Boolean);
+  const hasNative = cuts.some((c) => Object.values(c.native || {}).some((v) => v.n));
+  const tested = story("How tare tested this", [
+    told.length ? `Each agent tried the task once: ${join(told)}.` : "Each agent tries the task once.",
+    cuts.length ? `tare stopped both runs ${join(cuts.map((c) => AT(c.fraction)))}.` : "",
+    cuts.length ? `At each point it let each agent continue each workspace ${tails} times from a handover note, a written summary of the steps so far${hasNative ? ", and each agent its own saved session too" : ""}. That made ${restarts} restarts.` : "",
+    "If the agent decides, one column passes everywhere. If the workspace decides, one row does.",
+  ]);
+  const runs = section("How did the original runs go?", "Each agent tried the task once. One segment is one step: a command the agent ran or a file it wrote.",
+    ["a", "b"].map((k) => stepTrack(o[k] || {}, null, `<p class="body" style="margin:var(--space-4) 0 var(--space-3)"><b>${esc(sideName(s, k))}</b> <span class="muted">· ${o[k] && o[k].passed != null ? (o[k].passed ? "passed" : "failed") : "running"}</span></p>`)).join(""));
+  return matrix + tested + runs + rooms(s) + facts(s, [["Handover points", esc(((s.params || {}).cuts || []).join(", "))], ["Restarts", `${tails} per box`]]) + cost(s) + report(s);
 }
 
-function cliffCard(s) {
-  const rows = s.steps || [];
-  if (!rows.length) return "";
-  const o = s.originals.a || {};
-  const last = Math.max(1, (o.steps ? o.steps.length - 1 : 0), ...rows.map((r) => r.step));
-  const base = rows.find((r) => r.step === 0);
-  const theta = base && base.rate != null ? base.rate : null;
-  const W = 760, H = 220, L = 40, R = 14, T = 12, B = 28;
-  const x = (step) => L + (step / last) * (W - L - R), y = (v) => T + (1 - v) * (H - T - B);
-  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px;display:block" role="img" aria-label="pass rate by step">`;
-  for (const v of [0, .5, 1]) svg += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="6" y="${y(v) + 4}">${v.toFixed(1)}</text>`;
-  if (theta != null) {
-    svg += `<line x1="${L}" x2="${W - R}" y1="${y(theta)}" y2="${y(theta)}" stroke="var(--accent)" stroke-dasharray="2 3"/>`;
-    svg += `<line x1="${L}" x2="${W - R}" y1="${y(theta / 2)}" y2="${y(theta / 2)}" stroke="var(--threshold)" stroke-dasharray="6 4"/>`;
-    svg += `<text x="${L + 6}" y="${y(theta / 2) - 5}">half of a fresh start: below it, the run is lost</text>`;
+// ---- cliff -------------------------------------------------------------------------------------
+
+function cliffChart(rows, last, base) {
+  const W = 860, H = 300, L = 44, R = 12, T = 16, B = 32;
+  const x = (st) => L + (st / Math.max(1, last)) * (W - L - R), y = (v) => T + (1 - v) * (H - T - B);
+  let svg = "";
+  for (const v of [0, .5, 1]) svg += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="label" x="0" y="${y(v) + 4}">${v * 100}%</text>`;
+  if (base != null && base > 0) {
+    svg += `<line class="base" x1="${L}" x2="${W - R}" y1="${y(base)}" y2="${y(base)}"/><text class="label" x="${L + 14}" y="${y(base) + 16}">fresh start</text>`;
+    svg += `<line class="threshold" x1="${L}" x2="${W - R}" y1="${y(base / 2)}" y2="${y(base / 2)}"/><text class="label" x="${L + 14}" y="${y(base / 2) - 6}">half of a fresh start: below it, the run is lost</text>`;
   }
   for (const r of rows) {
-    if (r.rate == null) { svg += `<circle cx="${x(r.step)}" cy="${y(.5)}" r="5" fill="none" stroke="var(--run)"/>`; continue; }
-    const high = theta == null || r.rate >= theta / 2, color = high ? "var(--pass)" : "var(--fail)";
-    svg += `<line x1="${x(r.step)}" x2="${x(r.step)}" y1="${y(r.hi)}" y2="${y(r.lo)}" stroke="${color}" stroke-width="3" opacity=".45"/>`;
-    svg += `<circle cx="${x(r.step)}" cy="${y(r.rate)}" r="5" fill="${color}"/>`;
-    svg += `<text x="${x(r.step) - 4}" y="${H - 8}">${r.step}</text>`;
+    const lbl = `<text class="label" x="${x(r.step)}" y="${H - 8}" text-anchor="middle">${r.step === 0 ? "start" : "step " + r.step}</text>`;
+    if (r.rate == null) { svg += `<rect class="pt running" x="${x(r.step) - 5}" y="${y(.5) - 5}" width="10" height="10"/>${lbl}`; continue; }
+    const lost = base != null && base > 0 && r.rate < base / 2 ? " lost" : "";
+    svg += `<line class="range${lost}" x1="${x(r.step)}" x2="${x(r.step)}" y1="${y(r.hi)}" y2="${y(r.lo)}"/><rect class="pt${lost}" x="${x(r.step) - 5}" y="${y(r.rate) - 5}" width="10" height="10"/>${lbl}`;
   }
-  svg += `</svg>`;
-  const table = rows.map((r) => `<tr><td class="num">${r.step}</td><td>${esc(o.steps ? o.steps[r.step] : "")}</td>
-    <td class="num">${r.passes}/${r.n}${r.running ? ` <span class="muted">+${r.running} running</span>` : ""}</td>
-    <td class="num">${pct(r.rate)}</td><td class="num">${r.n ? `${pct(r.lo)}-${pct(r.hi)}` : "–"}</td></tr>`).join("");
-  return `<section class="panel"><h2>Cliff search</h2>${svg}
-    <table><thead><tr><th>step</th><th>what the step did</th><th>passed / restarts</th><th>rate</th><th>likely range</th></tr></thead><tbody>${table}</tbody></table></section>`;
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" style="max-width:${W}px" role="img" aria-label="Pass rate of restarts by step">${svg}</svg>`;
+}
+function cliff(s) {
+  const o = (s.originals || {}).a || {}, rows = s.steps || [], params = s.params || {};
+  const steps = o.steps || [];
+  const base = (rows.find((r) => r.step === 0) || {}).rate;
+  const tau = base ? base / 2 : null;
+  const probed = rows.filter((r) => r.rate != null);
+  const lows = tau ? probed.filter((r) => r.step > 0 && r.rate < tau) : [];
+  const low = lows.length ? Math.min(...lows.map((r) => r.step)) : null;
+  const last = Math.max(1, steps.length - 1, ...rows.map((r) => r.step));
+  let found = "";
+  if (rows.length) {
+    const table = rows.map((r) => `<tr class="${r.step === low ? "attention" : ""}"><td class="nowrap${r.step === low ? " signal" : ""}">${r.step === 0 ? "Fresh start" : r.step === low ? `<b>Step ${r.step}</b> · lost here` : `Step ${r.step}`}</td>
+      <td class="${r.step === 0 ? "muted" : "data"}">${r.step === 0 ? "the untouched project" : esc(steps[r.step] || "")}</td>
+      <td>${tally(r.passes, r.n, r.running)}</td><td>${rate(r)}</td></tr>`).join("");
+    const skipped = [...Array(last).keys()].map((i) => i + 1).filter((st) => !rows.some((r) => r.step === st));
+    found = section("Where did the run go wrong?", `Each square is a step tare restarted the agent from, several times. Its height is how often those restarts passed, the bar is the ${LIKELY}. Below the dashed line the run counts as lost.`,
+      cliffChart(rows, last, base) + `<div class="table-wrap" style="margin-top:var(--space-8)"><table class="table body"><thead class="label"><tr><th>Restarted from</th><th>What the step did</th><th>Restarts</th><th style="width:28%">Pass rate</th></tr></thead><tbody>${table}</tbody></table></div>`
+      + (skipped.length && s.phase === "done" ? `<p class="caption muted" style="margin-top:var(--space-3)">${skipped.length === 1 ? "Step" : "Steps"} ${join(skipped.map(String))} ${skipped.length === 1 ? "is" : "are"} missing: the search did not need ${skipped.length === 1 ? "it" : "them"}.</p>` : ""));
+  }
+  const changed = ((s.report || "").split("\n").find((l) => l.trim().startsWith("changed")) || "").trim().replace(/^changed\s+/, "");
+  const after = low != null ? probed.filter((r) => r.step > low) : [];
+  const again = after.filter((r) => r.rate >= tau);
+  const original = section("How did the original run go?", "The agent tried the task once. One segment is one step: a command the agent ran or a file it wrote.",
+    stepTrack(o, low, `<p class="body" style="margin-bottom:var(--space-3)"><b>${esc(sideName(s, "a"))}</b> <span class="muted">· ${o.running ? "running" : o.passed ? "passed" : `failed after ${plural(Math.max(0, steps.length - 1), "step")}`}</span></p>`)
+    + (low != null ? `<dl class="facts body" style="margin-top:var(--space-6)">${changed ? `<dt>Step ${low} changed</dt><dd class="data">${esc(changed)}</dd>` : ""}
+      <dt>After step ${low}</dt><dd>${after.length ? (again.length ? `step ${join(again.map((r) => String(r.step)))} passes again` : "no step passes again") : "no later step was tried"}</dd></dl>` : ""));
+  const fresh = rows.find((r) => r.step === 0);
+  const spent = rows.reduce((n, r) => n + r.n, 0);
+  const searched = rows.length ? story("How tare searched", [
+    `The original run failed, and tare saved the workspace after each of its ${plural(Math.max(0, steps.length - 1), "step")}.`,
+    fresh ? `It restarted the agent from the start ${plural(fresh.n + fresh.running, "time")}${probed.some((r) => r.step === last && last > 0) ? `, and from the last step, step ${last}` : ""}.` : "",
+    low != null ? `It halved the range between the last step that still passed and the first that did not, ${params.tails || 3} restarts at a time.` : "",
+    low != null ? `A step counts as fine while restarts from it pass at least half as often as a fresh start: step ${low} is the first that is not.` : "",
+    `That took ${spent} of the ${params.budget} restarts allowed.`,
+  ]) : "";
+  return found + original + searched + rooms(s) + facts(s, [["Search", `${params.tails} restarts per step tried, at most ${params.budget}`]]) + cost(s) + report(s);
 }
 
-function effect(e, label) {
-  if (!e) return `<div class="effect muted">${label}: waiting for every cell</div>`;
-  const [v, lo, hi] = e;
-  return `<div class="effect">${label}: <b>${v >= 0 ? "+" : ""}${v.toFixed(2)}</b> <span class="muted">[${lo.toFixed(2)}, ${hi.toFixed(2)}]</span></div>`;
-}
+// ---- the page ----------------------------------------------------------------------------------
 
-function swapCard(s) {
-  const cuts = s.cells || [];
-  if (!cuts.length) return "";
-  const agentName = (k) => esc((s.sides[k] || {}).agent || k);
-  return `<section class="panel"><h2>Swap</h2><div class="grid">${cuts.map((c) => {
-    const cell = (r, m) => {
-      const v = c.cells[r + m], dots = "<span class='dot pass'></span>".repeat(v.passes) + "<span class='dot fail'></span>".repeat(v.n - v.passes) + "<span class='dot run'></span>".repeat(v.running);
-      return `<div class="cell"><div class="big">${v.passes}/${v.n}</div><div class="dots">${dots}</div></div>`;
-    };
-    const native = Object.entries(c.native).map(([r, v]) => `workspace ${r}, own session: ${v.passes}/${v.n}`).join(" · ");
-    return `<div><b>handover at ${c.fraction.toFixed(2)}</b> <span class="muted">workspace a at step ${c.steps.a}, workspace b at step ${c.steps.b}</span>
-      <div class="matrix"><div></div><div class="head">agent a · ${agentName("a")}</div><div class="head">agent b · ${agentName("b")}</div>
-        <div class="head">workspace a</div>${cell("a", "a")}${cell("a", "b")}
-        <div class="head">workspace b</div>${cell("b", "a")}${cell("b", "b")}</div>
-      ${native ? `<div class="muted">${native}</div>` : ""}
-      ${effect(c.state, "workspace effect (positive: workspace a better)")}${effect(c.model, "agent effect (positive: agent a better)")}</div>`;
-  }).join("")}</div></section>`;
-}
-
-function runsCard(s) {
-  const rates = s.rates || {};
-  const rows = Object.entries(s.sides || {}).map(([k, side]) => {
-    const r = rates[k] || { passes: 0, n: 0, running: 0, times: [] };
-    const dots = "<span class='dot pass'></span>".repeat(r.passes) + "<span class='dot fail'></span>".repeat(r.n - r.passes) + "<span class='dot run'></span>".repeat(r.running);
-    const times = [...(r.times || [])].sort((a, b) => a - b);
-    const median = times.length ? times[Math.floor((times.length - 1) / 2)] : null;
-    return `<tr><td class="num">${esc(k)}</td><td><b>${esc(side.agent)}</b> ${esc((side.args || []).join(" "))}<div class="dots">${dots}</div></td>
-      <td class="num">${r.passes}/${r.n}</td><td class="num">${median == null ? "–" : `${dur(median)} (${dur(times[0])} to ${dur(times[times.length - 1])})`}</td></tr>`;
-  }).join("");
-  return `<section class="panel"><h2>Runs · no check</h2><table><thead><tr><th>side</th><th>agent</th><th>finished</th><th>time (median, range)</th></tr></thead><tbody>${rows}</tbody></table></section>`;
-}
-
-function calibrateCard(s) {
-  if (!s.check) return runsCard(s);
-  const rates = s.rates || {};
-  const judged = Object.values(rates).some((r) => (r.scores || []).length);
-  const rows = Object.entries(s.sides || {}).map(([k, side]) => {
-    const r = rates[k] || { passes: 0, n: 0, running: 0 };
-    const dots = "<span class='dot pass'></span>".repeat(r.passes) + "<span class='dot fail'></span>".repeat(r.n - r.passes) + "<span class='dot run'></span>".repeat(r.running);
-    const band = r.n ? `<div class="bar" style="position:relative"><i style="margin-left:${(r.lo * 100).toFixed(1)}%;width:${((r.hi - r.lo) * 100).toFixed(1)}%"></i></div>` : "";
-    const scores = r.scores || [];
-    const strip = scores.length ? `<svg viewBox="0 0 200 22" width="200" height="22" style="display:block">
-        <line x1="0" x2="200" y1="11" y2="11" stroke="var(--line)"/>
-        ${[0, 50, 100].map((v) => `<line x1="${v * 2}" x2="${v * 2}" y1="6" y2="16" stroke="var(--line)"/>`).join("")}
-        ${scores.map((v) => `<circle cx="${v * 2}" cy="11" r="4" fill="var(--accent)" opacity=".75"><title>${v}</title></circle>`).join("")}
-        ${r.mean != null ? `<line x1="${r.mean * 2}" x2="${r.mean * 2}" y1="2" y2="20" stroke="var(--text)" stroke-width="2"/>` : ""}
-      </svg><div class="muted mono">${[...scores].sort((a, b) => a - b).join(" ")} · mean ${r.mean.toFixed(1)}</div>` : `<span class="muted">–</span>`;
-    return `<tr><td class="num">${esc(k)}</td><td><b>${esc(side.agent)}</b> ${esc((side.args || []).join(" "))}<div class="dots">${dots}</div></td>
-      ${judged ? `<td>${strip}</td>` : ""}
-      <td class="num">${r.passes}/${r.n}</td><td class="num">${pct(r.rate)}</td><td class="num" style="min-width:160px">${r.n ? `${pct(r.lo)}-${pct(r.hi)}` : "–"}${band}</td></tr>`;
-  }).join("");
-  const title = judged ? "Judge scores and pass rates" : "Pass rates";
-  return `<section class="panel"><h2>${title}</h2><table><thead><tr><th>side</th><th>agent</th>${judged ? "<th>judge scores (0 to 100, line = mean)</th>" : ""}<th>pass</th><th>rate</th><th>likely range</th></tr></thead><tbody>${rows}</tbody></table></section>`;
-}
-
-function usageCard(s) {
-  const u = s.usage || {};
-  if (!u.total) return "";
-  const n = (x) => (x >= 1e6 ? `${(x / 1e6).toFixed(2)}M` : x >= 1e3 ? `${(x / 1e3).toFixed(1)}k` : `${x}`);
-  const money = (c) => (c < 10 ? c.toFixed(3) : c.toFixed(2));
-  const cost = (v) => (v.cost_usd == null ? `<span class="muted">unknown</span>`
-    : `${v.estimated ? "about " : ""}$${money(v.cost_usd)}${v.unpriced ? ` <span class="muted">(${v.unpriced} of ${v.runs} runs unknown)</span>` : ""}`
-      + (v.estimated ? `<div class="muted">estimated from ${esc(v.estimated)}</div>` : ""));
-  const row = (name, v) => `<tr><td>${name}</td><td class="num">${v.runs}</td><td class="num">${n(v.input)} <span class="muted">(${n(v.cached)} cached)</span></td>
-    <td class="num">${n(v.output)}</td><td class="num">${cost(v)}</td></tr>`;
-  const rows = Object.entries(u.sides || {}).filter(([, v]) => v.usage)
-    .map(([k, v]) => row(`<b>${esc(k)}</b> ${esc(v.label)}${v.billing === "subscription"
-      ? `<div class="muted">subscription login, so the cost is notional</div>` : ""}`, v.usage)).join("")
-    + (u.check ? row("check (the judge)", u.check) : "") + row("<b>total</b>", u.total);
-  return `<section class="panel"><h2>Usage</h2><table><thead><tr><th></th><th>runs</th><th>tokens in</th><th>tokens out</th><th>cost</th></tr></thead>
-    <tbody>${rows}</tbody></table></section>`;
-}
-
-function tailsCard(s) {
-  const running = s.tails.filter((t) => t.status === "running"), done = s.tails.filter((t) => t.status !== "running");
-  if (!s.tails.length) return "";
-  const fraction = (i) => (s.plan && s.plan[i] ? s.plan[i].fraction.toFixed(2) : i);
-  const where = (t) => s.kind === "cliff" ? `step ${t.step}` : s.kind === "calibrate" ? `side ${t.side} · fresh start`
-    : `handover at ${fraction(t.cut)} · workspace ${t.room} · agent ${t.agent}${t.kind === "native" ? " · own session" : ""}`;
-  const row = (t) => `<tr><td>${dot(t.status)}</td><td class="num">${esc(where(t))}</td><td>${esc(t.agent_name)}</td>
-    <td class="num">${dur((t.ended || s.now) - t.started)}</td><td class="activity">${esc(t.status === "running" ? (t.activity || "starting…") : t.detail || t.status)}</td></tr>`;
-  const total = s.kind === "cliff" ? `${done.length} of a budget of ${esc((s.params || {}).budget)}` : `${done.length} done`;
-  return `<section class="panel"><h2>${s.kind === "calibrate" ? "Runs" : "Restarts"} · ${running.length} running · ${total}</h2>
-    <table><thead><tr><th></th><th>where</th><th>agent</th><th>time</th><th>doing / result</th></tr></thead>
-    <tbody>${running.map(row).join("")}${done.slice(0, 40).map(row).join("")}</tbody></table></section>`;
-}
-
-function render(s) {
-  $("#title").textContent = s.kind ? `tare ${s.kind}` : "tare";
-  document.title = s.kind ? `tare ${s.kind} · ${s.phase}` : "tare live";
-  const status = s.phase === "done" ? "passed" : "running";
-  $("#phase").innerHTML = `${dot(status)}<span>${esc(s.phase === "tails" ? "restarts" : s.phase)}</span>`;  // the journal keeps the old phase name
-  if (s.started) $("#elapsed").textContent = `${dur((s.phase === "done" ? s.updated : s.now) - s.started)}`;
+const PHASES = { starting: "Starting", recording: "Recording the original run", "original run": "Recording the original run",
+  "original runs": "Recording the original runs", tails: "Restarting", runs: "Running" };
+function header(s, connected) {
+  $("#crumbs").innerHTML = (multi ? `<a href="../../">All runs</a><span class="sep">/</span>` : "") + `<span class="data">${esc(s.name || "")}</span>`;
+  $("#home").href = multi ? "../../" : "#";
   const quiet = s.updated ? s.now - s.updated : 0;
-  $("#updated").innerHTML = s.phase !== "done" && quiet > 300 ? `<span class="stale">no update for ${dur(quiet)}</span>` : "";
-  let cliffStep = null;
-  if (s.report) { const m = s.report.match(/lost at step (\d+)/); if (m) cliffStep = Number(m[1]); }
-  $("#app").innerHTML = (s.kind ? recipeCard(s) : "") + probesCard(s) + (s.kind && s.kind !== "calibrate" ? originalsCard(s, cliffStep) : "")
-    + (s.report ? `<section class="panel"><h2>Report</h2><pre>${esc(s.report)}</pre></section>` : "")
-    + (s.kind === "calibrate" ? calibrateCard(s) : "")
-    + (s.kind === "cliff" ? cliffCard(s) : "") + (s.kind === "swap" ? swapCard(s) : "") + usageCard(s) + tailsCard(s);
+  const total = (s.tails || []).length, word = s.kind === "calibrate" ? "run" : "restart";
+  const elapsed = s.started ? dur((s.phase === "done" ? s.updated : s.now) - s.started) : "";
+  const meta = `<span class="data muted">${plural(total, word)}${elapsed ? ` · ${elapsed}` : ""}</span>`;
+  let st;
+  if (!connected) st = `<span class="status lost"><i class="cell failed"></i>Connection lost</span>`;
+  else if (s.phase === "done") st = `<span class="status">${cell("passed")}Done</span>`;
+  else if (quiet > 300) st = `<span class="status stale"><i class="cell failed"></i>No update for ${dur(quiet)}</span>`;
+  else st = `<span class="status">${cell("running")}${esc(PHASES[s.phase] || s.phase)}</span>`;
+  $("#status").innerHTML = st + meta;
+  document.title = s.kind ? `tare ${s.kind} · ${s.name}` : "tare";
 }
-
+function render(s) {
+  header(s, true);
+  if (!s.kind) return;
+  const open = [...document.querySelectorAll("details[open][data-key]")].map((d) => d.dataset.key);
+  $("#app").innerHTML = answer(s.answer) + ({ calibrate, swap, cliff }[s.kind] || (() => ""))(s);
+  for (const key of open) { const d = document.querySelector(`details[data-key="${key}"]`); if (d) d.open = true; }
+}
+document.addEventListener("click", (e) => {
+  const id = e.target.dataset && e.target.dataset.copy;
+  if (id) navigator.clipboard.writeText($("#" + id).textContent).then(() => { e.target.textContent = "Copied"; });
+});
+let last = null;
 async function tick() {
   try {
     const r = await fetch("state", { cache: "no-store" });  // relative: under run/<i>/ when tare watch shows several runs
-    render(await r.json());
+    last = await r.json();
+    render(last);
+    if (last.phase === "done") return;  // a finished run does not change any more
   } catch (e) {
-    $("#phase").innerHTML = `${dot("failed")}<span>disconnected</span>`;
+    if (last) header(last, false);
   }
   setTimeout(tick, 1000);
 }
-if (location.pathname.startsWith("/run/")) $("#back").style.display = "";
 tick();
 </script>
 </body>

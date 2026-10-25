@@ -137,7 +137,7 @@ def swap(a: Side, b: Side, project: Path, prompt: str, check: str, out: Path, *,
     return text
 
 
-def _leader(state: tuple[float, float, float], model: tuple[float, float, float]) -> str:
+def leader(state: tuple[float, float, float], model: tuple[float, float, float]) -> str:
     """Which explains more of the gap at a cut: the room, the model, both alike, or neither (both near zero)."""
     if abs(state[0]) < 0.1 and abs(model[0]) < 0.1:
         return "neither"
@@ -180,7 +180,7 @@ def report(sides: dict[str, Side], plan: list[Cut], prompt: str, check: str, pro
                 native, (passed, n) = cut.native[side], cut.count(side, side)
                 lines.append(f"    note cost {side}       {_sign(cost)}  (own session {sum(native)}/{len(native)} against "
                              f"handover note {passed}/{n}, both in its own workspace)")
-        dominant.append(_leader(state, model))
+        dominant.append(leader(state, model))
         deciding.append(state if dominant[-1] in ("room", "tie") else model)
     lines.append("")
     first = plan[0]

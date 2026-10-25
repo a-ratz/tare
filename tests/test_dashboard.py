@@ -68,7 +68,7 @@ def test_running_original_shows_capsules_so_far(tmp_path):
 def test_server_serves_the_page_and_the_state(tmp_path):
     server, url = dashboard.serve(cliff_run(tmp_path))
     try:
-        assert b"tare live" in urllib.request.urlopen(url).read()
+        assert b"/assets/tare.css" in urllib.request.urlopen(url).read()
         assert json.loads(urllib.request.urlopen(url + "state").read())["kind"] == "cliff"
     finally:
         server.shutdown()
@@ -138,13 +138,40 @@ def test_watch_over_several_runs_serves_an_overview_and_each_run_below_it(tmp_pa
       sides={"a": {"agent": "claude", "args": [], "dir": ".", "prompt": "/x:ideate"}})
     server, url = dashboard.serve([first, second])
     try:
-        assert b"tare runs" in urllib.request.urlopen(url).read()
+        assert b"All runs" in urllib.request.urlopen(url).read()
         runs = json.loads(urllib.request.urlopen(url + "runs").read())
         assert [(r["i"], r["kind"]) for r in runs] == [(0, "cliff"), (1, "calibrate")]
         assert runs[1]["sides"]["a"]["prompt"] == "/x:ideate"
         assert json.loads(urllib.request.urlopen(url + "run/1/state").read())["kind"] == "calibrate"
-        assert b"tare live" in urllib.request.urlopen(url + "run/0").read()  # redirected to run/0/
+        assert b"id=\"app\"" in urllib.request.urlopen(url + "run/0").read()  # redirected to run/0/
         with pytest.raises(urllib.error.HTTPError):
             urllib.request.urlopen(url + "run/2/")
     finally:
         server.shutdown()
+
+
+def test_server_serves_the_fonts_logos_and_style_but_nothing_outside_assets(tmp_path):
+    server, url = dashboard.serve(cliff_run(tmp_path))
+    try:
+        css = urllib.request.urlopen(url + "assets/tare.css")
+        assert css.headers["content-type"].startswith("text/css") and b"--signal" in css.read()
+        assert urllib.request.urlopen(url + "assets/fonts/IBMPlexSans-Regular.woff2").headers["content-type"] == "font/woff2"
+        assert urllib.request.urlopen(url + "assets/logo-dark.svg").headers["content-type"] == "image/svg+xml"
+        for bad in ("assets/../dashboard.py", "assets/..%2Fdashboard.py", "assets/nope.css", "assets/fonts/x.py"):
+            with pytest.raises(urllib.error.HTTPError):
+                urllib.request.urlopen(url + bad)
+    finally:
+        server.shutdown()
+
+
+def test_state_carries_the_answer_and_the_judges_reason(tmp_path):
+    j = Journal(tmp_path)
+    j("start", kind="calibrate", task="t", check="tare judge", project="/p", tails=1,
+      sides={"a": {"agent": "claude", "args": ["--model", "haiku"], "dir": "."}})
+    j("tail", id="a-0", status="running", side="a", agent="a", agent_name="claude", kind="fresh", dir="calibrate/a-0")
+    j("tail", id="a-0", status="passed", detail="agent exit 0; check exit 0: score 70 (threshold 0): The chart is right.")
+    j("phase", phase="done")
+    s = dashboard.state(tmp_path)
+    assert s["tails"][0]["score"] == 70 and s["tails"][0]["reason"] == "The chart is right."
+    assert s["answer"]["sentence"] == "Claude Code scored 70 out of 100, on average."
+    assert dashboard.overview(tmp_path)["answer"] == s["answer"]["sentence"]

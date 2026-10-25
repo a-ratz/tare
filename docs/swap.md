@@ -13,6 +13,11 @@ tare swap "fix the failing test" --check "uv run pytest -q" --a claude --a-args 
 Two agents, a and b, each attempt the same task once. [Calibrate](calibrate.md) first tells you
 whether a task suits Swap: it needs one side that mostly fails and one that mostly passes.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/dashboard-swap-dark.png">
+  <img alt="A Swap run in the dashboard: the agent decided until halfway" src="assets/dashboard-swap-light.png">
+</picture>
+
 ## Handover points, restarts and the two effects
 
 Swap stops both runs at several **handover points**. `--handovers` sets them as fractions of each
