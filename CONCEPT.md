@@ -6,10 +6,11 @@ that it could not see your setup (`tare: not proven (blind)`). It refuses to sta
 until the reading is `tare: 0.00`, unless you pass `--allow-dirty`. It supports Claude Code, Codex, Pi
 and the Antigravity CLI (`agy`) on Linux and WSL, and Claude Code, Codex and Pi on macOS.
 
-This document describes the design and the measurements behind it. The [README](README.md)
-explains the words this document uses: room, probe, reading, leak, declared, dirty twin, check, tail and
-handoff. Every claim marked **measured** was observed on WSL2. The section
-[Measurements](#measurements) lists the agent versions and links each result.
+This document describes the design and the measurements behind it. The documentation explains the
+words this document uses: room, probe, reading, leak, declared and dirty twin in
+[docs/words.md](docs/words.md), check, tail and handoff in [docs/measuring.md](docs/measuring.md).
+Every claim marked **measured** was observed on WSL2. The section [Measurements](#measurements)
+lists the agent versions and links each result.
 
 ## Why
 
