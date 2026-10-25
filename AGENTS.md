@@ -11,7 +11,7 @@ setup at all. A plain script checks what the room can reach. tare is built for s
 evaluations, where a run that carries the user's own context measures the user's machine
 instead of the skill.
 
-The README explains these words for users. Contributors also meet these terms in the code:
+[docs/words.md](docs/words.md) explains these words for users. Contributors also meet these terms in the code:
 
 - a **marker** is a line of the user's own files that the probe looks for in a request,
 - an **unattended run** is a one-shot run without permission prompts (Calibrate, Swap and
@@ -127,7 +127,8 @@ test, a fix next door) becomes a new issue or a question, not part of the PR.
 - Code, docs, issues, commits and PRs are in English.
 - Python through uv (`uv run`, `uv add`). tare itself has no runtime dependencies.
 - Write like the surrounding code: its naming, its comment density, its idiom.
-- A user-visible change updates README.md and CONCEPT.md in the same PR.
+- A user-visible change updates the README or its page in `docs/`, and CONCEPT.md, in the same PR.
+  The README stays the short entry; details go into `docs/`, one page per topic.
 - The room uses bubblewrap on Linux and WSL and Seatbelt on macOS (since 0.3.0). The
   Antigravity CLI is not supported on macOS. Tests describe Linux unless they say otherwise:
   `tests/conftest.py` pins the platform and keeps the tests away from the Keychain.
