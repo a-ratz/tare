@@ -6,12 +6,24 @@ user's personal setup, and proves the room clean before the run. The room is a s
 the login and a cleared environment. The proof is a probe that asks the agent nothing. The real
 agent CLI runs in the room against a fake model server, which keeps the request. That request
 is the context the agent CLI put together.
-The same run in the user's real setup (the dirty twin) checks that the probe can see the user's
+The same run in the user's real setup (the control run) checks that the probe can see the user's
 setup at all. A plain script checks what the room can reach. tare is built for skill and agent
 evaluations, where a run that carries the user's own context measures the user's machine
 instead of the skill.
 
-[docs/words.md](docs/words.md) explains these words for users. Contributors also meet these terms in the code:
+[docs/words.md](docs/words.md) explains these words for users. The code keeps older names for some of
+them, so stored runs stay readable:
+
+| Plain name (docs, CLI, dashboard) | Name in the code and in run directories |
+|---|---|
+| control run | `twin` (`run_twin`, `twin_argv`) |
+| restart, fresh start | `tail`, the tail at step 0 |
+| handover point | `cut` (`--handovers` stores `cuts`) |
+| handover note | `handoff`, written from the trail |
+| workspace effect, agent effect | `state`, `model` (`Cut.state()`, `Cut.model()`) |
+| note cost | `foreignness` |
+
+Contributors also meet these terms in the code:
 
 - a **marker** is a line of the user's own files that the probe looks for in a request,
 - an **unattended run** is a one-shot run without permission prompts (Calibrate, Swap and
@@ -28,9 +40,9 @@ instead of the skill.
 | `src/tare/room.py` | the room: a `Room` with the host paths and the paths the agent sees, the backend that builds it (bubblewrap on Linux, Seatbelt on macOS), a fresh home with a login copy, the environment allowlist |
 | `src/tare/probe.py` | the probe: context, control, reach, scoring and the printed reading |
 | `src/tare/capsule.py` | capsules: archive the workspace after every tool call, continue one from the agent's own saved session or by handoff, run the check |
-| `src/tare/cliff.py` | Cliff: baseline, adaptive search with Wilson intervals, the report |
+| `src/tare/cliff.py` | Cliff: fresh starts, adaptive search with Wilson intervals, the report |
 | `src/tare/trail.py` | the trail: a run record in the same format for every agent, and the handoff written from it |
-| `src/tare/swap.py` | Swap: each agent continues each run's workspace. State effect, model effect, handoff cost, the report |
+| `src/tare/swap.py` | Swap: each agent continues each run's workspace. Workspace effect, agent effect, note cost, the report |
 | `src/tare/journal.py` | the run journal: one JSON line per event of a Calibrate, Cliff or Swap run |
 | `src/tare/dashboard.py`, `dashboard.html` | the live dashboard: state from the run directory, one page |
 | `src/tare/recipe.py` | recipes: how to repeat a run, and what has changed since |
@@ -52,7 +64,7 @@ CI cannot run the probe against real agents, because that needs bubblewrap and a
 agent. So before a PR that touches the room or the probe, run these on your machine:
 
 1. `uv run tare probe claude`, `codex`, `pi` and `agy` must read `tare: 0.00`, and the control
-   line must show every kind of context your setup has. The dirty twin of the Antigravity CLI
+   line must show every kind of context your setup has. The control run of the Antigravity CLI
    (`agy`) must leave `~/.gemini` unchanged.
 2. A planted leak must fail the probe. Put known parts of a personal setup (instructions, a
    skill, an environment variable) into the room's copy of the agent's config or its environment, and check that
@@ -61,8 +73,8 @@ agent. So before a PR that touches the room or the probe, run these on your mach
    "The run became lost at step 4". It drives the real Claude Code CLI against a scripted model,
    so it costs no API calls.
 4. Before a PR that touches Swap, the trail or capsules: `uv run experiments/swap-scripted/world.py`
-   must pass the null check and report "Blame passes from the model to the workspace between
-   cut 0.00 and cut 0.50".
+   must pass the start check and report "Blame passes from the agent to the workspace between
+   the handovers at 0.00 and 0.50".
 
 ## Development process
 
@@ -76,10 +88,10 @@ agent. So before a PR that touches the room or the probe, run these on your mach
    on the epic whenever you learn something the issue does not state yet: a measurement and its
    result, a lesson, a problem and the issue it led to. A comment may link features, but it
    states the point itself:
-   - good: "The dirty-twin run showed that a custom base URL turns Claude Code's tool search
+   - good: "The control run showed that a custom base URL turns Claude Code's tool search
      off, so the fake saw every tool schema inline instead of deferred. Probe and run now set
      `ENABLE_TOOL_SEARCH=true`."
-   - bad: "The dirty twin had a problem, fixed in the room code."
+   - bad: "The control run had a problem, fixed in the room code."
 4. **One branch per epic, from `main`**, named `<epic number>-<short-slug>` (`6-codex`). Features
    get no branches of their own. Each commit names the feature it implements (`Refs #7`).
 5. **One PR per epic, when the epic is done.** Its body says `Closes #6` for the epic and for
@@ -118,8 +130,8 @@ test, a fix next door) becomes a new issue or a question, not part of the PR.
   in a header.
 - Never change the user's real configuration (`~/.claude`, `~/.claude.json`, `~/.codex`, `~/.pi`,
   `~/.gemini`). Plant parts of a setup only into the room's copy, or into the temporary overlay
-  that the Antigravity CLI's dirty twin writes into.
-- The dirty twin starts the real CLI in the real setup, and the user's hooks fire. Run it only
+  that the Antigravity CLI's control run writes into.
+- The control run starts the real CLI in the real setup, and the user's hooks fire. Run it only
   through `tare probe` or an experiment.
 
 ## Conventions

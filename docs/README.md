@@ -8,7 +8,7 @@ hold the details, one topic each.
 | Page | What it answers |
 |---|---|
 | [Install](install.md) | What tare needs on Linux, WSL and macOS, and how to install it |
-| [The words tare uses](words.md) | Room, probe, reading, leak, declared, dirty twin |
+| [The words tare uses](words.md) | Room, probe, reading, leak, control run, and the words of the measuring tools |
 | [Running agents in rooms](running-agents.md) | Every command and flag, exit codes, what the room keeps out, the login lifetime |
 | [Reading a probe](probe.md) | What each line of a reading means, what a leak looks like, when a probe is blind |
 
@@ -16,7 +16,7 @@ hold the details, one topic each.
 
 | Page | What it answers |
 |---|---|
-| [Measuring agents in rooms](measuring.md) | Checks, steps, run directories and the 95% interval, shared by the tools below |
+| [Measuring agents in rooms](measuring.md) | Checks, steps, run directories and the likely range, shared by the tools below |
 | [Calibrate](calibrate.md) | How often does each side (an agent with its arguments) pass a task? |
 | [Judge](judge.md) | How do I score a result that no test can decide, such as a web page? |
 | [Swap](swap.md) | Did a run fail because of its workspace or because of the agent? |

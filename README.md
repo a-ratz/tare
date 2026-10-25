@@ -43,7 +43,7 @@ WSL, and with the first three on macOS.
 ```text
 $ tare probe claude
 tare probe · claude 2.1.289 · /home/me/tare
-  control   dirty twin shows: instructions, home path, mcp, skills, plugins, email, reach
+  control   your real setup shows: instructions, home path, mcp, skills, plugins, email, reach
   leaks     none
   declared
     email        account email                                subscription login
@@ -74,7 +74,7 @@ every line of the output above.
   model server on your machine. It makes no paid calls and never asks the agent about itself,
   because an agent asked about its own context can refuse or be wrong.
   [How it works](https://github.com/a-ratz/tare/blob/main/docs/how-it-works.md)
-- **Knows when it cannot see.** A dirty twin runs the agent in your real setup. If the probe could
+- **Knows when it cannot see.** A control run starts the agent in your real setup. If the probe could
   not see your setup there, the reading is `tare: not proven (blind)` instead of a `0.00` that
   proves nothing. [Reading a probe](https://github.com/a-ratz/tare/blob/main/docs/probe.md)
 - **Keeps your files out and your login working.** The room has no home directory of yours, no

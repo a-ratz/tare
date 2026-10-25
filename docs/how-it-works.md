@@ -6,7 +6,7 @@ A probe has three parts, and none of them asks the agent anything.
 
 1. **The agent in the room.** The real agent runs inside the room against a fake model server,
    which keeps the request that it receives. That request is the context the agent was given.
-2. **The dirty twin.** The same agent runs in your real setup, against a fake server too, so
+2. **The control run.** The same agent runs in your real setup, against a fake server too, so
    tare knows that it can see your setup at all. If it cannot, the reading is
    `tare: not proven (blind)` instead of a clean room that proves nothing.
 3. **The reach script.** A plain script inside the room looks for your files and for secret
@@ -25,7 +25,7 @@ environment, and none of them checks it.
 ## Further reading
 
 - [CONCEPT.md](../CONCEPT.md): the design and the measurements behind it
-- The dirty-twin experiments that decided the probe design:
+- The control-run experiments that decided the probe design (their records call the control run the dirty twin):
   [Claude Code](../experiments/dirty-twin/RESULTS.md),
   [Codex](../experiments/dirty-twin-codex/RESULTS.md),
   [Pi](../experiments/dirty-twin-pi/RESULTS.md),

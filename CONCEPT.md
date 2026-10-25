@@ -7,8 +7,10 @@ until the reading is `tare: 0.00`, unless you pass `--allow-dirty`. It supports 
 and the Antigravity CLI (`agy`) on Linux and WSL, and Claude Code, Codex and Pi on macOS.
 
 This document describes the design and the measurements behind it. The documentation explains the
-words this document uses: room, probe, reading, leak, declared and dirty twin in
-[docs/words.md](docs/words.md), check, tail and handoff in [docs/measuring.md](docs/measuring.md).
+words this document uses: room, probe, reading, leak, declared and control run in
+[docs/words.md](docs/words.md), check, restart and handover note in [docs/measuring.md](docs/measuring.md).
+The experiment records under `experiments/` call the control run the control run and a restart a
+tail.
 Every claim marked **measured** was observed on WSL2. The section [Measurements](#measurements)
 lists the agent versions and links each result.
 
@@ -72,11 +74,11 @@ your instructions, memories, plugins, hooks and skills. That is not enough.
   server keeps the request, which is the context the agent CLI put together, and answers "ok".
   The idea is the blank run from analytical chemistry, which runs the whole procedure without a
   sample to see what the procedure itself brings in.
-- **Control:** the same agent run in your real setup, the dirty twin, must show your context. The
+- **Control:** the same agent run in your real setup, the control run, must show your context. The
   risk was that features that come with the login (connected accounts, account skills) would
   not load against a fake server, so the probe would read clean while a real run is not.
   **Measured:** for Claude Code this risk did not occur. Against the fake model server, the
-  dirty twin still loaded the connected accounts, account skills, plugin skills, hook output,
+  control run still loaded the connected accounts, account skills, plugin skills, hook output,
   global instructions, memories and the email. The room loaded none of them except the email.
   Pointing Claude Code at a custom base URL turns its tool search off and puts every tool schema
   into the request. So the probe and the runs set `ENABLE_TOOL_SEARCH=true` to see the context as
@@ -134,19 +136,19 @@ the copy does not start inside the renewal window (#126).
 ### Probe and reading
 
 The probe has the three parts of layer 3: the agent in the room against the fake model server,
-the dirty twin, and the reach script. It sorts what it finds into **kinds of context**,
+the control run, and the reach script. It sorts what it finds into **kinds of context**,
 each checked on its own: instructions, memories, home path, MCP servers (connected accounts count
 here), skills, plugins, extensions, instruction files above the project, the account email, and
 reach.
 
 - A kind of context counts only when you have it. tare learns that from your files, for example
   a global instructions file or a skill folder.
-- If you have a kind of context and the dirty twin does not show it, the probe could not see
-  it. tare then runs the dirty twin once more after 10 seconds. If the second dirty twin still
+- If you have a kind of context and the control run does not show it, the probe could not see
+  it. tare then runs the control run once more after 10 seconds. If the second control run still
   does not show that kind of context, the reading is `tare: not proven (blind)`. **Measured:**
-  with six runs starting together, a dirty twin sent its request before its MCP servers were
+  with six runs starting together, a control run sent its request before its MCP servers were
   connected.
-- Every probe makes no paid model call, because both the room and the dirty twin talk to the
+- Every probe makes no paid model call, because both the room and the control run talk to the
   fake model server.
 
 ### Agents
@@ -154,7 +156,7 @@ reach.
 Each agent needs its own way to the fake model server, its own login copy and its own markers:
 lines of your own files that the probe looks for in a request.
 
-| Agent | How the room is set up | Way to the fake model server | Kinds of context the dirty twin showed on the measuring machine |
+| Agent | How the room is set up | Way to the fake model server | Kinds of context the control run showed on the measuring machine |
 |---|---|---|---|
 | Claude Code | `CLAUDE_CONFIG_DIR` and `HOME` in the room, a copy of `.credentials.json`, `--strict-mcp-config --setting-sources project,local` | `ANTHROPIC_BASE_URL` | instructions, home path, MCP servers, skills, plugins, email, reach |
 | Codex | `CODEX_HOME` and `HOME` in the room, a copy of `auth.json` only, `--disable remote_plugin` | `-c openai_base_url=<server>/v1` keeps the ChatGPT login | instructions, memories, home path, skills, plugins, custom agents, reach |
@@ -181,15 +183,15 @@ What each agent needed:
   Codex's default model. Pass `-m` when you compare runs.
 - **Pi:** a fresh agent directory is clean on its own and keeps the project's `AGENTS.md`, so the
   room uses no flags. `--no-context-files` would drop the project's `AGENTS.md`. tare finds Pi's
-  extension tools by comparing the dirty twin's tools with a run that uses `--no-extensions`.
+  extension tools by comparing the control run's tools with a run that uses `--no-extensions`.
   With standard input left open, Pi waits for piped input and never answers, so tare closes it.
 - **Antigravity CLI:** the fake model server speaks Google's Cloud Code `v1internal` API and
   offers one model. It lists that model in the groups the CLI shows models in
   (`agentModelSorts`), because the CLI rejects a model that no group lists. The
-  CLI writes into `~/.gemini` on every run, so its dirty twin runs with an overlay over
+  CLI writes into `~/.gemini` on every run, so its control run runs with an overlay over
   `~/.gemini`. A user namespace mounts the overlay, and every write goes to a temporary file
   system that disappears after the run. **Measured:** `~/.gemini` kept its fingerprint (paths,
-  sizes, modification times) through every dirty twin. The CLI writes each skill's path into
+  sizes, modification times) through every control run. The CLI writes each skill's path into
   its skill list, so the probe compares skill lines without the path. Without that, a skill that
   leaked into the room would not match yours, because its path differs.
 - **Instruction files above the project:** Claude Code's one-shot mode, which the probe uses, did
@@ -199,7 +201,7 @@ What each agent needed:
 - **Long prompts:** Linux limits a single argument to about 128 KiB. tare passes the task to
   every agent as an argument, so a longer task fails. Pi could read it from a file with `@file`.
 
-### Capsules, trail and handoff
+### Capsules, trail and handover note
 
 Calibrate, Swap and Cliff need a run they can stop and continue. During a recorded run, a hook
 archives the workspace after every tool call. Each archive is a **capsule**. The hook comes from
@@ -213,16 +215,16 @@ A run continues from a capsule in one of two ways:
   resumes a session file cut after the step, with `codex exec resume <id>`. Pi resumes with
   `--session`. **Measured:** a resumed Codex session kept its id and finished the remaining plan
   from step 1.
-- **A handoff.** The **trail** is a record of a run in the same format for every agent: the task,
-  the messages, the tool calls and their results. tare writes a handoff from any prefix of it, so
+- **A handover note.** The **trail** is a record of a run in the same format for every agent: the task,
+  the messages, the tool calls and their results. tare writes a handover note from any prefix of it, so
   any agent can continue any run without reading another agent's session format. The Antigravity
   CLI stores its sessions in a format that tare cannot cut, so it always continues with a
-  handoff. Its trail comes from `transcript_full.jsonl`.
+  handover note. Its trail comes from `transcript_full.jsonl`.
 
 ### Calibrate
 
 `tare calibrate` starts each side (an agent with its arguments) several times from a fresh copy
-of the project and reports each side's pass rate with a 95% interval (Wilson). A side can have
+of the project and reports each side's pass rate with a likely range (a 95% Wilson interval). A side can have
 its own prompt, so two skills that start with different commands compare in one call. Without a
 check, a run counts as finished when its agent exits with 0, and tare keeps its workspace for
 scoring elsewhere. **Measured:** in a field test that compared two ideation skills, 18 rooms all
@@ -243,31 +245,32 @@ judge found a real one-cent rounding bug and an overflow.
 
 ### Swap
 
-Swap cuts two runs at several points. At each cut, each agent continues each run's workspace
-by handoff. Swap reports a state effect (how much the state of the workspace matters), a model
-effect (which agent does better), and, where an agent can continue its own saved session, the
-handoff cost. At cut 0 both workspaces are the untouched project, so the state effect there must
-be zero. Swap checks this, and the check is called the null check. When the state effect and the
-model effect are within 0.1 of each other, Swap says they explain the failure about equally.
+Swap stops two runs at several handover points. At each one, each agent continues each run's
+workspace from a handover note. Swap reports a workspace effect (how much the state of the
+workspace matters), an agent effect (which agent does better), and, where an agent can continue
+its own saved session, the note cost. At the handover point 0 both workspaces are the untouched
+project, so the workspace effect there must be zero. Swap checks this, and the check is called the
+start check. When the workspace effect and the agent effect are within 0.1 of each other, Swap
+says they explain the failure about equally.
 
-**Measured:** against scripted models with a known truth, the null check passed and the blame
-passed from the model to the workspace between cut 0 and cut 0.5, as the scripts were written
-to cause.
+**Measured:** against scripted models with a known truth, the start check passed and the blame
+passed from the agent to the workspace between the handovers at 0 and 0.5, as the scripts were
+written to cause.
 
 ### Cliff
 
 Cliff restarts a failed run from its capsules and names the step after which it no longer
-succeeds. The baseline is the set of tails from the start. A step counts as good while its
-tails pass at least half as often as the baseline. Cliff halves the range between the last good
-and the first bad step, then adds tails to the two neighbours until their intervals separate or
-the budget is spent. It reports a model gap instead of a step only when the upper end of the
-baseline's 95% interval lies below 0.2.
+succeeds. Fresh starts are the restarts from the beginning. A step counts as good while its
+restarts pass at least half as often as a fresh start. Cliff halves the range between the last
+good and the first bad step, then adds restarts to the two neighbours until their likely ranges
+separate or the budget is spent. It reports that the task is too hard for the model instead of a
+step only when the upper end of the fresh starts' likely range (a 95% interval) lies below 0.2.
 
 **Measured:** against a scripted model whose wrong step is known, Cliff found step 4 with
-separated intervals in 18 tails. Cliff stays experimental, because neither of two real test
+separated likely ranges in 18 restarts. Cliff stays experimental, because neither of two real test
 rounds had a failure that sat in one step (see [Measurements](#measurements)). Swap already
-shows, at three cuts, how often an agent passes when it continues its own workspace. When a real
-Swap shows that rate dropping between two cuts, Cliff can narrow the drop down to one step. Only
+shows, at three handover points, how often an agent passes when it continues its own workspace. When a real
+Swap shows that rate dropping between two handover points, Cliff can narrow the drop down to one step. Only
 then does Cliff get new experiments.
 
 ### Tokens and cost
@@ -299,19 +302,19 @@ macOS 27.0 (arm64) on 2026-10-05 and 2026-10-06.
 
 | What | Agent and version | Result | Source |
 |---|---|---|---|
-| Dirty twin and room, fake model server | Claude Code 2.1.289 | the dirty twin showed every kind of context, the room only the email | [results](experiments/dirty-twin/RESULTS.md) |
-| Dirty twin and room | Codex CLI 0.160.0 | the room read `tare: 0.00` | [results](experiments/dirty-twin-codex/RESULTS.md) |
-| Dirty twin and room | Pi 1.0.2 | the room read `tare: 0.00` without flags | [results](experiments/dirty-twin-pi/RESULTS.md) |
-| Dirty twin and room | Antigravity CLI 1.2.16 | the room read `tare: 0.00` without flags, and `~/.gemini` stayed unchanged | [results](experiments/dirty-twin-agy/RESULTS.md) |
+| Control run and room, fake model server | Claude Code 2.1.289 | the control run showed every kind of context, the room only the email | [results](experiments/dirty-twin/RESULTS.md) |
+| Control run and room | Codex CLI 0.160.0 | the room read `tare: 0.00` | [results](experiments/dirty-twin-codex/RESULTS.md) |
+| Control run and room | Pi 1.0.2 | the room read `tare: 0.00` without flags | [results](experiments/dirty-twin-pi/RESULTS.md) |
+| Control run and room | Antigravity CLI 1.2.16 | the room read `tare: 0.00` without flags, and `~/.gemini` stayed unchanged | [results](experiments/dirty-twin-agy/RESULTS.md) |
 | Rooms given copies of real settings on purpose | all four | Claude Code 4 leaks, Codex 6, Pi 5, Antigravity CLI 3, each named with its source | the results above |
-| Scripted Cliff and Swap | Claude Code against scripted models | Cliff found step 4. Swap passed the null check and found the blame passing from the model to the workspace between cut 0 and cut 0.5 | `experiments/cliff-scripted`, `experiments/swap-scripted` |
+| Scripted Cliff and Swap | Claude Code against scripted models | Cliff found step 4. Swap passed the start check and found the blame passing from the agent to the workspace between the handovers at 0 and 0.5 | `experiments/cliff-scripted`, `experiments/swap-scripted` |
 | Real task 1: a data migration | Claude Code with Sonnet and Haiku, Codex | Deleting the source file after a wrong-encoding import was planned as the point of no return. Swap showed that the workspace could still be repaired. Haiku passed about 1 in 14 runs, Codex with gpt-6.1-sol 4 of 4 | [results](experiments/migration/RESULTS.md) |
 | Real task 2: a web page judged by Sonnet | Claude Code with Haiku, Codex with gpt-6.1-sol | Swap confirmed all four predictions of the plan written before the runs. Cliff called a failed run unlucky, and a later rescoring of the same page confirmed it | [results](experiments/html/RESULTS.md) |
 | Field test: two ideation skills compared | Claude Code 2.1.289 with Opus 5.5 | all 18 rooms read `tare: 0.00`, including a skill that started `claude -p` inside the room | not published |
 | macOS: what a Seatbelt room has to handle | Claude Code 2.1.289, Codex CLI 0.159.0, Pi 0.99.1 | Claude Code's login is in the Keychain. With only the home directory denied, `/var/folders`, `/private/tmp` and the pasteboard stayed readable. Agents' own sandboxes fail inside a room (`sandbox_apply: Operation not permitted`) | comments on epic #85 |
 | macOS: a Seatbelt room with the real login | same | each agent answered one prompt. The room and its login copy were removed afterwards, and the Keychain item was unchanged (digest before and after). `tare probe` read `tare: 0.00` for all three | comments on epic #85 |
-| macOS: dirty twin, Seatbelt room, and parts of the real setup copied into the room | same | every room read `tare: 0.00`. Each copied part that reached the request was named with its source, and nothing under the home directory, under `/var/folders`, in `/private/tmp` or on the pasteboard was reachable from inside. Two kinds of Codex context are invisible to the probe on any system (#109) | [results](experiments/dirty-twin-macos/RESULTS.md) |
-| macOS: scripted Cliff and Swap, the judge | Claude Code 2.1.290 against scripted models; Microsoft Edge for the judge's screenshot | Cliff found step 4. Swap passed the null check and found the blame passing from the model to the workspace between cut 0 and cut 0.5. `tare judge` rendered a page and scored it. With a project that turns Claude Code's sandbox on, every Bash call failed in a Seatbelt room until tare turned it off | comments on epic #85 |
+| macOS: control run, Seatbelt room, and parts of the real setup copied into the room | same | every room read `tare: 0.00`. Each copied part that reached the request was named with its source, and nothing under the home directory, under `/var/folders`, in `/private/tmp` or on the pasteboard was reachable from inside. Two kinds of Codex context are invisible to the probe on any system (#109) | [results](experiments/dirty-twin-macos/RESULTS.md) |
+| macOS: scripted Cliff and Swap, the judge | Claude Code 2.1.290 against scripted models; Microsoft Edge for the judge's screenshot | Cliff found step 4. Swap passed the start check and found the blame passing from the agent to the workspace between the handovers at 0 and 0.5. `tare judge` rendered a page and scored it. With a project that turns Claude Code's sandbox on, every Bash call failed in a Seatbelt room until tare turned it off | comments on epic #85 |
 
 ## Open questions and ideas
 
@@ -321,11 +324,11 @@ macOS 27.0 (arm64) on 2026-10-05 and 2026-10-06.
   a fresh room never did. Cached account data is the suspected cause. Not tested.
 - **Claude Code login renewal:** whether a renewal inside the room logs out the real session. Not
   tested, so tare avoids it.
-- **Codex handoffs:** Codex can run several commands in one tool call, which makes its handoffs
+- **Codex handover notes:** Codex can run several commands in one tool call, which makes its handover notes
   long.
-- **Cost:** every tail is a full agent run, so a Cliff search or a Swap costs as much as its tails.
+- **Cost:** every restart is a full agent run, so a Cliff search or a Swap costs as much as its restarts.
 - **macOS:** the room is built on Seatbelt, released in 0.3.0 (epic #85). Not done: the
-  Antigravity CLI, whose dirty twin needs Linux's overlay, so tare stops with a message there.
+  Antigravity CLI, whose control run needs Linux's overlay, so tare stops with a message there.
   Not tested: whether a program started through launchd or XPC runs outside the room's profile.
 - **Other probes, not built:** weighing the first request's input tokens before and after adding
   junk to the real setup, and file tripwires that report which secret files a run opened.

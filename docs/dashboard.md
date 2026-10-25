@@ -6,7 +6,7 @@
 
 The live dashboard of `tare calibrate`, `tare swap` and `tare cliff` runs at
 `http://localhost:8777/` unless that port is taken. It shows the setup of the run, the probe
-readings, each run step by step, every tail with what its agent is doing, the results as they
+readings, each run step by step, every restart with what its agent is doing, the results as they
 come in, and the final report.
 
 ```bash
