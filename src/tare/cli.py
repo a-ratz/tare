@@ -2,8 +2,8 @@
 
   tare probe {claude,codex,pi,agy} [--project DIR]
   tare {claude,codex,pi,agy} [--project DIR] [--allow-dirty] [--yolo] [-- AGENT_ARGS...]
-  tare cliff {claude,codex,pi,agy} PROMPT --check CMD [--tails N] [--budget N] [--jobs N] [-- AGENT_ARGS...]
-  tare swap PROMPT --check CMD [--a claude] [--b codex] [--a-args ARGS] [--b-args ARGS] [--cuts 0,0.5,1]
+  tare cliff {claude,codex,pi,agy} PROMPT --check CMD [--restarts N] [--budget N] [--jobs N] [-- AGENT_ARGS...]
+  tare swap PROMPT --check CMD [--a claude] [--b codex] [--a-args ARGS] [--b-args ARGS] [--handovers 0,0.5,1]
   tare calibrate [PROMPT] [--check CMD] --side "claude --model haiku" --side "codex" [--side-prompt b=TEXT] [--runs N]
   tare judge [DIR] --rubric FILE --threshold N [--judge "claude --model sonnet"]   a check: exit 0 at or above N
   tare judge-noise DIR... --rubric FILE --times K [--threshold N]                  how far the judge's scores vary
@@ -87,12 +87,15 @@ def main(argv: list[str] | None = None) -> int:
     k.add_argument("prompt", help="the task, as given to the agent")
     k.add_argument("--check", required=True, help="shell command run in the finished workspace (exit 0 passes)")
     k.add_argument("--project", type=Path, default=Path.cwd())
-    k.add_argument("--tails", type=int, default=3, help="tails (continuations from a saved step) per step tried (default 3)")
-    k.add_argument("--budget", type=int, default=30, help="tails in total, baseline included (default 30)")
-    k.add_argument("--jobs", type=int, default=3, help="tails run at the same time (default 3)")
-    k.add_argument("--gap-below", type=float, default=0.2,
-                   help="report a model gap (the task is too hard for the model) only when the upper end of the "
-                        "baseline's 95%% interval is below this (default 0.2)")
+    k.add_argument("--restarts", dest="tails", type=int, default=3, metavar="N",
+                   help="restarts from each saved step tried (default 3)")
+    k.add_argument("--tails", dest="tails", type=int, default=argparse.SUPPRESS, help=argparse.SUPPRESS)  # old name
+    k.add_argument("--budget", type=int, default=30, help="restarts in total, fresh starts included (default 30)")
+    k.add_argument("--jobs", type=int, default=3, help="restarts run at the same time (default 3)")
+    k.add_argument("--too-hard-below", dest="gap_below", type=float, default=0.2, metavar="RATE",
+                   help="report that the task is too hard for the model only when even the upper end of the fresh "
+                        "starts' likely range is below this (default 0.2)")
+    k.add_argument("--gap-below", dest="gap_below", type=float, default=argparse.SUPPRESS, help=argparse.SUPPRESS)  # old name
     k.add_argument("--out", type=Path, help="run directory (default ~/.local/state/tare/cliff/<project>-<time>)")
     k.add_argument("--allow-dirty", action="store_true", help="run even if the reading is not tare: 0.00")
     w = sub.add_parser("swap", help="each agent continues both workspaces: was it the workspace or the agent")
@@ -102,12 +105,18 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--b", default="codex", choices=sorted(AGENTS), help="agent b (default codex)")
     w.add_argument("--a-args", default="", help="arguments for every run of agent a, e.g. '--model sonnet'")
     w.add_argument("--b-args", default="", help="arguments for every run of agent b, e.g. '-m MODEL'")
-    w.add_argument("--cuts", default="0,0.5,1", help="where to cut each run, as fractions of its steps (default 0,0.5,1)")
-    w.add_argument("--tails", type=int, default=3, help="tails (continuations) per cut, workspace and agent (default 3)")
-    w.add_argument("--jobs", type=int, default=3, help="tails run at the same time (default 3)")
-    w.add_argument("--handoff", choices=["trail", "workspace"], default="trail",
-                   help="what a continuing agent gets besides the workspace: a written summary of the steps so far "
-                        "(trail, the default) or nothing (workspace)")
+    w.add_argument("--handovers", dest="cuts", default="0,0.5,1", metavar="FRACTIONS",
+                   help="where both runs are handed over, as fractions of their steps (default 0,0.5,1)")
+    w.add_argument("--restarts", dest="tails", type=int, default=3, metavar="N",
+                   help="restarts per handover point, workspace and agent (default 3)")
+    w.add_argument("--cuts", dest="cuts", default=argparse.SUPPRESS, help=argparse.SUPPRESS)  # old name
+    w.add_argument("--tails", dest="tails", type=int, default=argparse.SUPPRESS, help=argparse.SUPPRESS)  # old name
+    w.add_argument("--jobs", type=int, default=3, help="restarts run at the same time (default 3)")
+    w.add_argument("--handover", dest="handoff", choices=["note", "workspace"], default="note",
+                   help="what a continuing agent gets besides the workspace: a handover note with the steps so far "
+                        "(note, the default) or nothing (workspace)")
+    w.add_argument("--handoff", dest="handoff", choices=["trail", "workspace"], default=argparse.SUPPRESS,
+                   help=argparse.SUPPRESS)  # old name
     w.add_argument("--project", type=Path, default=Path.cwd())
     w.add_argument("--out", type=Path, help="run directory (default ~/.local/state/tare/swap/<project>-<time>)")
     w.add_argument("--allow-dirty", action="store_true", help="run even if a reading is not tare: 0.00")

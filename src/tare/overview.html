@@ -60,7 +60,7 @@ function row(r) {
   return `<tr><td><a href="run/${r.i}/"><b>${esc(r.kind || "run")}</b></a><div class="muted mono">${esc(r.name)}</div></td>
     <td><span class="dot ${phase}"></span>${esc(r.phase)}</td>
     <td class="task">${esc(short(r.task, 140)) || `<span class="muted">a prompt per side</span>`}</td>
-    <td>${sides}</td><td class="mono">${r.done} ${r.kind === "calibrate" ? "runs" : "tails"} done${r.running ? ` · ${r.running} running` : ""}</td><td>${result(r)}</td></tr>`;
+    <td>${sides}</td><td class="mono">${r.done} ${r.kind === "calibrate" ? "runs" : "restarts"} done${r.running ? ` · ${r.running} running` : ""}</td><td>${result(r)}</td></tr>`;
 }
 
 async function tick() {

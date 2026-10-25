@@ -17,8 +17,8 @@ tare scores each run with a **check**: any shell command that you pass with `--c
 it in the finished workspace, and exit code 0 means that the run passed. A **step** is one
 tool call of the agent, such as running a command or writing a file.
 
-Swap and Cliff also continue runs from saved steps. Each continuation is a **tail**. A tail that
-starts in another agent's workspace gets a **handoff**: a written summary of the steps so far, in
+Swap and Cliff also continue runs from saved steps. Each continuation is a **restart**. A restart
+in another agent's workspace gets a **handover note**: a written summary of the steps so far, in
 the same form for every agent.
 
 ## Run directories and the dashboard
@@ -27,14 +27,14 @@ Each command saves everything in a **run directory** under `~/.local/state/tare/
 a live dashboard on your machine and prints its address. Open the address in a browser to follow
 the runs. [Dashboard and rerun](dashboard.md) shows what it holds and how to repeat a run.
 
-## The 95% interval
+## The likely range
 
-A pass rate comes with a **95% interval**: the range that holds the true pass rate with 95%
-confidence. Few runs give a wide interval. Three passes out of three, for example, still allow a
-true rate as low as 0.44.
+A pass rate comes with a **likely range**: the range that holds the true pass rate with 95%
+confidence (a 95% interval). Few runs give a wide range. Three passes out of three, for
+example, still allow a true rate as low as 0.44.
 
 ## What it costs
 
 Every Calibrate, Swap and Cliff report ends with the tokens and the cost of each side, of the
-check and of the whole run ([Tokens and cost](tokens-and-cost.md)). Each tail is a real agent run,
-so a search costs as much as its tails.
+check and of the whole run ([Tokens and cost](tokens-and-cost.md)). Each restart is a real agent
+run, so a search costs as much as its restarts.

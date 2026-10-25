@@ -526,7 +526,7 @@ class Pi:
 
     @contextmanager
     def twin(self, real: Real, fake_url: str):
-        """The dirty twin runs on a copy of the user's agent directory; the real one is never written."""
+        """The control run runs on a copy of the user's agent directory; the real one is never written."""
         with tempfile.TemporaryDirectory(prefix="tare-pi-twin-") as copy:
             agent_dir = Path(copy) / "agent"
             shutil.copytree(real.config, agent_dir, symlinks=True, ignore=shutil.ignore_patterns("sessions"))
@@ -641,7 +641,7 @@ class Antigravity:
 
     def discover(self) -> Real:
         if sys.platform == "darwin":
-            raise TareError("the Antigravity CLI is not supported on macOS yet: its dirty twin needs Linux's overlay "
+            raise TareError("the Antigravity CLI is not supported on macOS yet: its control run needs Linux's overlay "
                             "over ~/.gemini (epic #85)")
         home = Path.home()
         return Real(home, home / ".gemini" / "antigravity-cli", _which("agy"))
@@ -679,7 +679,7 @@ class Antigravity:
 
     @contextmanager
     def twin(self, real: Real, fake_url: str):
-        """The dirty twin sees the real setup, but agy writes into ~/.gemini on every run (its
+        """The control run sees the real setup, but agy writes into ~/.gemini on every run (its
         conversations, caches, onboarding state). So it runs with an overlay over ~/.gemini
         whose writes go to a tmpfs that dies with the run; see twin_argv."""
         mount = tempfile.mkdtemp(prefix="tare-agy-twin-")

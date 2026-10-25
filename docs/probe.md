@@ -14,7 +14,7 @@ tare probe claude
 
 ```text
 tare probe · claude 2.1.289 · /home/me/tare
-  control   dirty twin shows: instructions, home path, mcp, skills, plugins, email, reach
+  control   your real setup shows: instructions, home path, mcp, skills, plugins, email, reach
   leaks     none
   declared
     email        account email                                subscription login
@@ -24,7 +24,7 @@ tare: 0.00
 
 This is the output of a real run, with only the home path shortened. Line by line:
 
-- `control` lists the kinds of context that the dirty twin found in your real setup. The probe
+- `control` lists the kinds of context that the control run found in your real setup. The probe
   could therefore have seen each of them in the room. Connected accounts count under `mcp`,
   because they reach the agent as MCP tools. `home path` means that your real home path appears
   in the agent's request, for example in the path of a memory file. `reach` comes from a plain
@@ -46,11 +46,11 @@ same for the other agents ([Running agents in rooms](running-agents.md)).
 tare does not ask the agent about its context. It records the request that the agent sends to its
 model. An agent asked about its own context can refuse or be wrong.
 
-## The dirty twin
+## The control run
 
-For the dirty twin, the probe starts your real agent with your real setup, so your hooks and MCP
+For the control run, the probe starts your real agent with your real setup, so your hooks and MCP
 servers start too. The Antigravity CLI writes into its config directory on every run, so tare
-lets its dirty twin write into a temporary overlay that is discarded after the run. Your
+lets its control run write into a temporary overlay that is discarded after the run. Your
 `~/.gemini` stays unchanged.
 
 ## A room with leaks
@@ -72,8 +72,8 @@ The agent does not start, unless you pass `--allow-dirty` ([Running agents in ro
 ## A blind probe
 
 tare looks at your files to learn what your setup holds, for example a global instructions file
-or installed skills. If the dirty twin's request lacks one of these, the probe could not see it.
-A clean room would then prove nothing. tare runs the dirty twin once more, and if that kind of
+or installed skills. If the control run's request lacks one of these, the probe could not see it.
+A clean room would then prove nothing. tare runs the control run once more, and if that kind of
 context is still missing, the reading is `tare: not proven (blind)`.
 
 Next: [how the probe is built](how-it-works.md), or [measuring agents](measuring.md).

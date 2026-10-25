@@ -4,7 +4,7 @@ Three readings, none of which asks the agent anything:
 
 - context: the real CLI runs inside the room against a fake model endpoint, which
   keeps the request, i.e. the context the harness actually assembled;
-- control: the same run in the user's real setup (the dirty twin). The probe must find
+- control run: the same run in the user's real setup (`twin` in the code). The probe must find
   the user's context there, or it is blind for that class;
 - reach: a plain script inside the room looks for the user's files and inherited
   environment variables; the same script outside is its control.
@@ -32,7 +32,7 @@ LABELS = {"instructions": "global instructions", "memories": "memories"}
 # An offered MCP tool: an entry of the tools array, or a whole line of a deferred-tools
 # listing (tool search). A mention inside prose, e.g. in instructions, is not one.
 MCP_TOOL = re.compile(r"^(mcp__[A-Za-z0-9_.\-]+?__)[A-Za-z0-9_.\-]+$", re.M)
-# Under load a dirty twin can send its request before its MCP servers are connected. A blind
+# Under load a control run can send its request before its MCP servers are connected. A blind
 # twin gets one more try after this pause, and the reading says so.
 TWIN_RETRY_PAUSE = 10
 
@@ -50,9 +50,9 @@ class Reading:
     version: str = "?"
     leaks: list[Finding] = field(default_factory=list)
     declared: list[Finding] = field(default_factory=list)
-    seen: list[str] = field(default_factory=list)  # classes the control found in the dirty twin
-    blind: list[str] = field(default_factory=list)  # classes the user has but the dirty twin did not show
-    retried: list[str] = field(default_factory=list)  # classes a first dirty twin was blind for
+    seen: list[str] = field(default_factory=list)  # classes the control run found in the real setup
+    blind: list[str] = field(default_factory=list)  # classes the user has but the control run did not show
+    retried: list[str] = field(default_factory=list)  # classes a first control run was blind for
 
     @property
     def zero(self) -> bool:
@@ -127,7 +127,7 @@ def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_
             if any(line in room.text for line in lines):
                 r.leaks.append(Finding("parent files", "instructions above the project", str(path)))
 
-    # extensions: tools the dirty twin offers that a run without extensions does not
+    # extensions: tools the control run offers that a run without extensions does not
     if bare is not None:
         extension_tools = twin.tools - bare.tools
         if extension_tools:
@@ -224,7 +224,7 @@ def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_
 
 
 def settle(run_twin, read) -> Reading:
-    """Read with a dirty twin; a twin blind for some class gets one more try."""
+    """Read with a control run; one blind for some class gets one more try."""
     reading = read(run_twin())
     if reading.blind:
         first = list(reading.blind)
@@ -251,7 +251,7 @@ def reach(real: Real) -> list[str]:
 def probe(agent, real: Real, project: Path) -> Reading:
     project = project.resolve()
 
-    # the dirty twin: the user's real setup, as a plain terminal would start it
+    # the control run: the user's real setup, as a plain terminal would start it
     twin_env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE") or k == "CLAUDE_CONFIG_DIR"}
 
     def run_twin() -> Capture:
@@ -292,12 +292,12 @@ def render(reading: Reading, project: Path) -> str:
 
     version = f" {reading.version}" if reading.version != "?" else ""
     out = [f"tare probe · {reading.agent}{version} · {project}",
-           f"  control   dirty twin shows: {', '.join(reading.seen) or 'nothing'}"]
+           f"  control   your real setup shows: {', '.join(reading.seen) or 'nothing'}"]
     if reading.retried:
-        out.append(f"  retried   the first dirty twin was blind for {', '.join(reading.retried)}. "
+        out.append(f"  retried   the first control run was blind for {', '.join(reading.retried)}. "
                    "This reading comes from a second one.")
     for cls in reading.blind:
-        out.append(f"  BLIND     {cls}: you have it, but the dirty twin did not show it, so the room cannot be "
+        out.append(f"  BLIND     {cls}: you have it, but the control run did not show it, so the room cannot be "
                    "proven clean of it")
     if reading.leaks:
         out += ["  leaks", *rows(reading.leaks)]

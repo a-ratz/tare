@@ -159,10 +159,10 @@ def report(sides: dict[str, Side], plan: list[Cut], prompt: str, check: str, pro
     lines = [f"tare swap · a: {who(sides['a'])} · b: {who(sides['b'])} · {project}",
              f"  task      {prompt}", f"  check     {check}",
              f"  run a     {sides['a'].original}", f"  run b     {sides['b'].original}",
-             f"  handoff   {'workspace only' if workspace_only else 'workspace and a written summary of the steps so far'}"]
+             f"  handover  {'workspace only' if workspace_only else 'workspace and a handover note, a written summary of the steps so far'}"]
     dominant, deciding = [], []
     for cut in plan:
-        lines += ["", f"  cut {cut.fraction:.2f}: workspace a at step {cut.steps['a']}, workspace b at step {cut.steps['b']}",
+        lines += ["", f"  handover at {cut.fraction:.2f}: workspace a at step {cut.steps['a']}, workspace b at step {cut.steps['b']}",
                   "                agent a          agent b"]
         for room in "ab":
             row = []
@@ -172,48 +172,48 @@ def report(sides: dict[str, Side], plan: list[Cut], prompt: str, check: str, pro
                 row.append(f"{x}/{n} {lo:.2f}-{hi:.2f}")
             lines.append(f"    workspace {room} {row[0]:<17}{row[1]}")
         state, model = cut.state(), cut.model()
-        lines.append(f"    state effect  {_sign(state)}  (positive: workspace a better)")
-        lines.append(f"    model effect  {_sign(model)}  (positive: agent a better)")
+        lines.append(f"    workspace effect  {_sign(state)}  (positive: workspace a better)")
+        lines.append(f"    agent effect      {_sign(model)}  (positive: agent a better)")
         for side in "ab":
             cost = cut.foreignness(side)
             if cost:
                 native, (passed, n) = cut.native[side], cut.count(side, side)
-                lines.append(f"    handoff cost {side} {_sign(cost)}  (own session {sum(native)}/{len(native)} against "
-                             f"handoff {passed}/{n}, both in its own workspace)")
+                lines.append(f"    note cost {side}       {_sign(cost)}  (own session {sum(native)}/{len(native)} against "
+                             f"handover note {passed}/{n}, both in its own workspace)")
         dominant.append(_leader(state, model))
         deciding.append(state if dominant[-1] in ("room", "tie") else model)
     lines.append("")
     first = plan[0]
     if first.fraction == 0:
         _, lo, hi = first.state()
-        lines.append("  null check   " + ("passed: no state effect at cut 0, where both workspaces are the untouched "
+        lines.append("  start check  " + ("passed: no workspace effect at the start, where both workspaces are the untouched "
                                           "project" if lo <= 0 <= hi else
-                                          f"FAILED: a state effect at cut 0 ({_sign(first.state())}), where both "
+                                          f"FAILED: a workspace effect at the start ({_sign(first.state())}), where both "
                                           "workspaces are the same. Do not trust the effects above."))
     shown = [i for i, d in enumerate(dominant) if d != "neither"]
     late = next((i for i, d in enumerate(dominant) if d in ("room", "tie") and "model" in dominant[:i]), None)
     if late is not None and dominant[late] == "tie" and "room" not in dominant:
-        verdict = (f"The model explains more than the workspace until cut {plan[late - 1].fraction:.2f}. From cut "
-                   f"{plan[late].fraction:.2f} on, workspace and model explain about the same.")
+        verdict = (f"The agent explains more than the workspace until the handover at {plan[late - 1].fraction:.2f}. From "
+                   f"the handover at {plan[late].fraction:.2f} on, workspace and agent explain about the same.")
     elif "room" in dominant and "model" in dominant[:dominant.index("room")]:
         at = dominant.index("room")
         before = max(i for i in range(at) if dominant[i] == "model")
-        verdict = (f"Blame passes from the model to the workspace between cut {plan[before].fraction:.2f} "
-                   f"and cut {plan[at].fraction:.2f}.")
+        verdict = (f"Blame passes from the agent to the workspace between the handovers at "
+                   f"{plan[before].fraction:.2f} and {plan[at].fraction:.2f}.")
     elif not shown:
-        verdict = "Neither the workspace nor the model makes a difference at any cut."
+        verdict = "Neither the workspace nor the agent makes a difference at any handover point."
     elif {dominant[i] for i in shown} == {"model"}:
-        verdict = "The model explains more than the workspace " + ("at every cut." if len(shown) == len(plan)
+        verdict = "The agent explains more than the workspace " + ("at every handover point." if len(shown) == len(plan)
                                                                     else "wherever there is an effect.")
     elif {dominant[i] for i in shown} == {"room"}:
-        verdict = "The workspace explains more than the model " + ("at every cut." if len(shown) == len(plan)
+        verdict = "The workspace explains more than the agent " + ("at every handover point." if len(shown) == len(plan)
                                                                     else "wherever there is an effect.")
     else:
-        names = {"room": "workspace", "model": "model", "tie": "both alike", "neither": "neither"}
-        verdict = "No single pattern. What explains more, per cut: " + ", ".join(
+        names = {"room": "workspace", "model": "agent", "tie": "both alike", "neither": "neither"}
+        verdict = "No single pattern. What explains more, per handover point: " + ", ".join(
             f"{c.fraction:.2f} {names[d]}" for c, d in zip(plan, dominant)) + "."
     if any(deciding[i][1] <= 0 <= deciding[i][2] for i in shown):
-        verdict += " The intervals behind this verdict include zero. More tails would settle it."
+        verdict += " The likely ranges behind this verdict include zero. More restarts would settle it."
     lines.append(f"  verdict      {verdict}")
-    lines.append(f"  tails        {spent}")
+    lines.append(f"  restarts     {spent}")
     return lines

@@ -30,7 +30,7 @@ def test_search_finds_a_sharp_cliff_with_separated_intervals():
 
 def test_search_stops_when_a_fresh_start_fails_too():
     s = search(lambda step, n: [False] * n, last=10, tails=3, budget=30)
-    assert s.cliff is None and "model gap" in s.verdict
+    assert s.cliff is None and "too hard for the model" in s.verdict
     assert list(s.results) == [0]
 
 
@@ -60,7 +60,7 @@ def test_report_says_when_a_step_after_the_cliff_passes_again():
     steps = [caps.Capsule(i, None, Path("/nonexistent"), 0, 0, f"step {i}") for i in range(9)]
     s.cliff = (2, 4)  # not adjacent: the report does not open archives
     text = "\n".join(report(s, steps, 30))
-    assert "monotone  no: steps 5 pass again after the cliff" in text
+    assert "after it  steps 5 pass again" in text
 
 
 def write_run(tmp_path, entries, archives):
@@ -156,16 +156,16 @@ def test_cliff_continues_by_handoff_when_the_agent_cannot_resume(tmp_path, monke
     assert all(kind == "handoff" for kind, step in used if step > 0)
 
 
-def test_search_samples_the_baseline_before_it_declares_a_model_gap():
+def test_search_samples_the_baseline_before_it_declares_a_too_hard():
     # a model that passes one fresh start in five: 0/3 is likely, but not a gap
     outcomes = iter([False] * 5 + [True] + [False] * 200)
     s = search(lambda step, n: [next(outcomes) if step == 0 else False for _ in range(n)], last=6, tails=3, budget=60)
     assert len(s.results[0]) >= 6 and s.rate(0) > 0
-    assert "model gap" not in s.verdict
+    assert "too hard" not in s.verdict
 
 
-def test_search_declares_a_model_gap_only_when_its_bound_is_clear():
+def test_search_declares_a_too_hard_only_when_its_bound_is_clear():
     s = search(lambda step, n: [False] * n, last=6, tails=3, budget=60)
-    assert s.interval(0)[1] < 0.2 and "model gap" in s.verdict and "upper end of the baseline's 95% interval" in s.verdict
+    assert s.interval(0)[1] < 0.2 and "too hard for the model" in s.verdict and "upper end of its likely range" in s.verdict
     short = search(lambda step, n: [False] * n, last=6, tails=3, budget=6)
-    assert "budget ran out before a model gap was clear" in short.verdict
+    assert "budget ran out before it was clear that the task is too hard" in short.verdict

@@ -1,14 +1,14 @@
 """Acceptance for Swap: the real Claude Code CLI, rooms, capsules, handoffs, native resume and
 check, against two scripted models whose truth is known.
 
-usage: uv run experiments/swap-scripted/world.py [TAILS]
+usage: uv run experiments/swap-scripted/world.py [RESTARTS]
 
 The task is to write 42 to answer.txt. Model a is competent but trusts notes.txt; model b is
 weak: it ignores the notes and writes 42 or 41 with even odds. Run a writes a true note
 (answer=42) at step 2, run b a poisoned one (answer=41). Expected:
-- cut 0: both rooms are the untouched project: state effect 0 (null check), model effect +0.5;
-- cuts 0.5 and 1: room b misleads agent a: state effect +0.5, model effect 0;
-- verdict: Blame passes from the model to the workspace between cut 0.00 and cut 0.50.
+- handover at 0: both rooms are the untouched project: workspace effect 0 (start check), agent effect +0.5;
+- handovers at 0.5 and 1: room b misleads agent a: workspace effect +0.5, agent effect 0;
+- verdict: Blame passes from the agent to the workspace between the handovers at 0.00 and 0.50.
 """
 import random
 import sys

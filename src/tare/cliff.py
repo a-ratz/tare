@@ -66,13 +66,13 @@ def search(probe, last: int, tails: int, budget: int, gap_below: float = 0.2) ->
     if s.rate(0) == 0:
         n, hi = len(s.results[0]), s.interval(0)[1]
         clear = hi < gap_below
-        s.verdict = (f"A fresh start fails too: {n} of {n} failed, so the upper end of the baseline's 95% interval is {hi:.2f}. The task "
-                     "is too hard for the model (a model gap), so there is no cliff to find." if clear else
-                     f"No fresh start passed in {n} tails, so the upper end of the baseline's 95% interval is {hi:.2f}. The budget ran "
-                     "out before a model gap was clear.")
+        s.verdict = (f"A fresh start fails too: {n} of {n} failed, so even the upper end of its likely range is {hi:.2f}. The task "
+                     "is too hard for the model, so no single step lost the run." if clear else
+                     f"No fresh start passed in {n} restarts, so the upper end of its likely range is {hi:.2f}. The budget ran "
+                     "out before it was clear that the task is too hard for the model.")
         return s
     run(last, tails)
-    unlucky = ("Continued from its last step, the run still passes at least half as often as a fresh start. "
+    unlucky = ("Restarted from its last step, the run still passes at least half as often as a fresh start. "
                "The original run was unlucky, not lost.")
 
     while True:
@@ -102,7 +102,7 @@ def search(probe, last: int, tails: int, budget: int, gap_below: float = 0.2) ->
     elif s.separated:
         s.verdict = f"The run became lost at step {low}."
     else:
-        s.verdict = (f"Most likely lost at step {low}. The intervals of steps {high} and {low} still overlap, and the "
+        s.verdict = (f"Most likely lost at step {low}. The likely ranges of steps {high} and {low} still overlap, and the "
                      "budget ran out.")
     return s
 
@@ -122,7 +122,7 @@ def cliff(agent, real, project: Path, prompt: str, check: str, out: Path, *, tai
     steps = caps.capsules(out, agent)
     journal("original", side="a", passed=passed, detail=detail, steps=[s.tool for s in steps], **spent)
     if passed:
-        return _write(out, header + [f"  original  passed ({detail}): there is no cliff to find"], journal)
+        return _write(out, header + [f"  original  passed ({detail}): no step lost it"], journal)
     header.append(f"  original  failed ({detail}) after {len(steps) - 1} steps")
     if len(steps) == 1:
         return _write(out, header + ["  The run made no tool calls, so there is no step to continue from."], journal)
@@ -156,7 +156,7 @@ def cliff(agent, real, project: Path, prompt: str, check: str, out: Path, *, tai
 
 
 def report(s: Search, steps: list, budget: int) -> list[str]:
-    lines = ["", "  step  what the step did                                      tails  pass  rate  95% interval"]
+    lines = ["", "  step  what the step did                                   restarts  pass  rate  likely range"]
     for step in sorted(s.results):
         lo, hi = s.interval(step)
         marker = " <" if s.cliff and step == s.cliff[1] else ""
@@ -169,9 +169,9 @@ def report(s: Search, steps: list, budget: int) -> list[str]:
         lines.append(f"  at step {step.step}: {step.tool}")
         lines.append(f"  changed   {', '.join(changed[:10]) or 'no files (the conversation changed, not the workspace)'}")
     if s.cliff:
-        lines.append("  monotone  " + ("yes: no step after the cliff passes again" if not s.rebounds else
-                                       f"no: steps {', '.join(map(str, s.rebounds))} pass again after the cliff"))
-    lines.append(f"  tails     {s.spent} of a budget of {budget}")
+        lines.append("  after it  " + ("no step after it passes again" if not s.rebounds else
+                                       f"steps {', '.join(map(str, s.rebounds))} pass again"))
+    lines.append(f"  restarts  {s.spent} of a budget of {budget}")
     return lines
 
 

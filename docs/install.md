@@ -18,7 +18,7 @@ agent.
 The agents tare knows are Claude Code, Codex, Pi
 ([`@earendil-works/pi-coding-agent`](https://www.npmjs.com/package/@earendil-works/pi-coding-agent))
 and Google's Antigravity CLI (`agy`). On macOS it works with Claude Code, Codex and Pi; the
-Antigravity CLI stops with a message there for now, because its dirty twin needs an overlay over
+Antigravity CLI stops with a message there for now, because its control run needs an overlay over
 `~/.gemini` that macOS does not have.
 
 ## From PyPI
