@@ -13,6 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from pathlib import Path
 
+from . import answer as answers
 from . import journal as journals
 from . import usage as usages
 from .agents import AGENTS
@@ -45,7 +46,7 @@ def _capsule_count(store: Path) -> int:
 def state(out: Path) -> dict:
     events = journals.read(out)
     recipe = out / "recipe.json"
-    s = {"recipe": json.loads(recipe.read_text()) if recipe.exists() else None, "kind": None, "task": None,
+    s = {"name": out.name, "recipe": json.loads(recipe.read_text()) if recipe.exists() else None, "kind": None, "task": None,
          "check": None, "project": None, "sides": {}, "params": {}, "phase": "starting", "probes": [], "originals": {},
          "tails": [], "plan": [], "report": None, "started": events[0]["t"] if events else None,
          "updated": events[-1]["t"] if events else None, "now": time.time()}
@@ -82,6 +83,8 @@ def state(out: Path) -> dict:
     for tail in tails.values():
         if tail["status"] == "running":
             tail["activity"] = _activity(tail.get("agent_name"), out / tail["dir"] / "stdout.jsonl")
+        elif judge := answers.judged(tail.get("detail", "")):
+            tail.update(judge)
     s["tails"] = sorted(tails.values(), key=lambda t: (t["status"] != "running", -t["started"]))
 
     if s["kind"] == "cliff":
@@ -91,6 +94,8 @@ def state(out: Path) -> dict:
     elif s["kind"] == "calibrate":
         s["rates"] = _rates(tails.values(), s["sides"])
     s["usage"] = usages.of_run(events)
+    s["names"] = answers.names(s["sides"] or {})
+    s["answer"] = answers.answer(s)
     return s
 
 
@@ -158,7 +163,12 @@ def overview(out: Path) -> dict:
     running = sum(t["status"] == "running" for t in s["tails"])
     return {"name": out.name, "kind": s["kind"], "task": s["task"], "check": s["check"], "sides": s["sides"],
             "phase": s["phase"], "running": running, "done": len(s["tails"]) - running, "rates": s.get("rates"),
-            "verdict": verdict}
+            "verdict": verdict, "answer": s["answer"]["sentence"],
+            "cells": [t["status"] for t in sorted(s["tails"], key=lambda t: t["started"])]}
+
+
+ASSET_TYPES = {".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".woff2": "font/woff2",
+               ".txt": "text/plain; charset=utf-8"}
 
 
 def serve(out: Path | list[Path], port: int = 0) -> tuple[ThreadingHTTPServer, str]:
@@ -171,6 +181,10 @@ def serve(out: Path | list[Path], port: int = 0) -> tuple[ThreadingHTTPServer, s
 
     def route(path: str) -> tuple[bytes, str] | str | None:
         """The body and its type, a path to redirect to, or None."""
+        if m := re.fullmatch(r"/assets/([\w-][\w.-]*(?:/[\w-][\w.-]*)?)", path):
+            asset = resources.files("tare").joinpath("assets", *m.group(1).split("/"))
+            kind = ASSET_TYPES.get(Path(m.group(1)).suffix)
+            return (asset.read_bytes(), kind) if kind and asset.is_file() else None
         if len(runs) == 1:
             run, rest = runs[0], path
         else:
