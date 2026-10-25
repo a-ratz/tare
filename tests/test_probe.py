@@ -256,13 +256,13 @@ def test_agy_capture_reads_the_cloud_code_request():
     assert capture.tools == {"run_command"} and capture.init == {"cwd": "/work"}
 
 
-def test_a_blind_dirty_twin_gets_one_more_try_and_the_reading_says_so(monkeypatch):
+def test_a_blind_control_run_gets_one_more_try_and_the_reading_says_so(monkeypatch):
     monkeypatch.setattr(probe_module, "TWIN_RETRY_PAUSE", 0)
     twins = iter(["slow", "settled", "never used"])
     readings = {"slow": Reading(blind=["mcp"]), "settled": Reading(seen=["mcp"])}
     reading = probe_module.settle(lambda: next(twins), readings.get)
     assert reading.zero and reading.retried == ["mcp"] and next(twins) == "never used"
-    assert "retried   the first dirty twin was blind for mcp" in render(reading, Path("/p"))
+    assert "retried   the first control run was blind for mcp" in render(reading, Path("/p"))
 
 
 def test_a_twin_blind_twice_stays_blind(monkeypatch):
