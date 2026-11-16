@@ -123,6 +123,7 @@ class Bubblewrap:
         if Path("/mnt/wsl").is_dir():
             # WSL keeps the resolver behind a symlink into /mnt/wsl; without it DNS fails.
             argv += ["--ro-bind", "/mnt/wsl", "/mnt/wsl"]
+        argv += _resolver()
         run = ["--bind", str(room.run), room.inside_run] if room.run else []
         argv += ["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--tmpfs", "/home",
                  "--bind", str(room.home), room.inside_home, *binds, *run, *(extra_binds or []),
@@ -176,6 +177,19 @@ class Seatbelt:
 
 
 @functools.cache
+def _resolver(conf: Path = Path("/etc/resolv.conf")) -> list[str]:
+    """The bind for a resolver file that sits outside the room's mounts.
+
+    systemd-resolved, NetworkManager and resolvconf keep /etc/resolv.conf as a symlink into /run. The room
+    mounts /etc but not /run, so the link would point nowhere and no host name would resolve. Only the file
+    the link names is mounted, not its directory.
+    """
+    target = conf.resolve()
+    if not conf.is_symlink() or not target.is_file() or str(target).startswith(("/etc/", "/usr/", "/mnt/wsl/")):
+        return []
+    return ["--ro-bind", str(target), str(target)]
+
+
 def _user_dir() -> Path:
     """The user's directory under /var/folders: its T and C hold other programs' temporary files and caches."""
     out = subprocess.run(["getconf", "DARWIN_USER_DIR"], capture_output=True, text=True, check=True).stdout

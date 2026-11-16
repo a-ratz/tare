@@ -98,7 +98,10 @@ A bubblewrap room is a sandbox for one agent run: an empty `/home` with the room
 directory at `/home/tare`, a fresh copy of the login, the agent's executable, the project at
 `/work`, and the environment allowlist. `tare claude` and the other agent commands mount your
 project directly, so the agent changes your real files. Calibrate, Swap and Cliff give every run
-its own copy of the project. The room has network access and a working login. It keeps your setup out of the measurement. It does not protect your machine from a hostile
+its own copy of the project. The room has network access and a working login. Where `/etc/resolv.conf` is a link into `/run`
+(systemd-resolved, NetworkManager), the room mounts the one file the link names; without it no host
+name would resolve in the room, and the probe would not notice, because it only talks to the fake
+model server by address. It keeps your setup out of the measurement. It does not protect your machine from a hostile
 agent.
 
 A Seatbelt room (macOS) cannot mount anything. It is one directory under `/private/tmp` that
@@ -300,7 +303,8 @@ names what has changed since.
 ## Measurements
 
 All measurements ran on WSL2 on 2026-10-04 and 2026-10-05. The rows that name macOS ran on
-macOS 27.0 (arm64) on 2026-10-05 and 2026-10-06.
+macOS 27.0 (arm64) on 2026-10-05 and 2026-10-06. The row that names Omarchy ran on native Linux on
+2026-11-16.
 
 | What | Agent and version | Result | Source |
 |---|---|---|---|
@@ -312,6 +316,7 @@ macOS 27.0 (arm64) on 2026-10-05 and 2026-10-06.
 | Scripted Cliff and Swap | Claude Code against scripted models | Cliff found step 4. Swap passed the start check and found the blame passing from the agent to the workspace between the handovers at 0 and 0.5 | `experiments/cliff-scripted`, `experiments/swap-scripted` |
 | Real task 1: a data migration | Claude Code with Sonnet and Haiku, Codex | Deleting the source file after a wrong-encoding import was planned as the point of no return. Swap showed that the workspace could still be repaired. Haiku passed about 1 in 14 runs, Codex with gpt-6.1-sol 4 of 4 | [results](experiments/migration/RESULTS.md) |
 | Real task 2: a web page judged by Sonnet | Claude Code with Haiku, Codex with gpt-6.1-sol | Swap confirmed all four predictions of the plan written before the runs. Cliff called a failed run unlucky, and a later rescoring of the same page confirmed it | [results](experiments/html/RESULTS.md) |
+| Native Linux with systemd-resolved: a room that resolves host names | Claude Code 2.1.325, bubblewrap 0.13.1, Omarchy 4.5.0 (Arch Linux) | before the fix the room read `tare: 0.00` and the agent's first request failed with a DNS error; with the resolver file mounted the probe still read `tare: 0.00` and the agent answered one prompt | [#152](https://github.com/a-ratz/tare/issues/152) |
 | Field test: two ideation skills compared | Claude Code 2.1.289 with Opus 5.5 | all 18 rooms read `tare: 0.00`, including a skill that started `claude -p` inside the room | not published |
 | macOS: what a Seatbelt room has to handle | Claude Code 2.1.289, Codex CLI 0.159.0, Pi 0.99.1 | Claude Code's login is in the Keychain. With only the home directory denied, `/var/folders`, `/private/tmp` and the pasteboard stayed readable. Agents' own sandboxes fail inside a room (`sandbox_apply: Operation not permitted`) | comments on epic #85 |
 | macOS: a Seatbelt room with the real login | same | each agent answered one prompt. The room and its login copy were removed afterwards, and the Keychain item was unchanged (digest before and after). `tare probe` read `tare: 0.00` for all three | comments on epic #85 |
