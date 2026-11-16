@@ -103,6 +103,35 @@ def test_room_refuses_without_login(tmp_path, agent):
             pass
 
 
+def test_a_resolver_file_behind_a_symlink_is_mounted_alone(tmp_path):
+    # systemd-resolved: /etc/resolv.conf -> ../run/systemd/resolve/stub-resolv.conf
+    target = tmp_path / "run/systemd/resolve/stub-resolv.conf"
+    target.parent.mkdir(parents=True)
+    target.write_text("nameserver 127.0.0.53\n")
+    (tmp_path / "run/systemd/resolve/resolv.conf").write_text("nameserver 192.0.2.1\n")
+    conf = tmp_path / "etc/resolv.conf"
+    conf.parent.mkdir()
+    conf.symlink_to(target)
+    assert room._resolver(conf) == ["--ro-bind", str(target), str(target)]
+
+
+def test_a_plain_resolver_file_or_a_dangling_link_needs_no_mount(tmp_path):
+    plain = tmp_path / "resolv.conf"
+    plain.write_text("nameserver 192.0.2.1\n")
+    assert room._resolver(plain) == []
+    dangling = tmp_path / "dangling.conf"
+    dangling.symlink_to(tmp_path / "gone")
+    assert room._resolver(dangling) == []
+
+
+def test_bwrap_mounts_the_resolver_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(room, "_resolver", lambda: ["--ro-bind", "/run/r/resolv.conf", "/run/r/resolv.conf"])
+    argv = bwrap(Claude(), claude_real(tmp_path), tmp_path, tmp_path, ["claude", "-p"], {})
+    at = argv.index("/run/r/resolv.conf")
+    assert argv[at - 1:at + 2] == ["--ro-bind", "/run/r/resolv.conf", "/run/r/resolv.conf"]
+    assert at < argv.index("--tmpfs")  # mounted with /usr and /etc, before the room's own home
+
+
 def test_bwrap_clears_the_environment_down_to_the_allowlist(tmp_path, monkeypatch):
     monkeypatch.setenv("SOME_API_KEY", "x")
     monkeypatch.setenv("TERM", "xterm")
