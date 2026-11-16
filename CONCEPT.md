@@ -156,6 +156,10 @@ reach.
 Each agent needs its own way to the fake model server, its own login copy and its own markers:
 lines of your own files that the probe looks for in a request.
 
+tare mounts the agent's own program into the room. Where the name on `PATH` is a mise shim, a link
+to mise that picks the tool by the name it was called as, tare asks mise for the program behind it
+(`mise which`). Mounted in its place, mise would find no installed tool in the room.
+
 | Agent | How the room is set up | Way to the fake model server | Kinds of context the control run showed on the measuring machine |
 |---|---|---|---|
 | Claude Code | `CLAUDE_CONFIG_DIR` and `HOME` in the room, a copy of `.credentials.json`, `--strict-mcp-config --setting-sources project,local` | `ANTHROPIC_BASE_URL` | instructions, home path, MCP servers, skills, plugins, email, reach |

@@ -68,7 +68,24 @@ def _which(name: str) -> Path:
     found = shutil.which(name)
     if not found:
         raise TareError(f"{name} is not on PATH")
-    return Path(found).resolve()
+    real = Path(found).resolve()
+    if real.name == "mise" and Path(found).name != "mise":
+        return _behind_mise(name, found, real)
+    return real
+
+
+def _behind_mise(name: str, shim: str, mise: Path) -> Path:
+    """The program behind a mise shim.
+
+    A mise shim is a link to mise itself, which picks the tool by the name it was called as. Mounted into
+    the room in place of the agent, mise finds no installed tool there and tries to fetch one.
+    """
+    out = subprocess.run([str(mise), "which", name], capture_output=True, text=True)
+    tool = Path(out.stdout.strip()) if out.returncode == 0 and out.stdout.strip() else None
+    if tool is None or not tool.is_file():
+        raise TareError(f"{name} on PATH is a mise shim ({shim}), and `mise which {name}` did not name the program. "
+                        f"Put the directory of the program itself first on PATH.")
+    return tool.resolve()
 
 
 def _absolute_links(original: Path, copy: Path):
