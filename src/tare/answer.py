@@ -340,7 +340,9 @@ def _cliff(s: dict, nm: dict) -> dict:
     fresh = rows[0]
     if base == 0:
         hi = wilson(fresh["passes"], fresh["n"])[1]
-        if hi < 0.2:
+        # --too-hard-below as Cliff itself used it. The run's recipe keeps it; the journal does not.
+        cutoff = ((s.get("recipe") or {}).get("params") or {}).get("gap_below")
+        if hi < (0.2 if cutoff is None else cutoff):
             out["sentence"] = f"The task is too hard for {agent}: even a fresh start passes 0 of {fresh['n']} times."
         elif live:
             out["sentence"] = f"Still searching. So far, no fresh start has passed: 0 of {fresh['n']}."

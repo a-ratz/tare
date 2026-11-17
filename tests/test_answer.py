@@ -105,6 +105,20 @@ def test_cliff_too_hard_unlucky_passed_and_still_searching():
         "Still searching. So far, a fresh start passes 3 of 3 times."
 
 
+def test_cliff_too_hard_follows_the_cutoff_the_run_was_started_with():
+    def started_with(cutoff, n, phase="done"):
+        s = cliff_state([(0, 0, n)], STEPS, phase=phase)
+        s["recipe"] = {"params": {"tails": 3, "budget": 30, "jobs": 3, "gap_below": cutoff}}  # as `tare cliff` writes it
+        return answer(s)["sentence"]
+    # 0 of 16: the likely range ends at about 19%, below the default 0.2 but not below 0.1 (bug #159)
+    assert started_with(0.1, 16, phase="tails") == "Still searching. So far, no fresh start has passed: 0 of 16."
+    assert started_with(0.1, 16).startswith("The task looks too hard for Claude Code")
+    # 0 of 5: the range ends at about 43%, below 0.5 but not below the default
+    assert started_with(0.5, 5) == "The task is too hard for Claude Code: even a fresh start passes 0 of 5 times."
+    assert started_with(None, 16) == "The task is too hard for Claude Code: even a fresh start passes 0 of 16 times."
+    assert answer(cliff_state([(0, 0, 16)], STEPS))["sentence"].startswith("The task is too hard")  # no recipe at all
+
+
 def test_act_turns_a_step_into_what_the_agent_did():
     assert act("Write /work/index.html") == "wrote index.html"
     assert act("Bash ls + Bash rm x") == "ran `rm x`"
