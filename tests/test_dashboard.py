@@ -116,6 +116,31 @@ def test_recipe_notes_what_changed_since(tmp_path):
     assert any("has changed" in note for note in recipe.drift(r, {}))
 
 
+def test_cliff_answer_follows_the_cutoff_in_the_runs_recipe(tmp_path):
+    """Bug #159: the page called a task too hard at a fixed 0.2. The cutoff is in the recipe, not in the journal."""
+    project = tmp_path / "project"
+    project.mkdir()
+    out = tmp_path / "run"
+    out.mkdir()
+    j = Journal(out)
+    j("start", kind="cliff", task="t", check="c", project=str(project), tails=3, budget=30,
+      sides={"a": {"agent": "claude", "args": [], "dir": "."}})
+    j("phase", phase="tails")
+    j("original", side="a", passed=False, detail="check exit 1", steps=["start", "Bash ls"])
+    for i in range(16):  # 0 of 16 fresh starts pass: their likely range ends at about 19%
+        j("tail", id=f"0000-{i}", status="running", step=0, agent_name="claude", kind="native", dir=f"tails/0000-{i}")
+        j("tail", id=f"0000-{i}", status="failed", detail="d")
+
+    def sentence(cutoff):
+        recipe.write(out, ["cliff", "claude", "t", "--check", "c"], "cliff", project, "t", "c",
+                     {"a": (Named("claude"), Binary(), [])}, {"tails": 3, "budget": 30, "jobs": 3, "gap_below": cutoff})
+        return dashboard.state(out)["answer"]["sentence"]
+
+    assert dashboard.state(out)["answer"]["sentence"].startswith("The task is too hard")  # no recipe: 0.2
+    assert sentence(0.2).startswith("The task is too hard")
+    assert sentence(0.1) == "Still searching. So far, no fresh start has passed: 0 of 16."
+
+
 def test_calibrate_rates_carry_the_judge_scores_of_finished_tails(tmp_path):
     j = Journal(tmp_path)
     j("start", kind="calibrate", task="t", check="tare judge", project="/p", tails=3,
