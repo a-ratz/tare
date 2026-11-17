@@ -226,12 +226,13 @@ def _swap(s: dict, nm: dict) -> dict:
     better = f"{a}'s" if rooms["a"] >= rooms["b"] else f"{b}'s"
     shown = [d for d in dominant if d != "neither"]
     late = next((i for i, d in enumerate(dominant) if d in ("room", "tie") and "model" in dominant[:i]), None)
-    if late is not None and dominant[late] == "tie" and "room" not in dominant:
+    at = dominant.index("room") if "room" in dominant else None
+    # "From X on" speaks for every point from X to the end, so each of them has to read that way
+    if late is not None and "room" not in dominant and set(dominant[late:]) == {"tie"}:
         until = _point(complete[late - 1]["fraction"])
         sentence = (f"The agent decided {'at the start' if until == 'the start' else 'until ' + until}. "
                     f"{_from(complete[late]['fraction'])} workspace and agent weighed about the same.")
-    elif "room" in dominant and "model" in dominant[:dominant.index("room")]:
-        at = dominant.index("room")
+    elif at is not None and "model" in dominant[:at] and set(dominant[at:]) == {"room"}:
         until = _point(complete[max(i for i in range(at) if dominant[i] == "model")]["fraction"])
         sentence = (f"The agent decided {'at the start' if until == 'the start' else 'until ' + until}. "
                     f"{_from(complete[at]['fraction'])} the workspace decided.")

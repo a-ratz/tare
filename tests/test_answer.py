@@ -74,6 +74,28 @@ def test_swap_sentence_follows_who_decided_at_each_handover_point():
     assert answer(only_agent)["sentence"] == "The agent decided, not the workspace: Codex passed more often in either workspace."
 
 
+def test_swap_sentence_claims_no_more_than_holds_to_the_end():
+    small, large, even = (-0.17, -0.53, 0.25), (-0.83, -0.97, -0.3), (-0.5, -0.78, -0.01)
+    agent, workspace, alike = (small, large), (large, small), (even, even)  # (workspace effect, agent effect)
+    cells = {"aa": 0, "ab": 3, "ba": 1, "bb": 3}
+
+    def sentence(*decided):
+        points = [cut(fraction, cells, *effects) for fraction, effects in zip((0, 0.5, 1), decided)]
+        return answer(state("swap", {"a": CLAUDE, "b": CODEX}, params={"tails": 3}, cells=points,
+                            originals={"a": {"passed": False}, "b": {"passed": True}}))["sentence"]
+
+    # the workspace did not decide "from halfway on" when the last point goes back to the agent (bug #160)
+    assert sentence(agent, workspace, agent) == \
+        "No single pattern: at the start the agent; halfway the workspace; at the end the agent."
+    # the same claim in the sentence's other form
+    assert sentence(agent, alike, agent) == \
+        "No single pattern: at the start the agent; halfway both alike; at the end the agent."
+    # a change that holds to the end keeps its sentence
+    assert sentence(agent, workspace, workspace) == "The agent decided at the start. From halfway on, the workspace decided."
+    assert sentence(agent, agent, alike) == \
+        "The agent decided until halfway. At the end, workspace and agent weighed about the same."
+
+
 def cliff_state(rows, steps, phase="done", passed=False):
     def row(step, passes, n):
         lo, hi = wilson(passes, n)
