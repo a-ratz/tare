@@ -19,7 +19,7 @@ macOS (epic #85, feature #89). One test per installed agent: Claude Code 2.1.289
   (ae2a7df). Those runs were checks, not this test.
 - The user's setup on this Mac, by names only:
   - Claude Code: no global CLAUDE.md, no hooks, no user MCP server. One plugin
-    (`codies-memory`), account skills synced from claude.ai, claude.ai connectors from the login.
+    (written `<plugin>` here), account skills synced from claude.ai, claude.ai connectors from the login.
   - Codex: no global AGENTS.md. Memories, six skills in `~/.agents/skills`, three MCP servers in
     `config.toml`.
   - Pi: no global AGENTS.md. Five skills (symlinks into `~/.agents/skills`), six packages, among
@@ -68,7 +68,7 @@ their SHA-256:
 
 | ID | What | sha256 |
 |---|---|---|
-| C1 | Claude Code: a skill of the user's plugin (`codies-memory:…`) | `cff3fec4006f827a` |
+| C1 | Claude Code: a skill of the user's plugin (`<plugin>:…`) | `cff3fec4006f827a` |
 | C2 | Claude Code: claude.ai connector tools (`mcp__claude_ai_`) | `4b9f99c0dd405af9` |
 | C3 | Claude Code: account skills from the login (`anthropic-skills:`) | `7efa796ebb4136ee` |
 | C4 | Claude Code: the account's email | `3cf00f91d08eb485` |
@@ -95,7 +95,7 @@ Claude Code:
 - **C-P4:** T2 contains C1, C2 and C3. The reading names:
   - the connectors as `mcp`, with the source "login (claude.ai connector)"
   - the plugin as `plugin`, with its path in the room
-  - its skills as `skills`, with the source "plugin codies-memory"
+  - its skills as `skills`, with the source "plugin <plugin>"
   - the account skills as `skills`, with the source "login (account skills)"
   - the variable as `env`, with the source "inherited environment"
 
