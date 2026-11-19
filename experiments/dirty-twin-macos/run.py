@@ -12,6 +12,10 @@ T0 is the dirty twin as `tare probe` starts it. T1 is the Seatbelt room as `tare
 builds it. T2 is that room with parts of the real setup copied into the room's own copy
 (PLANTED). Runs land in runs/<agent>/<condition>/ (not committed): request bodies, stdout,
 stderr, exit code, reach. The work directory is this repository, as `tare probe` uses it.
+
+The Claude Code plant (C1) is one of the user's own plugins, named by the environment so that the
+repository names none: TARE_PLANT_PLUGIN_DIR (the plugin's directory in the plugin cache) and
+TARE_PLANT_PLUGIN_SKILL (one of its skills, "<plugin>:<skill>").
 """
 import hashlib
 import json
@@ -30,6 +34,14 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 HOME = Path.home()
 PLANTED_ENV = {"TARE_PLANTED_VARIABLE": "planted"}
+
+
+def plant_plugin() -> tuple[Path, str]:
+    """The user's plugin planted for Claude Code and one of its skills, from the environment."""
+    directory, skill = os.environ.get("TARE_PLANT_PLUGIN_DIR"), os.environ.get("TARE_PLANT_PLUGIN_SKILL")
+    if not directory or not skill:
+        sys.exit("set TARE_PLANT_PLUGIN_DIR and TARE_PLANT_PLUGIN_SKILL (see the docstring)")
+    return Path(directory), skill
 # where macOS keeps what a room must not reach (#86), beside tare's SECRET_PATHS
 MAC_TARGETS = [str(HOME / "Library" / p) for p in ("Keychains", "Preferences", "Application Support")] + [
     str(_user_dir()), f"/private/tmp/claude-{os.getuid()}", "/private/var/tmp", "/Users/Shared"]
@@ -48,7 +60,7 @@ def markers():
     email = json.loads((HOME / ".claude.json").read_text())["oauthAccount"]["emailAddress"]
     project = "**Epic → features → one branch and one PR → epic closed.**"
     found = {
-        "claude": {"C1": "codies-memory:memory-boot", "C2": "mcp__claude_ai_", "C3": "anthropic-skills:",
+        "claude": {"C1": plant_plugin()[1], "C2": "mcp__claude_ai_", "C3": "anthropic-skills:",
                    "C4": email, "C5": f"{HOME}/", "C6": project},
         "codex": {"X1": memory, "X2": "agent-browser", "X3": f"{HOME}/", "X4": project, "X5": "mcp__qmd__"},
         "pi": {"I1": "<name>apple-design</name>", "I2": "web_search", "I3": f"{HOME}/", "I4": project},
@@ -70,7 +82,7 @@ def plant(name: str, agent, room: Room, post_hoc: bool = False) -> list[str]:
     """Copy parts of the real setup into the room's own copy. Returns extra CLI flags."""
     config = room.config(agent)
     if name == "claude":
-        plugin = HOME / ".claude/plugins/cache/limitless/codies-memory/1.2.3"
+        plugin = plant_plugin()[0]
         _clone(plugin, room.home / "planted-plugin")
         return ["--plugin-dir", str(room.home / "planted-plugin")]  # and no room flags: connectors, account skills
     if name == "codex":

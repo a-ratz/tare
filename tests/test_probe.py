@@ -184,7 +184,7 @@ def codex_body(*skill_lines, mcp=True):
                       {"type": "message", "role": "developer", "content": [{"type": "input_text", "text": text}]}]}
 
 
-PLUGIN_SKILLS = ["- limitless:james: review a plan", "- limitless:learn-anything: teach a topic",
+PLUGIN_SKILLS = ["- helpers:review-plan: review a plan", "- helpers:teach-topic: teach a topic",
                  "- ponytail:ponytail-help: show the modes"]
 
 
@@ -192,8 +192,8 @@ def test_codex_capture_names_mcp_namespaces_and_plugin_skills():
     capture = Codex().capture("", [codex_body(*PLUGIN_SKILLS)])
     assert {"mcp__cua_repl__js", "mcp__cua_repl__js_reset", "functions"} <= capture.tools
     assert "functions__exec" not in capture.tools  # only an MCP server's namespace is renamed
-    assert capture.init["skills"] == ["limitless:james", "limitless:learn-anything", "ponytail:ponytail-help"]
-    assert [p["name"] for p in capture.init["plugins"]] == ["limitless", "ponytail"]
+    assert capture.init["skills"] == ["helpers:review-plan", "helpers:teach-topic", "ponytail:ponytail-help"]
+    assert [p["name"] for p in capture.init["plugins"]] == ["helpers", "ponytail"]
     assert Codex().capture("", [codex_body(mcp=False)]).init == {}
 
 
@@ -204,8 +204,8 @@ def test_codex_plugin_skills_and_mcp_namespaces_are_seen_and_named_in_a_room(tmp
     assert clean.zero and {"mcp", "skills", "plugins"} <= set(clean.seen)
     dirty = score(Codex(), real, twin, twin, "", "")
     found = {(f.kind, f.what, f.source) for f in dirty.leaks}
-    assert found == {("mcp", "cua_repl", "MCP server"), ("skills", "2 skills", "plugin limitless"),
-                     ("skills", "1 skill", "plugin ponytail"), ("plugin", "limitless", "Codex plugin"),
+    assert found == {("mcp", "cua_repl", "MCP server"), ("skills", "2 skills", "plugin helpers"),
+                     ("skills", "1 skill", "plugin ponytail"), ("plugin", "helpers", "Codex plugin"),
                      ("plugin", "ponytail", "Codex plugin")}
 
 
