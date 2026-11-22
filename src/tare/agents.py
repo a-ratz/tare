@@ -860,7 +860,11 @@ class Antigravity:
             if update.get("step_type") != "tool":
                 continue
             index = update.get("step_index")
-            key = None if index is None else (update.get("conversation_id"), index)
+            key = None if index in (None, "") else (update.get("conversation_id"), index)
+            try:
+                hash(key)
+            except TypeError:  # an id that is not a plain value is no id
+                key = None
             name = str(update.get("tool_name") or "?")
             if _first(seen, key):
                 u.tools[name] += 1

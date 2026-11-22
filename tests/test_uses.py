@@ -73,11 +73,24 @@ def test_a_shell_command_is_read_as_the_shell_reads_it():
              "cat $(pwd)/SKILL.md": [], 'cat $(dirname "$0")/SKILL.md': [], "FILE=greet/SKILL.md cat $FILE": ["greet"],
              "dd if=greet/SKILL.md": ["greet"], "tool --path=greet/SKILL.md": ["greet"], "cat <greet/SKILL.md": ["greet"],
              "echo hi;cat greet/SKILL.md": ["greet"], 'bash -c "cat a/SKILL.md b/SKILL.md"': ["a", "b"],
-             "cat <<EOF\ndon't\nEOF\ncat x/SKILL.md": ["x"]}  # an open quote: the words split at whitespace
+             "cat <<EOF\ndon't\nEOF\ncat x/SKILL.md": ["x"]}
     assert {command: used.skill_reads(command) for command in reads} == reads
 
 
-def test_calls_without_ids_or_names_and_lines_of_another_shape_neither_vanish_nor_break_the_count(tmp_path):
+def test_heredoc_bodies_shell_flags_and_prose_name_no_skill():
+    reads = {"cat <<EOF\nread a/SKILL.md\nEOF\ncat b/SKILL.md": ["b"],  # a heredoc's body is written, not read
+             '/bin/zsh -lc "cat << \'EOF\' > a.txt\ndon\'t\nEOF\ncat .agents/skills/greet/SKILL.md\ncat << \'EOF\' > b.txt\nwon\'t\nEOF"': ["greet"],
+             "bash -cl 'cat a/SKILL.md b/SKILL.md'": ["a", "b"], "sh -ce 'cat greet/SKILL.md'": ["greet"],
+             'wc -c ".agents/skills/my skill/SKILL.md"': ["my skill"],  # -c of a program that is no shell
+             'cat "$(dirname /work/foo)/SKILL.md"': [], "x=${p#*/} && cat .agents/skills/greet/SKILL.md": ["greet"],
+             'git commit -m "Update greet/SKILL.md"': [], 'echo "a/SKILL.md and b/SKILL.md"': [],
+             "rg -g '!greet/SKILL.md' hello": []}
+    assert {command: used.skill_reads(command) for command in reads} == reads
+    big = '/bin/zsh -lc "cat <<EOF > out.txt && cat a/SKILL.md\n' + ("x" * 80 + "\n") * 13000 + 'EOF"'
+    assert used.skill_reads(big) == ["a"]  # quick: the body is gone before the words are read
+
+
+def test_calls_without_ids_or_names_and_lines_of_another_shape_neither_vanish_nor_break_the_count(tmp_path, capsys):
     stream = (jl({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Read",
                                                                 "input": {"file_path": "/w/a/SKILL.md"}}]}},
                  {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": None, "name": None, "input": "x"}]}},
@@ -91,7 +104,8 @@ def test_calls_without_ids_or_names_and_lines_of_another_shape_neither_vanish_no
         "tools": {"read": 1, "?": 1}, "skills": {"a": 1}}
     assert AGENTS["codex"].uses(jl({"type": "item.completed", "item": "x"},
                                    {"type": "item.completed", "item": {"type": "mcp_tool_call", "server": None}},
-                                   {"type": "item.completed", "item": {"type": "file_change"}})).to_dict() == {
+                                   {"type": "item.completed", "item": {"type": "file_change"}},
+                                   {"type": "item.completed", "item": {"id": "e", "type": ""}})).to_dict() == {
         "tools": {"?.?": 1, "file_change": 1}, "skills": {}}
     pi = jl({"type": "tool_execution_start", "toolCallId": "", "toolName": "read", "args": {"path": "/w/a/SKILL.md"}},
             {"type": "tool_execution_start", "toolCallId": "", "toolName": "bash", "args": {}},
@@ -103,6 +117,7 @@ def test_calls_without_ids_or_names_and_lines_of_another_shape_neither_vanish_no
         def uses(self, stdout):
             raise KeyError("a shape nobody expected")
     assert caps.read_uses(Broken(), tmp_path) is None  # the run goes on without counts
+    assert "no skill and tool counts" in capsys.readouterr().err
 
 
 def test_agy_counts_a_subagent_step_with_the_same_index_and_takes_the_skill_from_the_report_that_names_it():
@@ -116,6 +131,9 @@ def test_agy_counts_a_subagent_step_with_the_same_index_and_takes_the_skill_from
                 step("sub", 3, "DONE", "run_command", CommandLine="cat /w/review/SKILL.md"))
     assert AGENTS["agy"].uses(stream).to_dict() == {"tools": {"invoke_subagent": 1, "read_file": 1, "run_command": 1},
                                                     "skills": {"greet": 1, "review": 1}}
+    odd = jl(step("c", "", "DONE", "read_file", Path="/w/a/SKILL.md"), step("c", "", "DONE", "write_file"),
+             step(["c"], 1, "DONE", "read_file"))
+    assert AGENTS["agy"].uses(odd).to_dict() == {"tools": {"read_file": 2, "write_file": 1}, "skills": {"a": 1}}
 
 
 class Named:

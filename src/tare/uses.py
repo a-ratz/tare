@@ -19,8 +19,13 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 
-# characters that make a folder name a pattern or an expansion rather than a name
-NOT_PLAIN = set("*?[]{}$`~")
+# characters that make a folder name a pattern, an expansion or shell syntax rather than a name
+NOT_PLAIN = set("*?[]{}$`~()!")
+# programs whose -c takes a command
+SHELLS = {"sh", "bash", "zsh", "dash", "ksh"}
+# a heredoc's body: the lines after `<<WORD` up to the line that holds only WORD (which may close
+# the quote of an `sh -c` around it)
+HEREDOC = re.compile(r"""(<<-?[ \t]*(['"]?)(\w+)\2)([^\n]*)\n(?:.*?\n)??([ \t]*\3[ \t]*)(?=['"]?[ \t]*(?:\n|$))""", re.S)
 
 
 def _name(folder: str) -> str | None:
@@ -36,31 +41,43 @@ def skill_read(path: str) -> str | None:
 
 def _words(command: str, depth: int = 0) -> list[str]:
     """A shell command's words as the shell reads them: quotes and escapes resolved, and `;`, `|`,
-    `&`, `<`, `>` and parentheses as words of their own. The argument of `sh -c` (`zsh -lc` and the
-    like) is a command again. A command shlex cannot read (an open quote in a heredoc) falls back to
-    its whitespace-separated parts."""
+    `&`, `<`, `>` and parentheses as words of their own. A heredoc's body is left out: what it holds
+    is written, not read. The argument of a shell's -c (`zsh -lc`, `bash -cl`) is a command again. A
+    command shlex cannot read (an open quote) falls back to its whitespace-separated parts."""
+    command = HEREDOC.sub(r"\1\4\n\5", command)
     try:
         lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
         lexer.whitespace_split = True
+        lexer.commenters = ""  # a # inside a word (${p#*/}) starts no comment
         words = list(lexer)
     except ValueError:
         return command.split()
-    out = []
+    out, shell = [], False
     for i, word in enumerate(words):
-        if depth < 2 and i > 0 and re.fullmatch(r"-[a-z]*c", words[i - 1]):
+        if depth < 2 and shell and re.fullmatch(r"-[a-z]*c[a-z]*", words[i - 1]):
             out += _words(word, depth + 1)
         else:
             out.append(word)
+        if PurePosixPath(word).name in SHELLS:
+            shell = True
+        elif word in (";", "&&", "||", "|", "&", "(", ")"):
+            shell = False
     return out
 
 
 def skill_reads(command: str) -> list[str]:
     """The skills whose SKILL.md a shell command names, by folder, each once per command. A word
     `KEY=path` or `--flag=path` names its path, and `git show REV:path` its path."""
+    if "SKILL.md" not in command:
+        return []
     found = []
     for word in _words(command):
         word = re.sub(r"^[^/=]*=", "", word)  # FILE=..., --path=..., if=...
         word = re.sub(r"^[^/:]*:", "", word)  # HEAD:greet/SKILL.md
+        path = PurePosixPath(word)
+        # a quoted word with a space is a path only below a folder ("Update greet/SKILL.md" is prose)
+        if any(c.isspace() for c in word) and (path.parent.parent == PurePosixPath(".") or "SKILL.md" in path.parent.name):
+            continue
         if (name := skill_read(word)) and name not in found:
             found.append(name)
     return found
