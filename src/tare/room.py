@@ -466,6 +466,26 @@ def _copy_back(before: dict[str, tuple], clone: Path, work: Path):
             # gone from the clone since the state was taken
 
 
+# a room younger than this may still be in the making (the probe runs before the agent starts)
+FRESH_ROOM = 600  # seconds
+
+
+def rooms_on_disk() -> list[Path]:
+    """Every room directory on this machine: bubblewrap's in the temporary directory, Seatbelt's
+    in /private/tmp."""
+    places = {Path(tempfile.gettempdir()), Path(SEATBELT_ROOMS)}
+    return sorted({p.resolve() for place in places if place.is_dir() for p in place.glob("tare-room-*") if p.is_dir()})
+
+
+def leftover_rooms() -> list[Path]:
+    """Rooms nothing uses any more: no running process names them (the agent's and the sandbox's
+    command lines do), and they are older than FRESH_ROOM. A crash or a failed copy-back leaves
+    them, with their login copy (#187)."""
+    running = subprocess.run(["ps", "-axww", "-o", "command="], capture_output=True, text=True).stdout
+    now = time.time()
+    return [p for p in rooms_on_disk() if str(p) not in running and now - p.stat().st_mtime > FRESH_ROOM]
+
+
 def backend():
     """The room backend for this platform."""
     return Seatbelt() if sys.platform == "darwin" else Bubblewrap()

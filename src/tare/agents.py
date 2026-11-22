@@ -274,6 +274,15 @@ class Claude:
         sessions = sorted((home / ".claude-config" / "projects").rglob("*.jsonl"), key=lambda p: p.stat().st_size)
         return sessions[-1] if sessions else None
 
+    def latest_session(self, home: Path) -> Path | None:
+        """The session written last: an interactive room may hold several (after /clear), and a
+        subagent's transcript sits one level deeper."""
+        sessions = sorted((home / ".claude-config" / "projects").glob("*/*.jsonl"), key=lambda p: p.stat().st_mtime)
+        return sessions[-1] if sessions else None
+
+    def continue_args(self, session: str) -> list[str]:
+        return ["--resume", session]
+
     def place_session(self, room, session: str, lines: list[str]):
         # Claude Code keeps a project's sessions in a directory named after its path
         target = room.config(self) / "projects" / re.sub(r"[^A-Za-z0-9]", "-", room.inside_work)
@@ -453,6 +462,9 @@ class Codex:
     def session_file(self, home: Path) -> Path | None:
         rollouts = sorted((home / ".codex" / "sessions").rglob("rollout-*.jsonl"))
         return rollouts[-1] if rollouts else None
+
+    def continue_args(self, session: str) -> list[str]:
+        return ["resume", session]
 
     def place_session(self, room, session: str, lines: list[str]):
         # Codex finds a session by the id at the end of its rollout's file name
@@ -661,6 +673,9 @@ export default function (pi: any) {{
     def session_file(self, home: Path) -> Path | None:
         sessions = sorted((home / ".pi" / "agent" / "sessions").rglob("*.jsonl"), key=lambda p: p.stat().st_mtime)
         return sessions[-1] if sessions else None
+
+    def continue_args(self, session: str) -> list[str]:
+        return ["--session", session]
 
     def place_session(self, room, session: str, lines: list[str]):
         # Pi keeps a working directory's sessions in --<path with dashes>--
