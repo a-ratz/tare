@@ -216,6 +216,8 @@ def estimate(u: Usage, model: str | None, reasoning_extra: bool = False) -> Usag
     is for agents whose output count leaves out the reasoning tokens that are billed as output."""
     if u.cost_usd is not None or u.unpriced != u.runs:
         return u
+    if not (u.input or u.output or u.reasoning):  # no counts (a stream cut off before them): not free, unknown
+        return u
     found = price_of(model or u.model)
     if not found:
         return u

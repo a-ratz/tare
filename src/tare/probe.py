@@ -59,10 +59,12 @@ class Reading:
         return not self.leaks and not self.blind
 
 
-def _capture(agent, argv: list[str], env: dict[str, str], cwd: Path, fake: Fake) -> Capture:
+def _capture(agent, argv: list[str], env: dict[str, str], cwd: Path, fake: Fake, real: Real | None = None) -> Capture:
     proc = subprocess.run(argv, env=env, cwd=cwd, capture_output=True, text=True, timeout=300,
                           stdin=subprocess.DEVNULL)
-    capture = agent.capture(proc.stdout, fake.requests)
+    # the MCP servers a capture may meet, for an agent whose stream may not name them all (Copilot)
+    known = {"known": agent.mcp_names(real)} if real is not None and hasattr(agent, "mcp_names") else {}
+    capture = agent.capture(proc.stdout, fake.requests, **known)
     if capture is None:
         detail = proc.stderr.strip()[-300:] or proc.stdout.strip()[-300:] or "no output"
         raise TareError(f"{agent.name} never reached tare's fake model server, so the probe could not run "
@@ -71,12 +73,17 @@ def _capture(agent, argv: list[str], env: dict[str, str], cwd: Path, fake: Fake)
 
 
 def instruction_lines(path: Path) -> list[str]:
-    """Distinctive lines of a file of the user's, used as markers."""
+    """Distinctive lines of a file of the user's, used as markers: lines of 30 characters or more;
+    in a file of short lines the longest of 12 or more ("Always answer in French."); in a file of
+    shorter ones still its whole text, as the agent passes it on."""
     try:
-        lines = [line.strip() for line in path.read_text().splitlines()]
-    except OSError:
+        text = path.read_text()
+    except (OSError, UnicodeDecodeError):
         return []
-    return [line[:80] for line in lines if len(line) >= 30][:5]
+    lines = [line.strip() for line in text.splitlines()]
+    return ([line[:80] for line in lines if len(line) >= 30]
+            or sorted((line for line in lines if len(line) >= 12), key=len, reverse=True)
+            or [text.strip()] * (len(text.strip()) >= 12))[:5]
 
 
 def _mcp_prefixes(capture: Capture) -> set[str]:
@@ -89,18 +96,24 @@ def _without_paths(text: str) -> str:
     return re.sub(r" \([^)\n]*\)", "", text)
 
 
-def _skill_entry(text: str, name: str) -> str | None:
+def _skill_entry(text: str, name: str, not_project: bool = False) -> str | None:
     """How a request lists one skill: a "- name: description" line (agy writes "- name (path): ..."),
-    or a <skill> element with name, description and location (Pi). Paths are left out, because the
-    room's differ from the user's for the same skill."""
+    or a <skill> element with name, description and location. Paths are left out, because the room's
+    differ from the user's for the same skill (Pi's location is a path); a location word stays
+    (Copilot's user, project, plugin or builtin). `not_project` passes over an element whose
+    location is `project`: the project's own skill of that name."""
     line = re.search(rf"^- {re.escape(name)}(?:[:( ].*)?$", text, re.M)
     if line:
         return _without_paths(line.group(0))[:160]
     escaped = name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    element = re.search(rf"<skill>\s*<name>{re.escape(escaped)}</name>(.*?)</skill>", text, re.S)
-    if element:
+    for element in re.finditer(rf"<skill>\s*<name>{re.escape(escaped)}</name>(.*?)</skill>", text, re.S):
+        location = re.search(r"<location>(.*?)</location>", element.group(1), re.S)
+        word = location.group(1).strip() if location else ""
+        if not_project and word == "project":
+            continue
         inner = re.sub(r"<location>.*?</location>", "", element.group(1), flags=re.S)
-        return f"<skill> {name}: {' '.join(inner.split())}"[:160]
+        kept = f" [{word}]" if re.fullmatch(r"[a-z]+", word) else ""
+        return f"<skill> {name}{kept}: {' '.join(inner.split())}"[:160]
     return None
 
 
@@ -151,17 +164,26 @@ def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_
 
     # MCP servers and connectors
     twin_servers = _mcp_prefixes(twin)
-    connected = [s["name"] for s in twin.init.get("mcp_servers", []) if s.get("status") == "connected"]
+    # servers the control run should offer tools of: connected ones, and for an agent that says so
+    # (Copilot) ones still connecting or failed; a server reported with no tools offers none
+    expected = getattr(agent, "mcp_expected", ("connected",))
+    connected = [s["name"] for s in twin.init.get("mcp_servers", []) if s.get("status") in expected and s.get("tools") != 0]
     # servers the user configured that the control run did not connect: it cannot see them (Copilot)
     configured = agent.mcp_configured(real) if hasattr(agent, "mcp_configured") else []
     if any(_server_prefix(name) not in twin_servers for name in [*connected, *configured]):
         r.blind.append("mcp")
     elif twin_servers:
         r.seen.append("mcp")
+    # where the room's servers come from, where the agent says (Copilot): the project's own
+    # (workspace) are not the user's; bundled ones and the account's come with the login
+    sources = {_server_prefix(s["name"]): s.get("source") for s in room.init.get("mcp_servers", [])}
     for prefix in sorted(_mcp_prefixes(room)):
-        login = prefix.startswith("mcp__claude_ai_") or prefix[5:-2] in getattr(agent, "login_mcp", ())
-        source = "connected account (login)" if login else "MCP server"
-        r.leaks.append(Finding("mcp", prefix[5:-2], source))
+        source = sources.get(prefix)
+        if source == "workspace":
+            continue
+        login = prefix.startswith("mcp__claude_ai_") or source in ("builtin", "account") or (
+            source is None and prefix[5:-2] in getattr(agent, "login_mcp", ()))
+        r.leaks.append(Finding("mcp", prefix[5:-2], "connected account (login)" if login else "MCP server"))
 
     # skills from plugins, the user's skill directories and the account
     plugins = twin.init.get("plugins", [])
@@ -174,9 +196,13 @@ def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_
         if skill_dir.is_dir():
             own |= {d.name: skill_dir for d in skill_dir.iterdir() if d.is_dir() and not d.name.startswith(".")}
     names = {s for s in twin.init.get("skills", []) if ":" in s and s.split(":")[0] not in builtin} | set(own)
+    # skills the project brings itself (Copilot lists them with location project): a user's skill
+    # of the same name is known by its other location
+    ours = {d.name for sub in (agent.project_skill_dirs(project) if project and hasattr(agent, "project_skill_dirs") else [])
+            for d in sub.iterdir() if d.is_dir()}
     listed: dict[str, tuple[str, str]] = {}  # skill name -> how the twin lists it, and its source
     for name in sorted(names):
-        entry = _skill_entry(twin.text, name)
+        entry = _skill_entry(twin.text, name, not_project=name in ours)
         if entry:
             namespace = name.split(":")[0] if ":" in name else None
             source = (str(own[name]) if namespace is None
@@ -186,7 +212,7 @@ def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_
         (r.seen if listed else r.blind).append("skills")
     counts: dict[str, int] = {}
     for name, (entry, source) in listed.items():
-        if _skill_entry(room.text, name) == entry:
+        if _skill_entry(room.text, name, not_project=name in ours) == entry:
             counts[source] = counts.get(source, 0) + 1
     r.leaks += [Finding("skills", f"{n} skill{'s' if n != 1 else ''}", source) for source, n in sorted(counts.items())]
     if user_plugins:
@@ -269,7 +295,7 @@ def probe(agent, real: Real, project: Path) -> Reading:
                 argv = [str(real.binary), *args]
                 if hasattr(agent, "twin_argv"):  # a twin that must not write into the real setup
                     argv = agent.twin_argv(argv, env)
-                return _capture(agent, argv, env, project, fake)
+                return _capture(agent, argv, env, project, fake, real)
 
     rooms = backend()
 
@@ -278,7 +304,7 @@ def probe(agent, real: Real, project: Path) -> Reading:
             agent.prepare_probe(room.config(agent), fake.url)
             args, env = agent.probe(fake.url)
             argv = rooms.argv(room, agent, real, [agent.name, *flags, *args], env)
-            return _capture(agent, argv, {**os.environ}, project, fake)
+            return _capture(agent, argv, {**os.environ}, project, fake, real)
 
     with rooms.open(agent, real, project) as room:
         inside = in_room(room, agent.room_flags)

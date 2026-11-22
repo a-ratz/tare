@@ -250,3 +250,152 @@ def test_an_agent_description_written_as_a_yaml_block_is_read(setup):
     (setup.config / "agents" / "deep.agent.md").write_text(
         "---\nname: deep\ndescription: >\n  Looks into things.\n  Thoroughly.\ntools: [x]\n---\nBody.\n")
     assert Copilot().custom_agents(setup)[1] == {"deep": "Looks into things."}
+
+
+def events(*items):
+    return "\n".join(json.dumps({"type": kind, "data": data}) for kind, data in items)
+
+
+def test_mcp_servers_come_from_every_event_and_from_the_configuration_when_the_stream_names_none():
+    c = Copilot()
+    # the status changes and the tools come before any summary, and the tools before connected
+    late = events(("session.mcp_server_status_changed", {"serverName": "local", "status": "pending"}),
+                  ("session.mcp_server_tools_loaded", {"serverName": "local", "toolCount": 2}),
+                  ("session.mcp_server_status_changed", {"serverName": "local", "status": "connected", "configSource": "user"}),
+                  ("session.mcp_server_status_changed", {"serverName": "gone", "status": "connected"}),
+                  ("session.mcp_server_removed", {"serverName": "gone"}))
+    capture = c.capture(late, [request("bash", "local-query")])
+    assert capture.tools == {"bash", "mcp__local__query"}
+    assert capture.init["mcp_servers"] == [{"name": "local", "status": "connected", "tools": 2, "source": "user"}]
+    # a stream cut off before the servers: the configured names still place the tool
+    assert c.capture("", [request("local-query")], known=("local",)).tools == {"mcp__local__query"}
+    assert c.capture("", [request("local-query")]).tools == {"local-query"}
+    # a name that fits two servers counts for both: the request does not say which offers it
+    both = c.capture(stream("team", "team-search"), [request("team-search-query")], known=("other",))
+    assert both.tools == {"mcp__team__search-query", "mcp__team-search__query"}
+
+
+def test_a_server_the_control_run_could_not_use_makes_the_probe_blind_and_a_switched_off_one_does_not(setup, tmp_path):
+    c = Copilot()
+    room = c.capture(stream(), [request("bash")])
+    failed = c.capture(events(("session.mcp_server_status_changed", {"serverName": "github-mcp-server", "status": "failed"})),
+                       [request("bash")])
+    assert "mcp" in score(c, setup, failed, room, "", "", project=tmp_path / "p").blind
+    empty = c.capture(events(("session.mcp_server_status_changed", {"serverName": "prompts", "status": "connected"}),
+                             ("session.mcp_server_tools_loaded", {"serverName": "prompts", "toolCount": 0})), [request("bash")])
+    assert "mcp" not in score(c, setup, empty, room, "", "", project=tmp_path / "p").blind
+    (setup.config / "mcp-config.json").write_text(json.dumps({"mcpServers": {"off": {"command": "x"}, "on": {"command": "y"}}}))
+    (setup.config / "settings.json").write_text(json.dumps({"disabledMcpServers": ["off"]}))
+    assert c.mcp_configured(setup) == ["on"] and c.mcp_names(setup) == ("off", "on", "github-mcp-server")
+    twin = c.capture(stream("on"), [request("on-x")])
+    assert "mcp" not in score(c, setup, twin, room, "", "", project=tmp_path / "p").blind
+
+
+def test_the_rooms_mcp_servers_are_named_by_where_copilot_says_they_come_from(setup, tmp_path):
+    c = Copilot()
+    twin = c.capture(stream("github-mcp-server"), [request("github-mcp-server-x")])
+    room = c.capture(events(("session.mcp_servers_loaded", {"servers": [
+        {"name": "github-mcp-server", "status": "connected", "source": "user"},  # the user's own, by that name
+        {"name": "bundled", "status": "connected", "source": "builtin"},
+        {"name": "projects-own", "status": "connected", "source": "workspace"}]})),
+        [request("github-mcp-server-x", "bundled-y", "projects-own-z")])
+    leaks = [(f.what, f.source) for f in score(c, setup, twin, room, "", "", project=tmp_path / "p").leaks if f.kind == "mcp"]
+    assert leaks == [("bundled", "connected account (login)"), ("github-mcp-server", "MCP server")]
+
+
+def skill(name, description, location):
+    return f"<skill>\n  <name>{name}</name>\n  <description>{description}</description>\n  <location>{location}</location>\n</skill>"
+
+
+def test_a_skill_the_project_brings_itself_is_not_taken_for_the_users_of_the_same_name(setup, tmp_path):
+    c = Copilot()
+    (setup.config / "skills" / "browse").mkdir(parents=True)
+    project = tmp_path / "project"
+    (project / ".agents" / "skills" / "browse").mkdir(parents=True)
+    (project / ".git").mkdir()
+    ours, users = skill("browse", "Drive a browser.", "project"), skill("browse", "Drive a browser.", "user")
+    twin = c.capture(stream(), [request("bash", system=f"{ours}\n{users}")])
+    clean = c.capture(stream(), [request("bash", system=ours)])
+    reading = score(c, setup, twin, clean, "", "", project=project)
+    assert "skills" in reading.seen and not [f for f in reading.leaks if f.kind == "skills"]
+    leaked = c.capture(stream(), [request("bash", system=f"{ours}\n{users}")])
+    assert [f.source for f in score(c, setup, twin, leaked, "", "", project=project).leaks if f.kind == "skills"] == \
+        [str(setup.config / "skills")]
+
+
+def test_the_control_run_keeps_relative_links_and_nested_names_and_writes_nothing_where_the_user_points(
+        setup, tmp_path, monkeypatch):
+    shared = setup.home / "shared"
+    shared.mkdir()
+    (shared / "rules.md").write_text("Be careful.\n")
+    (setup.config / "copilot-instructions.md").symlink_to("../shared/rules.md")  # relative to its own folder
+    (setup.config / "skills" / "logs").mkdir(parents=True)  # a skill named like a folder left out at the top
+    (setup.config / "logs").mkdir()
+    (setup.config / "dangling").symlink_to("nowhere")
+    (setup.config / "skills" / "loop").symlink_to("..")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)  # a relative link is not read from the working directory
+    monkeypatch.setenv("COPILOT_EVENTS_LOG_DIRECTORY", str(setup.home / "my-events"))
+    monkeypatch.delenv("COPILOT_PROCESS_LOG_FILE", raising=False)
+    with Copilot().twin(setup, "http://fake") as env:
+        copy = Path(env["COPILOT_HOME"])
+        assert (copy / "copilot-instructions.md").read_text() == "Be careful.\n"
+        assert not (copy / "copilot-instructions.md").is_symlink()
+        assert (copy / "skills" / "logs").is_dir() and not (copy / "logs").exists()
+        assert not os.path.lexists(copy / "dangling") and not os.path.lexists(copy / "skills" / "loop")
+        tmp = copy.parent
+        assert env["COPILOT_PKG_CACHE_HOME"] == env["COPILOT_CACHE_HOME"] == str(tmp / "cache")
+        assert Path(env["COPILOT_EVENTS_LOG_DIRECTORY"]).parent == tmp and "COPILOT_PROCESS_LOG_FILE" not in env
+    assert not (setup.home / "my-events").exists()
+
+
+def test_the_rooms_login_file_is_private_from_the_moment_it_exists(setup, tmp_path, monkeypatch):
+    monkeypatch.setenv("COPILOT_GITHUB_TOKEN", "gho_x")
+    room = Room(tmp_path / "room-home", tmp_path / "work", inside_work="/work")
+    config = room.config(Copilot())
+    config.mkdir(parents=True)
+    modes, fdopen = [], os.fdopen
+    monkeypatch.setattr(agents.os, "fdopen", lambda fd, *a: modes.append(stat.S_IMODE(os.fstat(fd).st_mode)) or fdopen(fd, *a))
+    old = os.umask(0)
+    try:
+        Copilot().seed(setup, config, room)
+    finally:
+        os.umask(old)
+    assert modes == [0o600] and stat.S_IMODE((config / "config.json").stat().st_mode) == 0o600
+
+
+def test_yaml_values_lose_their_comments_and_quotes_and_block_headers_their_comments(tmp_path):
+    path = tmp_path / "a.agent.md"
+    path.write_text("---\nname: plain # a comment\ntitle: \"Quoted # kept\"\n"
+                    "description: > # shown in the agent list\n  Looks into things.\n\n  Thoroughly.\n"
+                    "note: |2-\n  Kept.\n---\n")
+    assert agents._frontmatter(path) == {"name": "plain", "title": "Quoted # kept",
+                                         "description": "Looks into things.\n\nThoroughly.", "note": "Kept."}
+
+
+def test_odd_checkpoint_fields_do_not_stop_the_count():
+    odd = json.dumps({"type": "session.usage_checkpoint", "data": {"modelCacheState": 5, "accountingSnapshot": {
+        "tokenDetails": {"input": {"tokenCount": 7}}}}})
+    u = Copilot().usage(odd)
+    assert (u.input, u.model) == (7, None)
+
+
+def test_instruction_files_of_short_lines_still_give_markers(tmp_path):
+    from tare.probe import instruction_lines
+    path = tmp_path / "copilot-instructions.md"
+    path.write_text("Always answer in French.\nBe brief.\n")
+    assert instruction_lines(path) == ["Always answer in French."]
+    path.write_text("# Rules\n- be brief\n")
+    assert instruction_lines(path) == ["# Rules\n- be brief"]
+    path.write_text("ok\n")
+    assert instruction_lines(path) == []
+
+
+def test_plugins_are_on_unless_switched_off_and_found_where_copilot_installs_them(setup):
+    data = json.loads((setup.config / "config.json").read_text().split("\n", 1)[1])
+    data["installedPlugins"] += [{"name": "implicit", "marketplace": "mk"},
+                                 {"name": "../escape", "marketplace": "mk"}, {"name": "x", "enabled": False, "marketplace": "mk"}]
+    (setup.config / "config.json").write_text(json.dumps(data))
+    assert Copilot()._enabled_plugins(setup) == [setup.config / "installed-plugins/m/on",
+                                                 setup.config / "installed-plugins" / "mk" / "implicit"]

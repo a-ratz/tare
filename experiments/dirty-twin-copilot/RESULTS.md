@@ -87,3 +87,20 @@ repository, whose root is the work directory, was blind for skills: the probe ex
 `~/.agents/skills/`, which Copilot did not load there. With the probe stopping at the repository's
 root too, it read `tare: 0.00`. That one reading is the evidence for the stopping rule.
 
+After a second review, on the same day, `tare probe copilot` ran twice more:
+
+| Work directory | Control run shows | Reading |
+|---|---|---|
+| this repository's root | home path, mcp, reach | `tare: 0.00` |
+| a new folder under the home, holding only an `AGENTS.md` | home path, mcp, skills, reach | `tare: 0.00` |
+
+Under the home the control run showed the skills of `~/.agents/skills/`, found by the walk up, and
+the room did not.
+
+The same review found a flaw in the harness: it copied the Copilot home with its links, and T2 and
+T2p write into that copy (`copilot-instructions.md`, `mcp-config.json`, `config.json`). A write
+through a link there would have reached the link's target, and the fingerprint reads a link
+without following it. `~/.copilot` held no links when checked after the runs, so the readings
+stand. `run.py` now copies what links point to, as tare's control run does, and leaves sessions
+and logs out of the copy's top folder only.
+

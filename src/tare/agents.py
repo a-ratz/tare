@@ -935,6 +935,17 @@ class Antigravity:
         return None
 
 
+_BLOCK = re.compile(r"[>|](?:[1-9][+-]?|[+-][1-9]?)?(?:\s+#.*)?")  # a block scalar's header, comment and all
+
+
+def _scalar(value: str) -> str:
+    """A one-line YAML value: a quoted one without its quotes, a plain one without its comment."""
+    if value[:1] in ("'", '"'):
+        end = value.find(value[0], 1)
+        return value[1:end] if end > 0 else value[1:]
+    return re.sub(r"\s+#.*$", "", value)
+
+
 def _frontmatter(path: Path) -> dict[str, str]:
     """The `key: value` lines between a Markdown file's leading `---` lines."""
     try:
@@ -947,18 +958,39 @@ def _frontmatter(path: Path) -> dict[str, str]:
     for line in lines[1:]:
         if line.strip() == "---":
             break
-        if block and line.startswith((" ", "\t")):  # a `key: >` or `key: |` value goes on indented
-            found[block] = (found[block] + "\n" + line.strip()).strip()
+        if block and (line.startswith((" ", "\t")) or not line.strip()):  # a `key: >` or `key: |` value goes on indented
+            found[block] = (found[block] + "\n" + line.strip()) if found[block] else line.strip()
             continue
         block = None
         key, sep, value = line.partition(":")
         if sep and key.strip() and not key.startswith((" ", "\t")):
             value = value.strip()
-            if value in (">", "|", ">-", "|-", ">+", "|+"):
+            if _BLOCK.fullmatch(value):
                 found[key.strip()], block = "", key.strip()
             else:
-                found[key.strip()] = value.strip("\"'")
-    return found
+                found[key.strip()] = _scalar(value)
+    return {k: v.strip() for k, v in found.items()}
+
+
+def _copy_setup(source: Path, target: Path, top: tuple[str, ...] = ()):
+    """A copy of an agent's setup folder with what links point to, not the links: a write through
+    a link would reach the real setup. A link that points nowhere, or to a folder that holds it,
+    is left out; `top` names entries left out of the folder itself only (glob patterns)."""
+    root = source.resolve()
+
+    def leave_out(directory: str, names: list[str]) -> set[str]:
+        out = set(shutil.ignore_patterns(*top)(directory, names)) if Path(directory).resolve() == root else set()
+        here = os.path.realpath(directory)
+        for name in names:
+            path = os.path.join(directory, name)
+            if not os.path.islink(path):
+                continue
+            if not os.path.exists(path):  # resolved from the link's own folder
+                out.add(name)
+            elif os.path.isdir(path) and (here + os.sep).startswith(os.path.realpath(path) + os.sep):
+                out.add(name)  # a loop: the link points to a folder above it
+        return out
+    shutil.copytree(source, target, symlinks=False, ignore=leave_out)
 
 
 class Copilot:
@@ -1051,8 +1083,11 @@ class Copilot:
                  "copilotTokens": {f"{user['host']}:{user['login']}": token},
                  # the user chose to run this project, so it is trusted as in their own setup
                  "trustedFolders": [room.inside_work]}
-        (config / self.credentials).write_text(json.dumps(login))
-        (config / self.credentials).chmod(0o600)
+        # made private before the token is in it, never readable by others for a moment
+        fd = os.open(config / self.credentials, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(json.dumps(login))
 
     def room_env(self, room) -> dict[str, str]:
         # Copilot's shell takes its environment from a login shell (/etc/profile puts /usr/local/bin
@@ -1075,49 +1110,93 @@ class Copilot:
         user's hooks run, as in every control run."""
         with tempfile.TemporaryDirectory(prefix="tare-copilot-twin-") as tmp:
             copy, cache = Path(tmp) / "copilot", Path(tmp) / "cache"
-            # what links point to is copied, not the links: a write through one would reach the real setup
-            shutil.copytree(real.config, copy, symlinks=False, ignore_dangling_symlinks=True,
-                            ignore=shutil.ignore_patterns(*self.not_setup))
+            _copy_setup(real.config, copy, self.not_setup)
             cache.mkdir()
-            # the control run is online with the login, so the login's context shows (T0 vs T0off)
-            yield {"COPILOT_HOME": str(copy), "COPILOT_CACHE_HOME": str(cache), "COPILOT_OFFLINE": "false"}
+            # the control run is online with the login, so the login's context shows (T0 vs T0off);
+            # the package cache comes before COPILOT_CACHE_HOME (its launcher), and logs the user
+            # sends elsewhere go to the copy too
+            places = {"COPILOT_PKG_CACHE_HOME": str(cache), "COPILOT_EVENTS_LOG_DIRECTORY": str(Path(tmp) / "events"),
+                      "COPILOT_PROCESS_LOG_FILE": str(Path(tmp) / "process.log")}
+            yield {"COPILOT_HOME": str(copy), "COPILOT_CACHE_HOME": str(cache), "COPILOT_OFFLINE": "false",
+                   **{k: v for k, v in places.items() if k == "COPILOT_PKG_CACHE_HOME" or k in os.environ}}
 
     def prepare_probe(self, config: Path, fake_url: str):
         pass
 
-    def capture(self, stdout: str, requests: list[dict]) -> Capture | None:
+    @staticmethod
+    def _servers(found: list[dict]) -> dict[str, dict]:
+        """Each MCP server the stream names, with its last status, its source and its tool count.
+        Copilot reports them in several events, in no fixed order with the model's request: a status
+        change each, the tools once loaded (which can come before connected), and a summary."""
+        servers: dict[str, dict] = {}
+        for e in found:
+            kind, data = e.get("type"), _dict(e.get("data"))
+            if kind == "session.mcp_servers_loaded":
+                for s in data.get("servers") if isinstance(data.get("servers"), list) else []:
+                    if isinstance(s, dict) and isinstance(s.get("name"), str):
+                        entry = servers.setdefault(s["name"], {"name": s["name"]})
+                        entry.update({k: s[k] for k in ("status", "source") if isinstance(s.get(k), str)})
+            elif kind in ("session.mcp_server_status_changed", "session.mcp_server_tools_loaded") \
+                    and isinstance(data.get("serverName"), str):
+                entry = servers.setdefault(data["serverName"], {"name": data["serverName"]})
+                if isinstance(data.get("status"), str):
+                    entry["status"] = data["status"]
+                if isinstance(data.get("configSource"), str) and data["configSource"] != "unknown":
+                    entry["source"] = data["configSource"]
+                if isinstance(data.get("toolCount"), int):
+                    entry["tools"] = data["toolCount"]
+            elif kind == "session.mcp_server_removed" and isinstance(data.get("serverName"), str):
+                servers.pop(data["serverName"], None)
+        return servers
+
+    def capture(self, stdout: str, requests: list[dict], known: tuple[str, ...] = ()) -> Capture | None:
         """The first request with tools. Copilot names an MCP tool `<server>-<tool>`; the capture names
-        it `mcp__<server>__<tool>`, as the probe reads MCP tools."""
+        it `mcp__<server>__<tool>`, as the probe reads MCP tools. The servers come from the stream;
+        `known` (the user's configured ones and the login's) count when the stream names none that
+        fits, as when it ends before the servers are reported. A tool whose name fits several servers
+        counts for each: the request does not say which one offers it."""
         main = next((r for r in requests if r.get("tools")), None)
         if main is None:
             return None
         found = list(_objects(stdout))
-        servers = next((_dict(e.get("data")).get("servers") for e in found if e.get("type") == "session.mcp_servers_loaded"), None)
-        servers = [s for s in servers or [] if isinstance(s, dict) and isinstance(s.get("name"), str)]
+        servers = self._servers(found)
         start = next((_dict(e.get("data")) for e in found if e.get("type") == "session.start"), {})
-        connected = sorted((s["name"] for s in servers if s.get("status") == "connected"), key=len, reverse=True)
         tools = set()
         for tool in main["tools"]:
             name = tool.get("name") if isinstance(tool, dict) else None
             if not isinstance(name, str):
                 continue
-            server = next((s for s in connected if name.startswith(f"{s}-")), None)
-            tools.add(f"mcp__{re.sub(r'[^A-Za-z0-9_-]', '_', server)}__{name[len(server) + 1:]}" if server else name)
+            fits = [s for s in servers if name.startswith(f"{s}-")] or [s for s in known if name.startswith(f"{s}-")]
+            tools |= {f"mcp__{re.sub(r'[^A-Za-z0-9_-]', '_', s)}__{name[len(s) + 1:]}" for s in fits} or {name}
         text = "\n".join(strings({k: main.get(k) for k in ("system", "messages", "tools")}))
-        init = {"version": start.get("copilotVersion"),
-                "mcp_servers": [{"name": s["name"], "status": s.get("status")} for s in servers]}
-        return Capture(text, tools, init)
+        return Capture(text, tools, {"version": start.get("copilotVersion"), "mcp_servers": list(servers.values())})
+
+    def mcp_names(self, real: Real) -> tuple[str, ...]:
+        """The MCP server names a capture may meet: the user's configured ones and the login's."""
+        return (*self._mcp_servers(real), *self.login_mcp)
 
     def instructions(self, real: Real) -> Path:
         return real.config / "copilot-instructions.md"
 
     def _enabled_plugins(self, real: Real) -> list[Path]:
-        plugins = self._config(real).get("installedPlugins") or []
-        return [Path(p["cache_path"]) for p in plugins if isinstance(p, dict) and p.get("enabled") is True
-                and isinstance(p.get("cache_path"), str)]
+        """Installed plugins not switched off (Copilot takes one without `enabled` as on), in their
+        `cache_path`, or where Copilot installs them: installed-plugins/<marketplace>/<name>."""
+        plugins = self._config(real).get("installedPlugins")
+        found = []
+        for p in plugins if isinstance(plugins, list) else []:
+            if not isinstance(p, dict) or p.get("enabled") is False:
+                continue
+            if isinstance(p.get("cache_path"), str) and p["cache_path"]:
+                found.append(Path(p["cache_path"]))
+            elif all(isinstance(p.get(k), str) and p[k] and "/" not in p[k] and p[k] not in (".", "..")
+                     for k in ("marketplace", "name")):
+                found.append(real.config / "installed-plugins" / p["marketplace"] / p["name"])
+        return found
 
     def skill_dirs(self, real: Real) -> list[Path]:
         return [real.config / "skills", *(plugin / "skills" for plugin in self._enabled_plugins(real))]
+
+    skill_subdirs = (".agents/skills", ".github/skills", ".claude/skills")  # in the project and above it
 
     def parent_skill_dirs(self, project: Path) -> list[Path]:
         """Skill folders above the project, which Copilot finds by walking up from it (T0, T0out):
@@ -1126,7 +1205,7 @@ class Copilot:
         found = []
         for directory in [project, *project.parents]:
             if directory != project:
-                found += [directory / sub for sub in (".agents/skills", ".github/skills", ".claude/skills")]
+                found += [directory / sub for sub in self.skill_subdirs]
             if (directory / ".git").exists():
                 break
         return [d for d in found if d.is_dir()]
@@ -1146,10 +1225,26 @@ class Copilot:
 
     login_mcp = ("github-mcp-server",)  # comes with the login, not with a setting of the user's
 
-    def mcp_configured(self, real: Real) -> list[str]:
-        """The MCP servers the user configured: a control run that connects none of them cannot see them."""
+    def _mcp_servers(self, real: Real) -> list[str]:
         servers = _dict(_json(real.config / "mcp-config.json")).get("mcpServers")
         return sorted(name for name in _dict(servers) if isinstance(name, str))
+
+    def mcp_configured(self, real: Real) -> list[str]:
+        """The MCP servers the user configured and did not switch off (`disabledMcpServers` of the
+        settings): a control run that offers none of their tools cannot see them."""
+        off = set()
+        for data in (_dict(_json(real.config / "settings.json")), self._config(real)):
+            listed = data.get("disabledMcpServers")
+            off |= {n for n in listed if isinstance(n, str)} if isinstance(listed, list) else set()
+        return [name for name in self._mcp_servers(real) if name not in off]
+
+    # statuses of a server the control run should have offered tools of; disabled, stopped and
+    # not_configured ones offer none
+    mcp_expected = ("connected", "failed", "needs-auth", "pending")
+
+    def project_skill_dirs(self, project: Path) -> list[Path]:
+        """The project's own skill folders, which Copilot lists with location `project`."""
+        return [project / sub for sub in self.skill_subdirs if (project / sub).is_dir()]
 
     def agent_entry(self, name: str, line: str) -> re.Pattern:
         """How the request lists a custom agent: `- **name**: description`."""
@@ -1182,7 +1277,8 @@ class Copilot:
             def count(kind: str) -> int:
                 n = _dict(tokens.get(kind)).get("tokenCount")
                 return n if isinstance(n, int) and not isinstance(n, bool) and n >= 0 else 0
-            states = [m for m in last.get("modelCacheState") or [] if isinstance(m, dict) and isinstance(m.get("modelId"), str)]
+            listed = last.get("modelCacheState")
+            states = [m for m in listed if isinstance(m, dict) and isinstance(m.get("modelId"), str)] if isinstance(listed, list) else []
             u = Usage(count("input") + count("cache_read") + count("cache_write"), count("cache_read"),
                       count("cache_write"), count("output"), count("reasoning"), None,
                       states[0]["modelId"] if len(states) == 1 else None)

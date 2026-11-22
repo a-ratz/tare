@@ -498,3 +498,19 @@ def test_cleanup_removes_only_old_half_written_copies(home, tmp_path):
         p.write_text("{")
     os.utime(old, (time.time() - 7200, time.time() - 7200))
     assert sessions.parts() == [old]
+
+
+def test_cleanup_removes_copies_of_the_setup_a_killed_probe_left_and_nothing_fresh(home, rooms_dir, tmp_path, capsys):
+    old, fresh = rooms_dir / "tare-copilot-twin-old", rooms_dir / "tare-pi-twin-fresh"
+    for twin in (old, fresh):
+        (twin / "copilot").mkdir(parents=True)
+        (twin / "copilot" / "config.json").write_text("{}")
+    aged(old, 2 * 3600)
+    elsewhere = tmp_path / "precious"
+    elsewhere.mkdir()
+    (rooms_dir / "tare-agy-twin-link").symlink_to(elsewhere)
+    assert room.leftover_twins() == [old]
+    assert cli.main(["cleanup", "--dry-run"]) == 0 and old.exists()
+    assert "0 rooms, 1 copy of your setup and 0 sessions would be removed" in capsys.readouterr().out
+    assert cli.main(["cleanup"]) == 0
+    assert not old.exists() and fresh.exists() and elsewhere.exists()

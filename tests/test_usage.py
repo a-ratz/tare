@@ -70,6 +70,9 @@ def test_prices_come_from_the_users_file_first_then_litellm_with_the_makers_pric
                                                               "models": {"gpt-x": {"input": 1, "output": 2}}}))
     assert price_of("gpt-x") == ({"input": 1e-6, "output": 2e-6}, "prices.json (my contract, 2026-10-01)")
     assert estimate(Usage(10, 0, 0, 1, 0, 0.5), "gpt-x").estimated is None  # a reported cost stays
+    # a run with no counts (its stream cut off before them) is not free: its cost stays unknown
+    nothing = estimate(Usage(cost_usd=None), "gpt-x")
+    assert nothing.cost_usd is None and nothing.unpriced == 1
 
 
 def test_a_run_reports_estimates_and_marks_subscription_logins(tmp_path, monkeypatch):

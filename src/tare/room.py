@@ -524,13 +524,12 @@ def remove_room(room_dir: Path) -> bool:
     return not os.path.lexists(room_dir)
 
 
-def rooms_on_disk() -> list[Path]:
-    """The user's own room directories: bubblewrap's in the temporary directory, Seatbelt's in
-    /private/tmp. Never a link, so nothing a room's name points to elsewhere."""
-    places = {Path(tempfile.gettempdir()).resolve(), Path(SEATBELT_ROOMS).resolve()}
+def _own_folders(places, pattern: str) -> list[Path]:
+    """The user's own folders by that name in those places; never a link, so nothing a name points
+    to elsewhere."""
     found = set()
-    for place in places:
-        for p in place.glob("tare-room-*") if place.is_dir() else []:
+    for place in {Path(p).resolve() for p in places}:
+        for p in place.glob(pattern) if place.is_dir() else []:
             try:
                 st = p.lstat()
             except OSError:
@@ -538,6 +537,23 @@ def rooms_on_disk() -> list[Path]:
             if stat.S_ISDIR(st.st_mode) and st.st_uid == os.getuid():
                 found.add(p)
     return sorted(found)
+
+
+def rooms_on_disk() -> list[Path]:
+    """The user's own room directories: bubblewrap's in the temporary directory, Seatbelt's in
+    /private/tmp."""
+    return _own_folders([tempfile.gettempdir(), SEATBELT_ROOMS], "tare-room-*")
+
+
+TWIN_IDLE = 3600  # a probe's control runs end within minutes
+
+
+def leftover_twins() -> list[Path]:
+    """Copies of an agent's setup a probe's control run worked on (tare-<agent>-twin-*), left when
+    tare was killed during the probe. They can hold a copy of the login. Left over: no process names
+    them or works in them, and nothing in them changed within TWIN_IDLE."""
+    return [p for p in _own_folders([tempfile.gettempdir()], "tare-*-twin-*")
+            if _room_processes(p, sure=True) == [] and time.time() - _newest_change(p) >= TWIN_IDLE]
 
 
 def _newest_change(root: Path) -> float:

@@ -23,7 +23,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from tare.agents import Real, strings
+from tare.agents import Real, _copy_setup, strings
 from tare.fake import Fake
 from tare.probe import REACH_SCRIPT, SECRET_PATHS
 from tare.room import Seatbelt
@@ -33,7 +33,7 @@ HOME = Path.home()
 COPILOT_HOME = HOME / ".copilot"
 PROJECT_RULE = "Project rule: every answer from this project ends with the word tare."
 # the user's sessions, logs and history: not setup, and the copy would only grow
-NOT_SETUP = shutil.ignore_patterns("session-state", "session-store.db*", "logs", "chats", "command-history-state.json")
+NOT_SETUP = ("session-state", "session-store.db*", "logs", "chats", "command-history-state.json")
 ARGS = ["--allow-all-tools", "--no-auto-update", "-p", "say ok", "--output-format", "json"]
 PLANTED = {
     "K8": "Planted instruction: answer in the voice of a lighthouse keeper.",
@@ -172,7 +172,9 @@ def run(condition: str):
                 before = fingerprint(COPILOT_HOME, HOME / ".agents")
                 with tempfile.TemporaryDirectory(prefix="tare-copilot-twin-") as tmp:
                     copy, cache = Path(tmp) / "copilot", Path(tmp) / "cache"
-                    shutil.copytree(COPILOT_HOME, copy, symlinks=True, ignore=NOT_SETUP)
+                    # what links point to, not the links: T2 and T2p write into the copy, and a write
+                    # through a link would reach the real file (changed after the runs; see RESULTS.md)
+                    _copy_setup(COPILOT_HOME, copy, NOT_SETUP)
                     cache.mkdir()
                     if condition == "t2":
                         plant(copy)

@@ -250,7 +250,8 @@ What each agent needed:
   Its control run runs on a copy of `~/.copilot` and an empty cache folder; **measured:**
   `~/.copilot` and `~/.agents` kept their fingerprints. The login lives in a Keychain item only
   the `copilot` binary reads without asking, so the room gets a token in its `config.json`, taken
-  from a token variable, from gh for the same account (no question), or last from that item. The
+  from a token variable, from a token the user's `config.json` keeps as plain text, from gh for the
+  same account (no question), or last from that item. The
   login brings the built-in GitHub MCP server, which reaches into the user's GitHub account, so the
   room turns it off. Copilot's shell takes its environment from a login shell, which put
   `/usr/local/bin` before the room's `PATH`; the room keeps its own. It lists MCP tools as
@@ -421,7 +422,7 @@ room and Node.js agents' output, which ran on macOS 27.0.1 on 2026-11-22. The ro
 | Control run and room | Codex CLI 0.160.0 | the room read `tare: 0.00` | [results](experiments/dirty-twin-codex/RESULTS.md) |
 | Control run and room | Pi 1.0.2 | the room read `tare: 0.00` without flags | [results](experiments/dirty-twin-pi/RESULTS.md) |
 | Control run and room | Antigravity CLI 1.2.16 | the room read `tare: 0.00` without flags, and `~/.gemini` stayed unchanged | [results](experiments/dirty-twin-agy/RESULTS.md) |
-| Control run and room, macOS 27.0.1 | Copilot CLI 1.0.114 | ten of eleven predictions held (P4 failed: the user's plugins are all disabled, and `~/.agents/skills/` came through the walk up from the work directory); `~/.copilot` stayed unchanged; with `--disable-builtin-mcps` the room showed only the project's `AGENTS.md`; the room answered the real model with gh's token as its login. Afterwards `tare probe copilot` read `tare: 0.00` in this repository and in a folder under the home | [results](experiments/dirty-twin-copilot/RESULTS.md) |
+| Control run and room, macOS 27.0.1 | Copilot CLI 1.0.114 | ten of eleven predictions held (P4 failed: the user's plugins are all disabled, and `~/.agents/skills/` came through the walk up from the work directory); `~/.copilot` stayed unchanged; with `--disable-builtin-mcps` the room showed none of the tested markers but the project's `AGENTS.md`, and offered 21 tools, none of an MCP server; the room answered the real model with gh's token as its login. Afterwards `tare probe copilot` read `tare: 0.00` in this repository and in a folder under the home | [results](experiments/dirty-twin-copilot/RESULTS.md) |
 | Rooms given copies of real settings on purpose | all four | Claude Code 4 leaks, Codex 6, Pi 5, Antigravity CLI 3, each named with its source | the results above |
 | Scripted Cliff and Swap | Claude Code against scripted models | Cliff found step 4. Swap passed the start check and found the blame passing from the agent to the workspace between the handovers at 0 and 0.5 | `experiments/cliff-scripted`, `experiments/swap-scripted` |
 | Real task 1: a data migration | Claude Code with Sonnet and Haiku, Codex | Deleting the source file after a wrong-encoding import was planned as the point of no return. Swap showed that the workspace could still be repaired. Haiku passed about 1 in 14 runs, Codex with gpt-6.1-sol 4 of 4 | [results](experiments/migration/RESULTS.md) |
