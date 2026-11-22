@@ -14,6 +14,8 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -102,16 +104,80 @@ def record(agent, real, project: Path, out: Path, prompt: str, args: list[str],
     return code
 
 
-def _stream(argv: list[str], log_dir: Path, timeout: float | None) -> int:
-    """Run a room with the agent's stdout and stderr written to log_dir as they come (the dashboard reads them)."""
-    with (log_dir / "stdout.jsonl").open("w") as out, (log_dir / "stderr.log").open("w") as err:
-        proc = subprocess.Popen(argv, stdout=out, stderr=err, stdin=subprocess.DEVNULL)
+# seconds the pumps get to finish after the agent exits: a process the agent left running may hold
+# its end of the pipe much longer
+PUMP_GRACE = 2.0
+
+
+def _pump(source, target, failures: list | None = None):
+    """Copy a pipe into a file as it comes. When the file cannot be written any more (a full disk,
+    or closed after the run while a process the agent left still writes), the pipe is drained on, so
+    the agent never blocks on a full pipe, and the first failure goes into `failures`."""
+    writing = True
+    try:
+        for chunk in iter(lambda: source.read1(65536), b""):
+            if writing:
+                try:
+                    target.write(chunk)
+                    target.flush()
+                except (OSError, ValueError) as e:
+                    writing = False
+                    if failures is not None and isinstance(e, OSError):  # ValueError: closed after the run
+                        failures.append(e)
+    except (OSError, ValueError):
+        pass
+    finally:  # the pump owns its end of the pipe: nothing else closes it while it reads
         try:
+            source.close()
+        except OSError:
+            pass
+
+
+def _feed(source, target):
+    """Copy a file into the agent's stdin pipe, then close it, so the agent sees the end. An agent
+    that stops reading (it exited) ends the copy."""
+    try:
+        for chunk in iter(lambda: source.read1(65536), b""):
+            target.write(chunk)
+            target.flush()
+    except (OSError, ValueError):
+        pass
+    finally:
+        try:
+            target.close()
+        except (OSError, ValueError):
+            pass
+
+
+def _join(threads, grace: float | None = None):
+    """Wait for the pumps, all of them together at most `grace` seconds."""
+    deadline = time.monotonic() + (PUMP_GRACE if grace is None else grace)
+    for thread in threads:
+        if thread.ident is not None:  # a signal may have come before every pump started
+            thread.join(timeout=max(0.0, deadline - time.monotonic()))
+
+
+def _stream(argv: list[str], log_dir: Path, timeout: float | None) -> int:
+    """Run a room with the agent's stdout and stderr written to log_dir as they come (the dashboard reads them).
+    Through pipes, not the files themselves: a Node.js agent (Pi, the Copilot CLI) aborts at start when its
+    stdout is a file in a place the room denies (#172), and the run directory, under the home, is one."""
+    with (log_dir / "stdout.jsonl").open("wb") as out, (log_dir / "stderr.log").open("wb") as err:
+        proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL)
+        pumps, failures = [], []
+        try:
+            pumps = [threading.Thread(target=_pump, args=(pipe, file, failures), daemon=True)
+                     for pipe, file in ((proc.stdout, out), (proc.stderr, err))]
+            for pump in pumps:
+                pump.start()
             return proc.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
+        except BaseException:  # a timeout, or a signal (SystemExit) or Ctrl-C: the agent ends before its room
             proc.kill()
             proc.wait()
             raise
+        finally:
+            _join(pumps)  # the rest of the output
+            if failures:  # the run goes on, but its record is short: say so
+                print(f"tare: the agent's output in {log_dir} is incomplete: {failures[0]}", file=sys.stderr)
 
 
 def session_lines(out: Path) -> list[str]:

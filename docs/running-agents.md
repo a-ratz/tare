@@ -33,6 +33,11 @@ on copies instead.
 All your arguments after `--` go to the agent. Interactive or one-shot, the agent runs as it does
 outside tare.
 
+Input or output that you redirect to a file reaches the agent through a pipe: Node.js agents (Pi,
+the Copilot CLI) stop at start when one of these is a file in a place the room denies, which your
+home is (#172). For an input file, tare reads it all into the agent's pipe, whether the agent reads
+it or not.
+
 ## Exit codes
 
 `tare probe` exits with 0 on `tare: 0.00` and with 1 otherwise. `tare claude` and the other agent
