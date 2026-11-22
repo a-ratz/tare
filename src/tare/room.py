@@ -162,17 +162,22 @@ class Seatbelt:
             agent.seed(real, room.config(agent), room)
             yield room
         finally:
+            # ending the room's processes must never stop the copy-back or the room's removal: a signal
+            # that arrives meanwhile (Ctrl-C, SIGTERM, SIGHUP) is raised again once the room is gone
+            interrupted = None
             try:
                 ended = _end_processes(base)
-            except Exception as e:  # ending processes must never stop the copy-back or the room's removal
-                ended = 0
-                print(f"tare: could not end the processes left in the room: {type(e).__name__}: {e}", file=sys.stderr)
-            if ended:
-                print(f"tare: ended {ended} process{'es' if ended != 1 else ''} the agent left running in the room",
-                      file=sys.stderr)
+                if ended:
+                    _say(f"tare: ended {ended} process{'es' if ended != 1 else ''} the agent left running in the room")
+            except Exception as e:
+                _say(f"tare: could not end the processes left in the room: {type(e).__name__}: {e}")
+            except BaseException as e:
+                interrupted = e
             if before is not None:
                 _copy_back(before, clone, work)
             shutil.rmtree(base, ignore_errors=True)
+            if interrupted is not None:
+                raise interrupted
 
     def argv(self, room: Room, agent, real, command: list[str], extra_env: dict[str, str] | None = None) -> list[str]:
         """The command line that runs `command` in the room. `command[0]` may be the agent's own name."""
@@ -262,6 +267,14 @@ def profile(room: Room) -> str:
     return "\n".join(rules) + "\n"
 
 
+def _say(message: str):
+    """A line on stderr, which may be gone (a closed terminal)."""
+    try:
+        print(message, file=sys.stderr)
+    except OSError:
+        pass
+
+
 def _listing(argv: list[str]) -> str:
     """A listing from ps or lsof; empty when the program is missing, fails or stalls."""
     try:
@@ -279,7 +292,7 @@ def _room_processes(base: Path) -> list[int]:
     pids = set()
     for line in _listing(["/bin/ps", "-xww", "-o", "pid=,command="]).splitlines():
         pid, _, command = line.strip().partition(" ")
-        if pid.isdigit() and any(re.search(re.escape(root) + r"(/|\s|$)", command) for root in roots):
+        if pid.isdigit() and any(re.search(rf"(?<![^\s\"'=:]){re.escape(root)}(?=[/\s\"';:]|$)", command) for root in roots):
             pids.add(int(pid))
     pid = None
     for line in _listing(["/usr/sbin/lsof", "-b", "-w", "-a", "-u", str(os.getuid()), "-d", "cwd", "-Fpn"]).splitlines():

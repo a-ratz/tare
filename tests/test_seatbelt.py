@@ -1,6 +1,5 @@
 import json
 import os
-import re
 import signal
 import socket
 import subprocess
@@ -317,13 +316,45 @@ def test_only_processes_that_name_the_room_or_work_in_it_are_its_own(monkeypatch
           f" 102 {base}/opt/agent/claude -p hi\n"
           f" 103 tail -f {base}-copy/log\n"  # another directory whose name starts the same
           f" 104 vim /Users/me/tare-room-abc12345/notes\n"  # the same name elsewhere
+          f" 105 vim /Users/me/tmp/tare-room-abc12345/notes\n 106 vim /var/tmp/tare-room-abc12345/notes\n"
+          f" 107 /bin/sh -c cd \"{base}\"; sleep 300\n"  # the room itself, quoted
           f"   1 {base}/x\n   0 {base}/x\n garbage line {base}\n"
           f" {os.getpid()} python {base}/self\n")
     lsof = f"p201\nn{base}/tmp\np202\nn{base}\np203\nn/\npnotapid\nn{base}\np204\nn{base}-copy\n"
     monkeypatch.setattr(room, "_listing", lambda argv: ps if argv[0].endswith("ps") else lsof)
-    assert room._room_processes(base) == [101, 102, 201, 202]
+    assert room._room_processes(base) == [101, 102, 107, 201, 202]
     monkeypatch.setattr(room, "_listing", lambda argv: "")  # ps and lsof missing
     assert room._room_processes(base) == []
+
+
+def test_a_signal_while_ending_processes_still_copies_back_removes_the_room_and_is_raised(tmp_path, monkeypatch, mac):
+    real, _ = claude_on_mac(tmp_path, monkeypatch)
+    work = project(tmp_path)
+
+    def interrupted(base, grace=3.0):
+        raise KeyboardInterrupt
+    monkeypatch.setattr(room, "_end_processes", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        with Seatbelt().open(Claude(), real, work) as r:
+            (Path(r.inside_work) / "made.txt").write_text("kept\n")
+            base = r.home.parent
+    assert (work / "made.txt").read_text() == "kept\n" and not base.exists()
+
+
+def test_a_closed_stderr_does_not_stop_the_room_from_going(tmp_path, monkeypatch, mac):
+    real, _ = claude_on_mac(tmp_path, monkeypatch)
+    monkeypatch.setattr(room, "_end_processes", lambda base, grace=3.0: 2)
+
+    class Gone:
+        def write(self, text):
+            raise BrokenPipeError
+
+        def flush(self):
+            raise BrokenPipeError
+    with Seatbelt().open(Claude(), real, project(tmp_path)) as r:
+        base = r.home.parent
+        monkeypatch.setattr(sys, "stderr", Gone())
+    assert not base.exists()
 
 
 def test_a_failure_while_ending_processes_still_copies_back_and_removes_the_room(tmp_path, monkeypatch, mac, capsys):
