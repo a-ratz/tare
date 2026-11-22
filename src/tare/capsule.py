@@ -104,15 +104,48 @@ def record(agent, real, project: Path, out: Path, prompt: str, args: list[str],
     return code
 
 
+# seconds the pumps get to finish after the agent exits: a process the agent left running may hold
+# its end of the pipe much longer
+PUMP_GRACE = 2.0
+
+
 def _pump(source, target):
-    """Copy a pipe into a file as it comes. A process the agent left running may hold the pipe after
-    the run and write on after the file is closed: that is dropped."""
+    """Copy a pipe into a file as it comes. When the file cannot be written any more (a full disk,
+    or closed after the run while a process the agent left still writes), the pipe is drained on, so
+    the agent never blocks on a full pipe."""
+    writing = True
+    try:
+        for chunk in iter(lambda: source.read1(65536), b""):
+            if writing:
+                try:
+                    target.write(chunk)
+                    target.flush()
+                except (OSError, ValueError):
+                    writing = False
+    except (OSError, ValueError):
+        pass
+
+
+def _feed(source, target):
+    """Copy a file into the agent's stdin pipe, then close it, so the agent sees the end."""
     try:
         for chunk in iter(lambda: source.read1(65536), b""):
             target.write(chunk)
             target.flush()
     except (OSError, ValueError):
         pass
+    finally:
+        try:
+            target.close()
+        except OSError:
+            pass
+
+
+def _join(threads, grace: float | None = None):
+    """Wait for the pumps, all of them together at most `grace` seconds."""
+    deadline = time.monotonic() + (PUMP_GRACE if grace is None else grace)
+    for thread in threads:
+        thread.join(timeout=max(0.0, deadline - time.monotonic()))
 
 
 def _stream(argv: list[str], log_dir: Path, timeout: float | None) -> int:
@@ -132,9 +165,7 @@ def _stream(argv: list[str], log_dir: Path, timeout: float | None) -> int:
             proc.wait()
             raise
         finally:
-            deadline = time.time() + 2  # the rest of the output; a process left holding the pipe ends with the room
-            for pump in pumps:
-                pump.join(timeout=max(0.0, deadline - time.time()))
+            _join(pumps)  # the rest of the output
 
 
 def session_lines(out: Path) -> list[str]:

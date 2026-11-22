@@ -130,11 +130,12 @@ cannot write it, so the room's `PATH` holds the developer directory's `usr/bin` 
 choice, never a denied place) before `/usr/bin`. `git`, `python3` and `make` then start without
 xcrun; `pip3`, and with Xcode `clang` and `swift`, still ask it ([docs/tools.md](docs/tools.md)).
 A Node.js agent (Pi, and the Copilot CLI) aborts at start, before any of its own code runs, when
-its stdout is a file in a place the room denies (measured: `SIGABRT` in Node's start-up, while the
-same run with stdout in an allowed place or a pipe answered). A measuring run's output goes into
+its stdout is a file in a place the room denies (measured on macOS 27.0.1 with the Copilot CLI
+1.0.114 and Pi 1.6.0 on Node.js 22.23.2: `SIGABRT` in Node's start-up, while the same run with
+stdout in an allowed place or a pipe answered). Node checks stdin, stdout and stderr alike. A measuring run's output goes into
 the run directory under the home, which the room denies, so tare hands every agent its output
-through pipes and writes the files itself (#172). The same holds for `tare pi` with its output
-redirected to a file.
+through pipes and writes the files itself (#172). The same holds for `tare pi` with its input or
+output redirected to a file; a terminal is passed through as it is.
 On macOS, `tar` stores extended attributes as `._` files, so the snapshot hook runs it with
 `COPYFILE_DISABLE=1`. **Measured** on macOS 27.0 (Claude Code 2.1.289, Codex CLI 0.159.0,
 Pi 0.99.1): each agent answered in such a room with its real login. Afterwards the room was
@@ -352,7 +353,7 @@ keeps it in `uses.json` and in each run's `result.json`.
 writes a file: Claude Code 2.1.330 in a room called `Skill` with `greet`, Codex 0.166.0 in a room ran
 `cat .agents/skills/greet/SKILL.md`, Pi 1.6.0 read `.pi/skills/greet/SKILL.md` with `read`, and the
 Antigravity CLI 1.5.13 read `.agents/skills/greet/SKILL.md` with `read_file`. Each counted one load
-of `greet`. Pi and the Antigravity CLI ran outside a room: Pi aborts in a macOS room (#172), and the
+of `greet`. Pi and the Antigravity CLI ran outside a room: Pi aborted in a macOS room then (#172, since fixed), and the
 Antigravity CLI is not supported there. The streams are kept in `tests/streams/`.
 
 ### Run directory, dashboard and recipes
@@ -368,8 +369,8 @@ names what has changed since.
 ## Measurements
 
 All measurements ran on WSL2 on 2026-10-04 and 2026-10-05. The rows that name macOS ran on
-macOS 27.0 (arm64) on 2026-10-05 and 2026-10-06, except the row on tools in a room, which ran on
-macOS 27.0.1 on 2026-11-22. The row that names Omarchy ran on native Linux on
+macOS 27.0 (arm64) on 2026-10-05 and 2026-10-06, except the rows on tools in a room and on Node.js
+agents' output, which ran on macOS 27.0.1 on 2026-11-22. The row that names Omarchy ran on native Linux on
 2026-11-16.
 
 | What | Agent and version | Result | Source |
@@ -389,6 +390,7 @@ macOS 27.0.1 on 2026-11-22. The row that names Omarchy ran on native Linux on
 | macOS: control run, Seatbelt room, and parts of the real setup copied into the room | same | every room read `tare: 0.00`. Each copied part that reached the request was named with its source, and nothing under the home directory, under `/var/folders`, in `/private/tmp` or on the pasteboard was reachable from inside. Two kinds of Codex context are invisible to the probe on any system (#109) | [results](experiments/dirty-twin-macos/RESULTS.md) |
 | macOS: scripted Cliff and Swap, the judge | Claude Code 2.1.290 against scripted models; Microsoft Edge for the judge's screenshot | Cliff found step 4. Swap passed the start check and found the blame passing from the agent to the workspace between the handovers at 0 and 0.5. `tare judge` rendered a page and scored it. With a project that turns Claude Code's sandbox on, every Bash call failed in a Seatbelt room until tare turned it off | comments on epic #85 |
 | macOS: tools in a room | Claude Code 2.1.330 with Sonnet, agent-browser 0.39.2, Chrome for Testing 158, Playwright 1.57 | installs into the room's home worked; writes to `/opt/homebrew`, `/Applications` and `/Library/Caches` worked before #183 and fail after it. Chrome opened a page only with `MAC_CHROMIUM_TMPDIR` and `--no-sandbox`; Playwright's headless shell opened it without either, its full Chromium only with `MAC_CHROMIUM_TMPDIR`. An agent-browser task passed 0 of 2 runs without them and 2 of 2 with them. With the developer directory on `PATH`, `git` stopped printing xcrun's cache error | comments on epic #181 |
+| macOS: Node.js agents' output | the Copilot CLI 1.0.114, Pi 1.6.0, both on Node.js 22.23.2 | with stdout a file in a place the room denies, the Copilot CLI aborted (`SIGABRT`, nothing written) and Pi exited with 250, or -6 in Calibrate; with stdout a file in an allowed place, or a pipe, both answered. With pipes, a Pi Calibrate run passed, and `tare pi` with its output redirected to a file answered | #172 |
 
 ## Open questions and ideas
 

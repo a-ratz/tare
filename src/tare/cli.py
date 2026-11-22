@@ -31,7 +31,7 @@ from .cliff import cliff
 from .journal import Journal
 from .swap import Side, swap
 from .probe import probe, render
-from .capsule import _pump
+from .capsule import _feed, _join, _pump
 from .room import TareError, backend
 
 
@@ -47,23 +47,36 @@ def _run_attached(argv: list[str]) -> int:
     when its stdout is a file in a place the room denies (#172)."""
     previous = signal.signal(signal.SIGINT, signal.SIG_IGN)
     try:
-        to_file = {fd: stat.S_ISREG(os.fstat(fd).st_mode) for fd in (1, 2)}
+        to_file = {fd: _is_file(fd) for fd in (0, 1, 2)}
         if not any(to_file.values()):
             return subprocess.call(argv)
         sys.stdout.flush()
         sys.stderr.flush()
-        proc = subprocess.Popen(argv, stdout=subprocess.PIPE if to_file[1] else None,
-                                stderr=subprocess.PIPE if to_file[2] else None)
-        pumps = [threading.Thread(target=_pump, args=(pipe, target), daemon=True)
-                 for pipe, target in ((proc.stdout, sys.stdout.buffer), (proc.stderr, sys.stderr.buffer)) if pipe]
-        for pump in pumps:
-            pump.start()
-        code = proc.wait()
-        for pump in pumps:
-            pump.join(timeout=2)
-        return code
+        pipe = {fd: subprocess.PIPE if to_file[fd] else None for fd in (0, 1, 2)}
+        with subprocess.Popen(argv, stdin=pipe[0], stdout=pipe[1], stderr=pipe[2]) as proc:
+            try:
+                pumps = [threading.Thread(target=_pump, args=(source, target), daemon=True)
+                         for source, target in ((proc.stdout, sys.stdout.buffer), (proc.stderr, sys.stderr.buffer))
+                         if source]
+                feed = [threading.Thread(target=_feed, args=(sys.stdin.buffer, proc.stdin), daemon=True)] if proc.stdin else []
+                for thread in pumps + feed:
+                    thread.start()
+                code = proc.wait()
+                _join(pumps)  # the rest of the output
+                return code
+            except BaseException:  # SIGTERM or SIGHUP (SystemExit): the agent ends before its room does
+                proc.kill()
+                proc.wait()
+                raise
     finally:
         signal.signal(signal.SIGINT, previous)
+
+
+def _is_file(fd: int) -> bool:
+    try:
+        return stat.S_ISREG(os.fstat(fd).st_mode)
+    except OSError:  # closed (>&-)
+        return False
 
 
 def _serve(out: Path | list[Path], port: int) -> str:

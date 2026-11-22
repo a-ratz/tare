@@ -99,17 +99,86 @@ def test_a_runs_output_reaches_its_files_through_pipes(tmp_path):
     """The agent's stdout is a pipe, never the run directory's file: a Node.js agent aborts at start
     when its stdout is a file in a place the room denies (#172)."""
     from tare.capsule import _stream
-    code = _stream(["/bin/sh", "-c", 'if [ -p /dev/stdout ]; then echo pipe; else echo file; fi; echo oops >&2; exit 3'],
+    code = _stream(["/bin/sh", "-c", '[ -p /dev/fd/1 ] && echo pipe; [ -p /dev/fd/2 ] && echo pipe >&2; exit 3'],
                    tmp_path, 30)
     assert code == 3
     assert (tmp_path / "stdout.jsonl").read_text() == "pipe\n"
-    assert (tmp_path / "stderr.log").read_text() == "oops\n"
+    assert (tmp_path / "stderr.log").read_text() == "pipe\n"
 
 
-def test_a_process_left_holding_the_pipe_does_not_hold_up_the_run(tmp_path):
+def test_a_process_left_holding_the_pipe_does_not_hold_up_the_run(tmp_path, monkeypatch):
+    import os
+    import signal
     import time
-    from tare.capsule import _stream
-    started = time.time()
-    assert _stream(["/bin/sh", "-c", "echo done; (sleep 5; echo late) &"], tmp_path, 30) == 0
-    assert time.time() - started < 3.5
+    from tare import capsule
+    monkeypatch.setattr(capsule, "PUMP_GRACE", 0.3)
+    started = time.monotonic()
+    script = f"echo done; (sleep 30; echo late) & echo $! > {tmp_path}/left.pid"
+    assert capsule._stream(["/bin/sh", "-c", script], tmp_path, 30) == 0
+    assert time.monotonic() - started < 10  # not the 30 seconds the left process holds the pipe
     assert (tmp_path / "stdout.jsonl").read_text().startswith("done\n")
+    os.kill(int((tmp_path / "left.pid").read_text()), signal.SIGKILL)
+
+
+def test_a_pump_that_cannot_write_drains_on_so_the_agent_never_blocks(tmp_path):
+    import subprocess
+    import threading
+    from tare.capsule import _pump
+
+    class Full:
+        def write(self, chunk):
+            raise OSError(28, "No space left on device")
+
+        def flush(self):
+            pass
+    proc = subprocess.Popen(["/bin/sh", "-c", "head -c 300000 /dev/zero"], stdout=subprocess.PIPE)
+    pump = threading.Thread(target=_pump, args=(proc.stdout, Full()), daemon=True)
+    pump.start()
+    assert proc.wait(timeout=10) == 0  # 300 KB through a 64 KB pipe: only a reader lets it finish
+    pump.join(timeout=5)
+
+
+ATTACHED = '''
+import signal, sys
+from tare.cli import _exit_on, _run_attached
+signal.signal(signal.SIGTERM, _exit_on)  # as tare's main installs it
+sys.exit(_run_attached(sys.argv[1:]))
+'''
+
+
+def attached(tmp_path, argv, stdin=None):
+    """tare's attached run in a process of its own, its stdout and stderr files, as `tare pi -- ... > out`."""
+    import subprocess
+    import sys
+    out, err = (tmp_path / "out").open("w"), (tmp_path / "err").open("w")
+    return subprocess.Popen([sys.executable, "-c", ATTACHED, *argv], stdin=stdin, stdout=out, stderr=err)
+
+
+def test_an_attached_run_redirected_to_files_hands_the_agent_pipes_and_its_exit(tmp_path):
+    script = 'for fd in 0 1 2; do [ -p /dev/fd/$fd ] && echo "$fd pipe" >&2; done; cat; echo out; exit 4'
+    (tmp_path / "in").write_text("from a file\n")
+    with (tmp_path / "in").open() as stdin:
+        proc = attached(tmp_path, ["/bin/sh", "-c", script], stdin=stdin)
+        assert proc.wait(timeout=30) == 4
+    assert (tmp_path / "out").read_text() == "from a file\nout\n"
+    assert (tmp_path / "err").read_text() == "0 pipe\n1 pipe\n2 pipe\n"
+
+
+def test_a_signal_ends_the_agent_of_an_attached_run_before_its_room_goes(tmp_path):
+    import os
+    import signal
+    import time
+    proc = attached(tmp_path, ["/bin/sh", "-c", f"echo $$ > {tmp_path}/agent.pid; exec sleep 30"])
+    for _ in range(100):
+        if (tmp_path / "agent.pid").exists() and (tmp_path / "agent.pid").read_text().strip():
+            break
+        time.sleep(0.05)
+    agent = int((tmp_path / "agent.pid").read_text())
+    proc.send_signal(signal.SIGTERM)
+    assert proc.wait(timeout=10) == 128 + signal.SIGTERM
+    try:
+        os.kill(agent, 0)
+    except ProcessLookupError:
+        return
+    os.kill(agent, signal.SIGKILL)
+    pytest.fail("the agent outlived tare")
