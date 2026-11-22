@@ -37,10 +37,12 @@ runs go on:
 
 A skill counts as loaded when the agent invoked it (Claude Code's `Skill` tool) or read its
 `SKILL.md`, which is how Codex, Pi and the Antigravity CLI load a skill. The name is the folder that
-holds the file. A loaded skill is not necessarily a followed one: the count says only that the
-agent read it. Tool names are the ones the agent's output uses; Codex names the kind of call
-(`command_execution`, `file_change`) rather than the tool. The run directory keeps the counts in
-`uses.json` and in each run's `result.json`, so `tare watch` shows them for a finished run too.
+holds the file. A shell command counts only folders it names plainly (no globs, variables or
+spaces), whatever it does with the file. A loaded skill is not necessarily a followed one: the
+count says only that the agent read it. Tool names are the ones the agent's output uses; Codex
+names the kind of call (`command_execution`, `file_change`) rather than the tool. The run's journal
+carries the counts, so `tare watch` shows them for a finished run too, and the run directory keeps
+them in `uses.json` (per side) and in each run's `result.json`.
 
 ## Different prompts per side
 

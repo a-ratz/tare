@@ -147,3 +147,13 @@ def test_a_run_still_going_is_not_counted_and_sides_whose_agent_cannot_tell_have
     assert sides["a"] == {"label": "claude", "runs": 1, "skills": {"s": {"runs": 1, "calls": 1}},
                           "tools": {"Read": {"runs": 1, "calls": 2}}}
     assert sides["b"]["runs"] == 0
+
+
+def test_skills_are_listed_by_how_many_runs_loaded_them_and_null_counts_are_read_as_none():
+    start = {"event": "start", "sides": {"a": {"agent": "claude", "args": []}}}
+    events = [start, *({"event": "tail", "id": f"a-{i}", "status": "running", "side": "a"} for i in range(3)),
+              {"event": "tail", "id": "a-0", "status": "passed", "uses": {"tools": {"Skill": 5}, "skills": {"loud": 5}}},
+              {"event": "tail", "id": "a-1", "status": "passed", "uses": {"tools": {"Skill": 1}, "skills": {"common": 1}}},
+              {"event": "tail", "id": "a-2", "status": "passed", "uses": {"tools": None, "skills": {"common": 1}}}]
+    side = used.of_run(events)["sides"]["a"]
+    assert list(side["skills"]) == ["common", "loud"] and side["runs"] == 3

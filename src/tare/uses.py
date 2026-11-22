@@ -80,17 +80,17 @@ def of_run(events: list[dict]) -> dict:
             sides = {k: {"label": label, "runs": 0, "skills": {}, "tools": {}} for k, label in labels.items()}
         elif kind == "tail" and e.get("status") == "running":
             owner[e["id"]] = e.get("side") or e.get("agent") or "?"
-        elif kind == "tail" and e.get("uses") is not None:
+        elif kind == "tail" and isinstance(e.get("uses"), dict):
             side = sides.setdefault(owner.get(e["id"], "?"), {"label": "?", "runs": 0, "skills": {}, "tools": {}})
             side["runs"] += 1
             for what in ("skills", "tools"):
-                for name, n in e["uses"].get(what, {}).items():
+                for name, n in (e["uses"].get(what) or {}).items():
                     found = side[what].setdefault(name, {"runs": 0, "calls": 0})
                     found["runs"] += 1
                     found["calls"] += n
-    for side in sides.values():
-        for what in ("skills", "tools"):
-            side[what] = dict(sorted(side[what].items(), key=lambda item: (-item[1]["calls"], item[0])))
+    for side in sides.values():  # skills by how many runs loaded them, tools by how often they were called
+        side["skills"] = dict(sorted(side["skills"].items(), key=lambda i: (-i[1]["runs"], -i[1]["calls"], i[0])))
+        side["tools"] = dict(sorted(side["tools"].items(), key=lambda i: (-i[1]["calls"], i[0])))
     return {"sides": sides}
 
 
