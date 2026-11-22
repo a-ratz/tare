@@ -119,7 +119,7 @@ and open a live dashboard that leads with the answer:
 
 | | |
 |---|---|
-| **Getting started** | [Install](https://github.com/a-ratz/tare/blob/main/docs/install.md) · [The words tare uses](https://github.com/a-ratz/tare/blob/main/docs/words.md) · [Running agents in rooms](https://github.com/a-ratz/tare/blob/main/docs/running-agents.md) · [Reading a probe](https://github.com/a-ratz/tare/blob/main/docs/probe.md) |
+| **Getting started** | [Install](https://github.com/a-ratz/tare/blob/main/docs/install.md) · [The words tare uses](https://github.com/a-ratz/tare/blob/main/docs/words.md) · [Running agents in rooms](https://github.com/a-ratz/tare/blob/main/docs/running-agents.md) · [Reading a probe](https://github.com/a-ratz/tare/blob/main/docs/probe.md) · [Tools in a room](https://github.com/a-ratz/tare/blob/main/docs/tools.md) |
 | **Measuring** | [Overview](https://github.com/a-ratz/tare/blob/main/docs/measuring.md) · [Calibrate](https://github.com/a-ratz/tare/blob/main/docs/calibrate.md) · [Judge](https://github.com/a-ratz/tare/blob/main/docs/judge.md) · [Swap](https://github.com/a-ratz/tare/blob/main/docs/swap.md) · [Cliff](https://github.com/a-ratz/tare/blob/main/docs/cliff.md) · [Tokens and cost](https://github.com/a-ratz/tare/blob/main/docs/tokens-and-cost.md) · [Dashboard and rerun](https://github.com/a-ratz/tare/blob/main/docs/dashboard.md) |
 | **Background** | [How it works](https://github.com/a-ratz/tare/blob/main/docs/how-it-works.md) · [Concept: the design and every measurement](https://github.com/a-ratz/tare/blob/main/CONCEPT.md) · [Experiments](https://github.com/a-ratz/tare/tree/main/experiments) |
 

@@ -110,7 +110,9 @@ where bubblewrap would mount them (`opt/agent/...`). A clone shares the original
 so it costs next to nothing. The profile (`sandbox-exec`) denies your home directory, your
 directory under `/var/folders` (other programs' temporary files and caches), the rest of
 `/private/tmp` (where Claude Code keeps its temporary files), `/private/var/tmp`,
-`/Users/Shared` and the pasteboard. Then it allows the room. When the room closes, the run's
+`/Users/Shared` and the pasteboard. It denies every write outside the room, so an install the
+agent makes (a `brew install`, an app in `/Applications`) cannot change the machine, as a Linux
+room's read-only mounts ensure. Then it allows the room. When the room closes, the run's
 changes to the clone are copied back to the project. A file the run did not touch stays as it
 is. Sockets and pipes the run left (git's fsmonitor keeps one in `.git`) cannot be copied and are
 left out. Up to tare 0.5.0 the first one stopped the copy: the changes after it never reached the
@@ -119,6 +121,14 @@ On macOS, Claude Code keeps its login in the Keychain. tare reads it there the w
 Keychain item. No further Seatbelt profile can start inside a Seatbelt room, so the agents' own
 sandboxes do not work there. Codex runs without its sandbox anyway, and tare turns Claude Code's
 off in a macOS room, because a project that turns it on would make every Bash call fail there.
+The same holds for Chromium's sandbox, so a macOS room sets `AGENT_BROWSER_ARGS=--no-sandbox` for
+agent-browser (Playwright passes the flag anyway). Chromium also ignores `TMPDIR` on macOS and
+takes the denied directory under `/var/folders`, so the room sets `MAC_CHROMIUM_TMPDIR` to its own
+temporary directory, as `tare judge` does for its Chrome. The developer tools in `/usr/bin` are
+shims whose xcrun cache lives in that denied directory too, and each call would print that it
+cannot write it, so the room's `PATH` holds the developer directory's `usr/bin` (the system's
+choice, never a denied place) before `/usr/bin`. `git`, `python3` and `make` then start without
+xcrun; `pip3`, and with Xcode `clang` and `swift`, still ask it ([docs/tools.md](docs/tools.md)).
 On macOS, `tar` stores extended attributes as `._` files, so the snapshot hook runs it with
 `COPYFILE_DISABLE=1`. **Measured** on macOS 27.0 (Claude Code 2.1.289, Codex CLI 0.159.0,
 Pi 0.99.1): each agent answered in such a room with its real login. Afterwards the room was
@@ -352,7 +362,8 @@ names what has changed since.
 ## Measurements
 
 All measurements ran on WSL2 on 2026-10-04 and 2026-10-05. The rows that name macOS ran on
-macOS 27.0 (arm64) on 2026-10-05 and 2026-10-06. The row that names Omarchy ran on native Linux on
+macOS 27.0 (arm64) on 2026-10-05 and 2026-10-06, except the row on tools in a room, which ran on
+macOS 27.0.1 on 2026-11-22. The row that names Omarchy ran on native Linux on
 2026-11-16.
 
 | What | Agent and version | Result | Source |
@@ -371,6 +382,7 @@ macOS 27.0 (arm64) on 2026-10-05 and 2026-10-06. The row that names Omarchy ran 
 | macOS: a Seatbelt room with the real login | same | each agent answered one prompt. The room and its login copy were removed afterwards, and the Keychain item was unchanged (digest before and after). `tare probe` read `tare: 0.00` for all three | comments on epic #85 |
 | macOS: control run, Seatbelt room, and parts of the real setup copied into the room | same | every room read `tare: 0.00`. Each copied part that reached the request was named with its source, and nothing under the home directory, under `/var/folders`, in `/private/tmp` or on the pasteboard was reachable from inside. Two kinds of Codex context are invisible to the probe on any system (#109) | [results](experiments/dirty-twin-macos/RESULTS.md) |
 | macOS: scripted Cliff and Swap, the judge | Claude Code 2.1.290 against scripted models; Microsoft Edge for the judge's screenshot | Cliff found step 4. Swap passed the start check and found the blame passing from the agent to the workspace between the handovers at 0 and 0.5. `tare judge` rendered a page and scored it. With a project that turns Claude Code's sandbox on, every Bash call failed in a Seatbelt room until tare turned it off | comments on epic #85 |
+| macOS: tools in a room | Claude Code 2.1.330 with Sonnet, agent-browser 0.39.2, Chrome for Testing 158, Playwright 1.57 | installs into the room's home worked; writes to `/opt/homebrew`, `/Applications` and `/Library/Caches` worked before #183 and fail after it. Chrome opened a page only with `MAC_CHROMIUM_TMPDIR` and `--no-sandbox`; Playwright's headless shell opened it without either, its full Chromium only with `MAC_CHROMIUM_TMPDIR`. An agent-browser task passed 0 of 2 runs without them and 2 of 2 with them. With the developer directory on `PATH`, `git` stopped printing xcrun's cache error | comments on epic #181 |
 
 ## Open questions and ideas
 

@@ -21,6 +21,7 @@ def mac(monkeypatch, tmp_path):
     monkeypatch.setattr(room, "SEATBELT_ROOMS", str(tmp_path / "rooms"))
     monkeypatch.setattr(room, "_user_dir", lambda: Path("/private/var/folders/xy/user"))
     monkeypatch.setattr(probe, "_user_dir", room._user_dir)
+    monkeypatch.setattr(room, "_developer_bin", lambda: ["/Library/Developer/CommandLineTools/usr/bin"])
     (tmp_path / "rooms").mkdir()
     return tmp_path
 
@@ -140,8 +141,9 @@ def test_seatbelt_argv_clears_the_environment_and_runs_the_clone_in_the_work_clo
     assert argv[4:6] == ["/usr/bin/env", "-i"]
     env = dict(a.split("=", 1) for a in argv[6:argv.index("/usr/bin/sandbox-exec")])
     assert env["HOME"] == str(base / "home")
-    assert env["PATH"] == f"{base}/opt/agent:/usr/bin:/bin"
-    assert env["TMPDIR"] == env["CLAUDE_CODE_TMPDIR"] == str(base / "tmp")
+    assert env["PATH"] == f"{base}/opt/agent:/Library/Developer/CommandLineTools/usr/bin:/usr/bin:/bin"
+    assert env["TMPDIR"] == env["CLAUDE_CODE_TMPDIR"] == env["MAC_CHROMIUM_TMPDIR"] == str(base / "tmp")
+    assert env["AGENT_BROWSER_ARGS"] == "--no-sandbox"
     assert env["CLAUDE_CONFIG_DIR"] == str(base / "home/.claude-config")
     assert env["ANTHROPIC_BASE_URL"] == "http://fake"
     assert argv[-3:] == [f"{base}/opt/agent/claude", "-p", "hi"]
@@ -159,6 +161,42 @@ def test_seatbelt_profile_denies_the_home_and_shared_places_and_allows_the_room(
     allow = lines.index(f'(allow file-read* file-write* (subpath "{base}"))')
     assert lines.index(deny) < allow < lines.index(f'(deny file-write* (subpath "{base}/opt"))')
     assert f'(allow file-read* file-write* (subpath "{tmp_path / "run"}"))' in lines
+    # writes go nowhere outside the room but the devices; the room and the run's store come after
+    no_writes = lines.index('(deny file-write* (subpath "/"))')
+    assert no_writes < lines.index('(allow file-write* (subpath "/dev"))') < allow
+    assert lines[no_writes - 1] == "(allow default)"
+    assert lines.index(deny) < lines.index(f'(allow file-read* file-write* (subpath "{tmp_path / "run"}"))')
+
+
+def test_the_developer_tools_are_on_the_path_only_where_xcode_select_names_them(tmp_path, monkeypatch):
+    tools = tmp_path / "Developer" / "usr" / "bin"
+    tools.mkdir(parents=True)
+    monkeypatch.setattr(room, "_denied", lambda: (tmp_path / "home",))
+    calls = []
+    answer = lambda out, code=0: lambda *a, **k: calls.append(k.get("env")) or subprocess.CompletedProcess(a, code, out, "")
+    monkeypatch.setattr(room.subprocess, "run", answer(f"{tmp_path / 'Developer'}\n"))
+    assert room._developer_bin() == [str(tools.resolve())]
+    assert calls == [{}]  # the system's choice, not the caller's DEVELOPER_DIR
+    monkeypatch.setattr(room.subprocess, "run", answer(f"{tmp_path / 'gone'}\n"))
+    assert room._developer_bin() == []
+    monkeypatch.setattr(room.subprocess, "run", answer(""))  # no developer directory selected
+    assert room._developer_bin() == []
+    monkeypatch.setattr(room.subprocess, "run", answer(f"{tmp_path / 'Developer'}\n", 2))  # xcode-select failed
+    assert room._developer_bin() == []
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(room.subprocess, "run", answer("Developer\n"))  # relative
+    assert room._developer_bin() == []
+    (tmp_path / "home" / "Xcode" / "usr" / "bin").mkdir(parents=True)  # in a place the room denies
+    monkeypatch.setattr(room.subprocess, "run", answer(f"{tmp_path / 'home' / 'Xcode'}\n"))
+    assert room._developer_bin() == []
+    (tmp_path / "home" / "link").symlink_to(tmp_path / "Developer")  # through a denied place to an allowed one
+    monkeypatch.setattr(room.subprocess, "run", answer(f"{tmp_path / 'home' / 'link'}\n"))
+    assert room._developer_bin() == [str(tools.resolve())]
+
+    def missing(*a, **k):
+        raise FileNotFoundError("xcode-select")
+    monkeypatch.setattr(room.subprocess, "run", missing)
+    assert room._developer_bin() == []
 
 
 def test_seatbelt_profile_allows_the_runs_store_by_its_resolved_path(tmp_path, mac):
@@ -206,7 +244,7 @@ class Tool:
 def test_a_real_seatbelt_room_hides_the_home_and_keeps_the_runs_work(tmp_path, monkeypatch):
     script = tmp_path / "tool.sh"
     script.write_text('#!/bin/sh\nls "$REAL_HOME" >/dev/null 2>&1 && echo "home: listed" || echo "home: denied"\n'
-                      'echo "cwd: $(pwd)"\necho made > made.txt\nrm gone.txt\n')
+                      'echo "cwd: $(pwd)"\necho made > made.txt\nrm gone.txt\necho tmp > "$TMPDIR/t" && echo "tmp: written"\n')
     script.chmod(0o755)
     work = project(tmp_path)
     real = Real(tmp_path, tmp_path, script)
@@ -217,11 +255,29 @@ def test_a_real_seatbelt_room_hides_the_home_and_keeps_the_runs_work(tmp_path, m
         out = proc.stdout
         config = r.config(Tool(script))
         assert (config / "login").exists()
-    assert "home: denied" in out
+    assert "home: denied" in out and "tmp: written" in out
     assert f"cwd: {r.inside_work}" in out
     assert "getcwd" not in proc.stderr  # started from a directory the room cannot read
     assert (work / "made.txt").read_text() == "made\n" and not (work / "gone.txt").exists()
     assert not config.exists()
+
+
+@pytest.mark.skipif(HOST != "darwin", reason="runs sandbox-exec")
+def test_a_real_seatbelt_room_cannot_write_outside_the_room(tmp_path, monkeypatch):
+    outside = next((p for p in ("/opt/homebrew", "/Applications", "/Library/Caches", "/usr/local")
+                    if os.access(p, os.W_OK)), None)  # a place the user may write, outside the room
+    if outside is None:
+        pytest.skip("no place outside the room that this user may write, so a denied write would prove nothing")
+    script = tmp_path / "tool.sh"
+    script.write_text('#!/bin/sh\nf=$(mktemp "$OUTSIDE/.tare-test.XXXXXX" 2>/dev/null) && { rm -f "$f"; echo "outside: written"; }'
+                      ' || echo "outside: denied"\n')
+    script.chmod(0o755)
+    real = Real(tmp_path, tmp_path, script)
+    monkeypatch.setattr(sys, "platform", HOST)
+    with Seatbelt().open(Tool(script), real, project(tmp_path)) as r:
+        argv = Seatbelt().argv(r, Tool(script), real, ["tool"], {"OUTSIDE": outside})
+        out = subprocess.run(argv, capture_output=True, text=True, timeout=60, cwd=Path.home()).stdout
+    assert "outside: denied" in out
 
 
 def test_the_probe_looks_for_the_places_macos_keeps_and_for_the_pasteboard(tmp_path, monkeypatch, mac):

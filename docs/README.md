@@ -11,6 +11,7 @@ hold the details, one topic each.
 | [The words tare uses](words.md) | Room, probe, reading, leak, control run, and the words of the measuring tools |
 | [Running agents in rooms](running-agents.md) | Every command and flag, exit codes, what the room keeps out, the login lifetime |
 | [Reading a probe](probe.md) | What each line of a reading means, what a leak looks like, when a probe is blind |
+| [Tools in a room](tools.md) | What the room has for installing tools, what lasts after a run, and what a browser needs there |
 
 ## Measuring agents
 

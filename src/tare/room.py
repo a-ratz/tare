@@ -153,8 +153,9 @@ class Seatbelt:
             _clone(work, clone)
             before = _state(clone)
             (base / "tmp").mkdir()
+            path, tmp = ":".join([f"{base}/opt/agent", *_developer_bin(), "/usr/bin", "/bin"]), str(base / "tmp")
             room = Room(base / "home", work, run, str(base / "home"), str(clone), str(run) if run else ROOM_RUN,
-                        {"PATH": f"{base}/opt/agent:/usr/bin:/bin", "TMPDIR": str(base / "tmp")})
+                        {"PATH": path, "TMPDIR": tmp, **_browser_env(tmp)})
             room.config(agent).mkdir(parents=True)
             agent.seed(real, room.config(agent), room)
             yield room
@@ -196,15 +197,49 @@ def _user_dir() -> Path:
     return Path(out.strip()).resolve().parent
 
 
+def _browser_env(tmp: str) -> dict[str, str]:
+    """What a Chromium browser needs in a Seatbelt room. It takes the user's temporary directory, which
+    the profile denies, unless MAC_CHROMIUM_TMPDIR names another (it ignores TMPDIR). Its own sandbox
+    cannot start inside the room's, as no Seatbelt profile can, so agent-browser gets --no-sandbox
+    (Playwright passes it anyway)."""
+    return {"MAC_CHROMIUM_TMPDIR": tmp, "AGENT_BROWSER_ARGS": "--no-sandbox"}
+
+
+def _developer_bin() -> list[str]:
+    """The active developer directory's usr/bin, where git, python3 and make run as themselves. Those in
+    /usr/bin are shims that ask xcrun, whose cache lives in the user's temporary directory: in a room
+    each call would print that it cannot write the cache. The system's choice only (`xcode-select -s`,
+    not the caller's DEVELOPER_DIR), and never a place the room denies, such as the home."""
+    try:
+        found = subprocess.run(["/usr/bin/xcode-select", "-p"], capture_output=True, text=True, timeout=10, env={})
+    except (OSError, subprocess.SubprocessError):
+        return []
+    tools = Path(found.stdout.strip(), "usr", "bin")
+    if found.returncode or not tools.is_absolute() or not tools.is_dir():
+        return []
+    resolved = tools.resolve()  # what Seatbelt matches, and no detour through a denied place on PATH
+    return [] if any(resolved.is_relative_to(Path(d).resolve()) for d in _denied()) else [str(resolved)]
+
+
+def _denied() -> tuple:
+    """Where a Seatbelt room may neither read nor write: the home, the user's directory under
+    /var/folders, and the places other programs share."""
+    return (Path.home().resolve(), _user_dir(), "/private/tmp", "/private/var/tmp", "/Users/Shared")
+
+
 def profile(room: Room) -> str:
-    """The Seatbelt profile of a room. The last matching rule wins, so it denies broadly, then allows the room."""
+    """The Seatbelt profile of a room. The last matching rule wins, so it denies broadly, then allows the room.
+    Reading stays open outside the denied places; writing does not (devices aside)."""
     base = room.home.parent
 
     def q(path) -> str:  # an SBPL string
         return json.dumps(str(path), ensure_ascii=False)
 
-    denied = (Path.home().resolve(), _user_dir(), "/private/tmp", "/private/var/tmp", "/Users/Shared")
+    denied = _denied()
     rules = ["(version 1)", "(allow default)",
+             # writes stay in the room, as in bubblewrap's: an install outside it (Homebrew, /Applications)
+             # would change the user's machine
+             '(deny file-write* (subpath "/"))', '(allow file-write* (subpath "/dev"))',
              f"(deny file-read* file-write* {' '.join(f'(subpath {q(p)})' for p in denied)})",
              # the pasteboard holds whatever the user copied last
              '(deny mach-lookup (global-name "com.apple.pasteboard.1"))',
