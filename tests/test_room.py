@@ -142,6 +142,8 @@ def test_bwrap_clears_the_environment_down_to_the_allowlist(tmp_path, monkeypatc
     assert "SOME_API_KEY" not in env
     assert env["TERM"] == "xterm" and env["HOME"] == room.ROOM_HOME
     assert env["ANTHROPIC_BASE_URL"] == "http://f" and env["ENABLE_TOOL_SEARCH"] == "true"
+    assert env["PATH"] == "/opt/agent:/usr/bin:/bin"
+    assert "MAC_CHROMIUM_TMPDIR" not in env and "AGENT_BROWSER_ARGS" not in env  # what a macOS room adds
     assert argv[-3:] == ["--", "/opt/agent/claude", "-p"]
     # nothing of the real home is mounted: /home is a tmpfs, only the room's own home sits on it
     assert any(argv[i:i + 2] == ["--tmpfs", "/home"] for i in range(len(argv)))

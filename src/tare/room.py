@@ -153,8 +153,9 @@ class Seatbelt:
             _clone(work, clone)
             before = _state(clone)
             (base / "tmp").mkdir()
+            path, tmp = ":".join([f"{base}/opt/agent", *_developer_bin(), "/usr/bin", "/bin"]), str(base / "tmp")
             room = Room(base / "home", work, run, str(base / "home"), str(clone), str(run) if run else ROOM_RUN,
-                        {"PATH": f"{base}/opt/agent:/usr/bin:/bin", "TMPDIR": str(base / "tmp")})
+                        {"PATH": path, "TMPDIR": tmp, **_browser_env(tmp)})
             room.config(agent).mkdir(parents=True)
             agent.seed(real, room.config(agent), room)
             yield room
@@ -194,6 +195,26 @@ def _user_dir() -> Path:
     """The user's directory under /var/folders: its T and C hold other programs' temporary files and caches."""
     out = subprocess.run(["getconf", "DARWIN_USER_DIR"], capture_output=True, text=True, check=True).stdout
     return Path(out.strip()).resolve().parent
+
+
+def _browser_env(tmp: str) -> dict[str, str]:
+    """What a Chromium browser needs in a Seatbelt room. It takes the user's temporary directory, which
+    the profile denies, unless MAC_CHROMIUM_TMPDIR names another (it ignores TMPDIR). Its own sandbox
+    cannot start inside the room's, as no Seatbelt profile can, so agent-browser gets --no-sandbox
+    (Playwright passes it anyway)."""
+    return {"MAC_CHROMIUM_TMPDIR": tmp, "AGENT_BROWSER_ARGS": "--no-sandbox"}
+
+
+def _developer_bin() -> list[str]:
+    """The active developer directory's usr/bin, where git, python3 and make run as themselves. Those in
+    /usr/bin are shims that ask xcrun, whose cache lives in the user's temporary directory: in a room
+    each call would print that it cannot write the cache."""
+    try:
+        out = subprocess.run(["/usr/bin/xcode-select", "-p"], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    tools = Path(out.strip(), "usr", "bin")
+    return [str(tools)] if out.strip() and tools.is_dir() else []
 
 
 def profile(room: Room) -> str:

@@ -21,6 +21,7 @@ def mac(monkeypatch, tmp_path):
     monkeypatch.setattr(room, "SEATBELT_ROOMS", str(tmp_path / "rooms"))
     monkeypatch.setattr(room, "_user_dir", lambda: Path("/private/var/folders/xy/user"))
     monkeypatch.setattr(probe, "_user_dir", room._user_dir)
+    monkeypatch.setattr(room, "_developer_bin", lambda: ["/Library/Developer/CommandLineTools/usr/bin"])
     (tmp_path / "rooms").mkdir()
     return tmp_path
 
@@ -140,8 +141,9 @@ def test_seatbelt_argv_clears_the_environment_and_runs_the_clone_in_the_work_clo
     assert argv[4:6] == ["/usr/bin/env", "-i"]
     env = dict(a.split("=", 1) for a in argv[6:argv.index("/usr/bin/sandbox-exec")])
     assert env["HOME"] == str(base / "home")
-    assert env["PATH"] == f"{base}/opt/agent:/usr/bin:/bin"
-    assert env["TMPDIR"] == env["CLAUDE_CODE_TMPDIR"] == str(base / "tmp")
+    assert env["PATH"] == f"{base}/opt/agent:/Library/Developer/CommandLineTools/usr/bin:/usr/bin:/bin"
+    assert env["TMPDIR"] == env["CLAUDE_CODE_TMPDIR"] == env["MAC_CHROMIUM_TMPDIR"] == str(base / "tmp")
+    assert env["AGENT_BROWSER_ARGS"] == "--no-sandbox"
     assert env["CLAUDE_CONFIG_DIR"] == str(base / "home/.claude-config")
     assert env["ANTHROPIC_BASE_URL"] == "http://fake"
     assert argv[-3:] == [f"{base}/opt/agent/claude", "-p", "hi"]
@@ -163,6 +165,23 @@ def test_seatbelt_profile_denies_the_home_and_shared_places_and_allows_the_room(
     no_writes = lines.index('(deny file-write* (subpath "/"))')
     assert no_writes < lines.index('(allow file-write* (subpath "/dev"))') < allow
     assert lines[no_writes - 1] == "(allow default)"
+
+
+def test_the_developer_tools_are_on_the_path_only_where_xcode_select_names_them(tmp_path, monkeypatch):
+    tools = tmp_path / "Developer" / "usr" / "bin"
+    tools.mkdir(parents=True)
+    answer = lambda out: lambda *a, **k: subprocess.CompletedProcess(a, 0, out, "")
+    monkeypatch.setattr(room.subprocess, "run", answer(f"{tmp_path / 'Developer'}\n"))
+    assert room._developer_bin() == [str(tools)]
+    monkeypatch.setattr(room.subprocess, "run", answer(f"{tmp_path / 'gone'}\n"))
+    assert room._developer_bin() == []
+    monkeypatch.setattr(room.subprocess, "run", answer(""))  # no developer directory selected
+    assert room._developer_bin() == []
+
+    def missing(*a, **k):
+        raise FileNotFoundError("xcode-select")
+    monkeypatch.setattr(room.subprocess, "run", missing)
+    assert room._developer_bin() == []
 
 
 def test_seatbelt_profile_allows_the_runs_store_by_its_resolved_path(tmp_path, mac):
