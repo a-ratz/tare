@@ -22,6 +22,7 @@ tare probe codex                   # the same for Codex, Pi and the Antigravity 
 tare codex -- exec -m MODEL "..."  # one-shot Codex run: arguments after -- go to codex
 tare pi                            # Pi in a room
 tare agy                           # the Antigravity CLI in a room
+tare copilot                       # the GitHub Copilot CLI in a room
 tare prices update                 # fetch the price table for costs an agent does not report
 ```
 

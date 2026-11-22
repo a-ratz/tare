@@ -15,7 +15,7 @@
 [![PyPI][version-shield]][version-url]
 [![Python 3.11+][python-shield]][python-url]
 [![Linux | WSL | macOS][platform-shield]][platform-url]
-[![Claude Code | Codex | Pi | Antigravity][agent-shield]][agent-url]
+[![Claude Code | Codex | Pi | Antigravity | Copilot][agent-shield]][agent-url]
 
 </div>
 
@@ -38,7 +38,7 @@ your machine, not the skill.
 
 **tare** starts the agent in a room that holds nothing of yours and proves the room is clean
 before every run. It works with Claude Code, Codex, Pi and Google's Antigravity CLI on Linux and
-WSL, and with the first three on macOS.
+WSL, with the first three on macOS, and with the GitHub Copilot CLI on macOS (not tested on Linux yet).
 
 ```text
 $ tare probe claude
@@ -127,7 +127,8 @@ and open a live dashboard that leads with the answer:
 ## Status
 
 tare is on PyPI as `tare-cli`. Claude Code, Codex and Pi run on Linux, WSL and macOS; the
-Antigravity CLI runs on Linux and WSL, and stops with a message on macOS for now. What comes next
+Antigravity CLI runs on Linux and WSL, and stops with a message on macOS for now; the GitHub
+Copilot CLI runs on macOS, in rooms and in Calibrate, not yet in Cliff and Swap. What comes next
 is in the [open epics](https://github.com/a-ratz/tare/issues?q=is%3Aissue+is%3Aopen+label%3Atype%3Aepic).
 
 ## Contributing
@@ -152,5 +153,5 @@ Crafted with [Readme Craft](https://github.com/motiful/readme-craft)
 [python-url]: https://www.python.org/
 [platform-shield]: https://img.shields.io/badge/platform-Linux%20%7C%20WSL%20%7C%20macOS-555555.svg
 [platform-url]: https://github.com/a-ratz/tare/blob/main/docs/install.md
-[agent-shield]: https://img.shields.io/badge/agents-Claude%20Code%20%7C%20Codex%20%7C%20Pi%20%7C%20Antigravity-D97757.svg
+[agent-shield]: https://img.shields.io/badge/agents-Claude%20Code%20%7C%20Codex%20%7C%20Pi%20%7C%20Antigravity%20%7C%20Copilot-D97757.svg
 [agent-url]: https://github.com/a-ratz/tare/blob/main/docs/install.md

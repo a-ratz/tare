@@ -1,6 +1,6 @@
 # tare
 
-tare starts a coding agent (Claude Code, Codex, Pi or the Antigravity CLI) in a room without the
+tare starts a coding agent (Claude Code, Codex, Pi, the Antigravity CLI or the GitHub Copilot CLI) in a room without the
 user's personal setup, and proves the room clean before the run. The room is a sandbox
 (bubblewrap on Linux and WSL, Seatbelt on macOS) with an empty home directory, a fresh copy of
 the login and a cleared environment. The proof is a probe that asks the agent nothing. The real
@@ -53,7 +53,7 @@ Contributors also meet these terms in the code:
 | `src/tare/usage.py` | tokens and cost: the shape every adapter reads its stream into, totals, price tables and estimates |
 | `src/tare/uses.py` | skills and tools: what every adapter counts from its stream (skills loaded, tools called), the totals per side, the report lines |
 | `src/tare/judge.py` | the judge check: render the page in a room, score it in a room without agent or model names (so the judge cannot favour either), measure how far the scores vary |
-| `src/tare/fake.py` | the fake model server (Anthropic Messages for Claude Code and Pi, OpenAI Responses for Codex, Google's Cloud Code API for the Antigravity CLI) |
+| `src/tare/fake.py` | the fake model server (Anthropic Messages for Claude Code, Pi and the Copilot CLI, OpenAI Responses for Codex, Google's Cloud Code API for the Antigravity CLI) |
 | `tests/` | pytest. Needs no agent, no login and no network. |
 | `experiments/` | pre-registered measurements (`PLAN.md` before the runs, `RESULTS.md` after) |
 | `prototypes/` | the first bwrap room, kept as the record |
