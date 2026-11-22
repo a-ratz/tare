@@ -229,3 +229,37 @@ def test_a_process_left_writing_does_not_crash_tare_at_exit(tmp_path):
         except ProcessLookupError:
             pass  # it ended on the closed pipe when tare exited
         assert proc.returncode == 0, proc.stderr.decode(errors="replace")[-300:]
+
+
+def test_stdout_and_stderr_into_one_file_stay_in_order(tmp_path):
+    import subprocess
+    import sys
+    with (tmp_path / "log").open("w") as log:
+        subprocess.run([sys.executable, "-c", ATTACHED, "/bin/sh", "-c", "echo one; echo two >&2; echo three"],
+                       stdout=log, stderr=subprocess.STDOUT, timeout=30)
+    assert (tmp_path / "log").read_text() == "one\ntwo\nthree\n"
+
+
+def test_a_pump_reports_a_failed_write_and_not_a_closed_file(tmp_path):
+    import io
+    import subprocess
+    from tare.capsule import _pump
+
+    class Full(io.RawIOBase):
+        def writable(self):
+            return True
+
+        def write(self, b):
+            raise OSError(28, "No space left on device")
+    failures = []
+    proc = subprocess.Popen(["/bin/sh", "-c", "echo x"], stdout=subprocess.PIPE)
+    _pump(proc.stdout, Full(), failures)
+    proc.wait()
+    assert [e.errno for e in failures] == [28]
+    closed = io.BytesIO()
+    closed.close()
+    failures = []
+    proc = subprocess.Popen(["/bin/sh", "-c", "echo x"], stdout=subprocess.PIPE)
+    _pump(proc.stdout, closed, failures)
+    proc.wait()
+    assert failures == []

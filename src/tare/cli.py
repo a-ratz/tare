@@ -54,23 +54,26 @@ def _run_attached(argv: list[str]) -> int:
             if stream:
                 stream.flush()
         pipe = {fd: subprocess.PIPE if to_file[fd] else None for fd in (0, 1, 2)}
-        # no `with`: the threads own the pipes and close them; the main thread never waits on them
-        proc = subprocess.Popen(argv, stdin=pipe[0], stdout=pipe[1], stderr=pipe[2])
+        if to_file[1] and to_file[2] and _same_file(1, 2):  # `> log 2>&1`: one pipe keeps their order
+            pipe[2], to_file[2] = subprocess.STDOUT, False
         # the pumps write to copies of tare's descriptors, closed below: a pump that a process left
         # behind keeps busy then stops, instead of holding sys.stdout's lock at interpreter shutdown
         targets = {fd: os.fdopen(os.dup(fd), "wb") for fd in (1, 2) if to_file[fd]}
-        pumps = []
+        pumps, failures = [], []
         try:
-            pumps = [threading.Thread(target=_pump, args=(source, targets[fd]), daemon=True)
-                     for fd, source in ((1, proc.stdout), (2, proc.stderr)) if source]
-            feed = [threading.Thread(target=_feed, args=(sys.stdin.buffer, proc.stdin), daemon=True)] if proc.stdin else []
-            for thread in pumps + feed:
-                thread.start()
-            return proc.wait()
-        except BaseException:  # SIGTERM or SIGHUP (SystemExit): the agent ends before its room does
-            proc.kill()
-            proc.wait()
-            raise
+            # no `with`: the threads own the pipes and close them; the main thread never waits on them
+            proc = subprocess.Popen(argv, stdin=pipe[0], stdout=pipe[1], stderr=pipe[2])
+            try:
+                pumps = [threading.Thread(target=_pump, args=(source, targets[fd], failures), daemon=True)
+                         for fd, source in ((1, proc.stdout), (2, proc.stderr)) if source]
+                feed = [threading.Thread(target=_feed, args=(sys.stdin.buffer, proc.stdin), daemon=True)] if proc.stdin else []
+                for thread in pumps + feed:
+                    thread.start()
+                return proc.wait()
+            except BaseException:  # SIGTERM or SIGHUP (SystemExit): the agent ends before its room does
+                proc.kill()
+                proc.wait()
+                raise
         finally:
             _join(pumps)  # the rest of the output
             for target in targets.values():
@@ -78,8 +81,18 @@ def _run_attached(argv: list[str]) -> int:
                     target.close()
                 except (OSError, ValueError):
                     pass
+            if failures and sys.stderr:
+                print(f"tare: the agent's redirected output is incomplete: {failures[0]}", file=sys.stderr)
     finally:
         signal.signal(signal.SIGINT, previous)
+
+
+def _same_file(a: int, b: int) -> bool:
+    try:
+        x, y = os.fstat(a), os.fstat(b)
+    except OSError:
+        return False
+    return (x.st_dev, x.st_ino) == (y.st_dev, y.st_ino)
 
 
 def _is_file(fd: int) -> bool:
