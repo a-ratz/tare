@@ -311,13 +311,18 @@ stream tare cannot read leaves the run without counts and never fails it.
 A skill counts as loaded when the agent invoked it (Claude Code's `Skill` tool, whose input names
 the skill) or read its `SKILL.md`. Codex has no skill tool and reads the file with a shell command,
 Pi and the Antigravity CLI read it with their read tools, and Claude Code may read one too. The
-skill's name is the folder that holds the `SKILL.md`, unless the name holds a character of a
-pattern, an expansion or shell syntax (`*?[]{}$`, a backtick, `~()!`). tare reads a shell command as
-the shell reads it: quotes and escapes resolved, a heredoc's body left out (it is written, not
-read), and the argument of a shell's `-c` read as a command again. Each word that names a
-`SKILL.md` counts its folder, each skill once per command, whatever the command does with the file
-(a `cat`, but also an `rm`). A glob (`skills/*/SKILL.md`), a variable, a command substitution, `~`,
-a relative `./SKILL.md` or a quoted sentence that ends in one gives no name. A write to a
+skill's name is the folder that holds the `SKILL.md`. From a read tool's path the folder counts
+whatever it is called, unless the name holds a character of a pattern, an expansion or shell syntax
+(`*?[]{}$`, a backtick, `~()!`). tare does not parse a shell command; it looks for a `SKILL.md`
+whose folder is named the way skills are named (ASCII letters, digits, `_ . -`) and starts after a
+separator. So `$DIR/SKILL.md`, `$(pwd)/SKILL.md`, `skills/*/SKILL.md`, `~/SKILL.md` and
+`./SKILL.md` name no skill, `if=x/SKILL.md` or `HEAD:x/SKILL.md` name `x`, and a command names each
+skill once. A command counts whatever it does with the file (a `cat`, but also an `rm`), and a
+`SKILL.md` named in a comment or a heredoc counts too. A folder name with a space or a letter
+outside ASCII comes through only from a read tool: a shell command gives the last word of the one
+and nothing for the other. Two rounds of a shell parser built on shlex showed why: comments,
+heredocs and long quoted words each broke it in a new way, while skill names keep to the narrow
+form. A write to a
 `SKILL.md` through a write or edit tool is not a load, nor is a `SKILL.md.bak`. The count
 says nothing about whether the agent then followed the skill: it says loaded, not followed. The
 Calibrate report gives per side how many runs loaded each skill and how often per run, and the

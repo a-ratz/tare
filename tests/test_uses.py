@@ -1,4 +1,5 @@
 import json
+import time
 from pathlib import Path
 
 from tare import calibrate as cal
@@ -58,9 +59,14 @@ def test_a_run_whose_stream_is_missing_counts_nothing(tmp_path):
 
 def test_a_skill_name_is_the_folder_that_holds_the_file_and_never_a_dot_a_glob_or_a_backup():
     reads = {"./SKILL.md": [], "../SKILL.md": [], "cat skills/greet/SKILL.md.bak": [], "cat x/SKILL.md-old": [],
-             "ls skills/*/SKILL.md": [], "cat $DIR/SKILL.md": [], "cat ~/SKILL.md": [], "git show HEAD:greet/SKILL.md": ["greet"],
-             "test -f x/SKILL.md && cat x/SKILL.md": ["x"], "cat .agents/skills/grüße/SKILL.md": ["grüße"],
-             "/bin/zsh -lc 'cat .agents/skills/greet/SKILL.md'": ["greet"]}
+             "cat x/SKILL.md~": [], "ls skills/*/SKILL.md": [], "cat $DIR/SKILL.md": [], "cat ~/SKILL.md": [],
+             "cat $(pwd)/SKILL.md": [], 'cat "$(dirname /work/foo)/SKILL.md"': [], "rg -g '!greet/SKILL.md' x": [],
+             "git show HEAD:greet/SKILL.md": ["greet"], "test -f x/SKILL.md && cat x/SKILL.md": ["x"],
+             "/bin/zsh -lc 'cat .agents/skills/greet/SKILL.md'": ["greet"], 'bash -cl "cat a/SKILL.md b/SKILL.md"': ["a", "b"],
+             "dd if=greet/SKILL.md": ["greet"], "cat <greet/SKILL.md": ["greet"], "echo hi;cat greet/SKILL.md": ["greet"],
+             "x=${p#*/} && cat .agents/skills/greet/SKILL.md": ["greet"],
+             "# Check the skill's instructions\ncat \".agents/skills/greet/SKILL.md\"": ["greet"],
+             "python3 -c 'print(1 << 10)'\ncat .agents/skills/greet/SKILL.md\ncat <<EOF > e.txt\n1\nEOF": ["greet"]}
     assert {command: used.skill_reads(command) for command in reads} == reads
     assert used.skill_read("/work/.agents/skills/my skill/SKILL.md") == "my skill"
     assert used.skill_read("/work/skills/ns:greet/SKILL.md") == "ns:greet"
@@ -68,26 +74,21 @@ def test_a_skill_name_is_the_folder_that_holds_the_file_and_never_a_dot_a_glob_o
     assert used.skill_read("/work/skills/greet/SKILL.md.bak") is None
 
 
-def test_a_shell_command_is_read_as_the_shell_reads_it():
-    reads = {'cat "skills/my skill/SKILL.md"': ["my skill"], "cat skills/my\\ skill/SKILL.md": ["my skill"],
-             "cat $(pwd)/SKILL.md": [], 'cat $(dirname "$0")/SKILL.md': [], "FILE=greet/SKILL.md cat $FILE": ["greet"],
-             "dd if=greet/SKILL.md": ["greet"], "tool --path=greet/SKILL.md": ["greet"], "cat <greet/SKILL.md": ["greet"],
-             "echo hi;cat greet/SKILL.md": ["greet"], 'bash -c "cat a/SKILL.md b/SKILL.md"': ["a", "b"],
-             "cat <<EOF\ndon't\nEOF\ncat x/SKILL.md": ["x"]}
-    assert {command: used.skill_reads(command) for command in reads} == reads
+def test_the_limits_of_reading_shell_commands_without_parsing_the_shell():
+    # a SKILL.md named in a comment or a heredoc counts, a quoted name with a space gives its last
+    # word, and a name outside ASCII gives none (CONCEPT.md, "Skills and tools")
+    assert used.skill_reads("# already read .agents/skills/greet/SKILL.md\nls") == ["greet"]
+    assert used.skill_reads("cat <<EOF > notes.md\nsee a/SKILL.md\nEOF") == ["a"]
+    assert used.skill_reads('cat "skills/my skill/SKILL.md"') == ["skill"]
+    assert used.skill_reads("cat .agents/skills/grüße/SKILL.md") == []
 
 
-def test_heredoc_bodies_shell_flags_and_prose_name_no_skill():
-    reads = {"cat <<EOF\nread a/SKILL.md\nEOF\ncat b/SKILL.md": ["b"],  # a heredoc's body is written, not read
-             '/bin/zsh -lc "cat << \'EOF\' > a.txt\ndon\'t\nEOF\ncat .agents/skills/greet/SKILL.md\ncat << \'EOF\' > b.txt\nwon\'t\nEOF"': ["greet"],
-             "bash -cl 'cat a/SKILL.md b/SKILL.md'": ["a", "b"], "sh -ce 'cat greet/SKILL.md'": ["greet"],
-             'wc -c ".agents/skills/my skill/SKILL.md"': ["my skill"],  # -c of a program that is no shell
-             'cat "$(dirname /work/foo)/SKILL.md"': [], "x=${p#*/} && cat .agents/skills/greet/SKILL.md": ["greet"],
-             'git commit -m "Update greet/SKILL.md"': [], 'echo "a/SKILL.md and b/SKILL.md"': [],
-             "rg -g '!greet/SKILL.md' hello": []}
-    assert {command: used.skill_reads(command) for command in reads} == reads
-    big = '/bin/zsh -lc "cat <<EOF > out.txt && cat a/SKILL.md\n' + ("x" * 80 + "\n") * 13000 + 'EOF"'
-    assert used.skill_reads(big) == ["a"]  # quick: the body is gone before the words are read
+def test_a_long_command_is_read_in_linear_time():
+    body = ("x" * 80 + "\n") * 13000
+    start = time.monotonic()
+    assert used.skill_reads('/bin/zsh -lc "cat <<EOF > o.txt\n' + body + 'EOF\ncat a/SKILL.md"') == ["a"]
+    assert used.skill_reads("abc-" * 250000 + " b/SKILL.md") == ["b"]
+    assert time.monotonic() - start < 1
 
 
 def test_calls_without_ids_or_names_and_lines_of_another_shape_neither_vanish_nor_break_the_count(tmp_path, capsys):
