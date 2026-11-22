@@ -25,6 +25,7 @@ from . import trail as trails
 from .fake import FAKE_MODEL
 from .room import TareError
 from .usage import Usage
+from .uses import Uses
 
 PROMPT = "say ok"
 
@@ -275,6 +276,22 @@ class Claude:
                           top.get("canonicalModel"))
         return _one_run(u)
 
+    def uses(self, stdout: str) -> Uses:
+        """From the tool_use blocks of the assistant events, each once by its id. A Skill call names
+        its skill in `skill`; a Read or Bash call may read a SKILL.md."""
+        u, seen = Uses(), set()
+        for e in events(stdout):
+            if e.get("type") != "assistant":
+                continue
+            for block in (e.get("message") or {}).get("content") or []:
+                if block.get("type") != "tool_use" or block.get("id") in seen:
+                    continue
+                seen.add(block.get("id"))
+                name, args = block.get("name", "?"), block.get("input") or {}
+                reads = str(args.get("file_path") or "") if name == "Read" else str(args.get("command") or "") if name == "Bash" else ""
+                u.call(name, reads, str(args.get("skill") or "?") if name == "Skill" else None)
+        return u
+
     def activity(self, event: dict) -> str | None:
         """What one line of the live stream (stream-json) shows, for the dashboard."""
         if event.get("type") == "result":
@@ -432,6 +449,24 @@ class Codex:
                               n.get("cache_write_input_tokens", 0), n.get("output_tokens", 0),
                               n.get("reasoning_output_tokens", 0))
         return _one_run(u)
+
+    def uses(self, stdout: str) -> Uses:
+        """From the items of the stream, each once by its id. The stream names an item's kind, not
+        the tool behind it (`command_execution` for a shell command, `file_change` for a patch), and
+        an MCP call as server and tool. Codex reads a SKILL.md with a shell command."""
+        u, seen = Uses(), set()
+        for e in events(stdout):
+            item = e.get("item") or {}
+            if e.get("type") not in ("item.started", "item.completed") or item.get("id") in seen:
+                continue
+            if item.get("type") in (None, "agent_message", "reasoning", "error"):
+                continue
+            seen.add(item.get("id"))
+            kind = item["type"]
+            if kind == "mcp_tool_call":
+                kind = f"{item.get('server', '?')}.{item.get('tool', '?')}"
+            u.call(kind, str(item.get("command") or "") if kind == "command_execution" else "")
+        return u
 
     def activity(self, event: dict) -> str | None:
         """What one line of the live stream (--json) shows, for the dashboard."""
@@ -626,6 +661,18 @@ export default function (pi: any) {{
                           n.get("cacheWrite", 0), n.get("output", 0), n.get("reasoning", 0), cost, message.get("model"))
         return _one_run(u)
 
+    def uses(self, stdout: str) -> Uses:
+        """From the tool_execution_start events, each once by its call id. Pi reads a SKILL.md with
+        its read tool (or a shell command)."""
+        u, seen = Uses(), set()
+        for e in events(stdout):
+            if e.get("type") != "tool_execution_start" or e.get("toolCallId") in seen:
+                continue
+            seen.add(e.get("toolCallId"))
+            name, args = e.get("toolName", "?"), e.get("args") or {}
+            u.call(name, str(args.get("path") or "") if name == "read" else str(args.get("command") or "") if name == "bash" else "")
+        return u
+
     def activity(self, event: dict) -> str | None:
         """What one line of the live stream (--mode json) shows, for the dashboard."""
         kind = event.get("type")
@@ -774,6 +821,23 @@ class Antigravity:
                 u = u + Usage(n.get("input_tokens", 0), n.get("cache_read_tokens", 0), 0, n.get("output_tokens", 0),
                               n.get("thinking_tokens", 0))
         return _one_run(u)
+
+    # the tools that read files, and the parameter that names what they read
+    READS = {"read_file": "Path", "view_file": "AbsolutePath", "run_command": "CommandLine"}
+
+    def uses(self, stdout: str) -> Uses:
+        """From the tool steps of the stream, each once by its step index (a step is reported when
+        it starts and again when it is done). agy reads a SKILL.md with its read tool."""
+        u, seen = Uses(), set()
+        for e in events(stdout):
+            update = e.get("step_update") or {}
+            if update.get("step_type") != "tool" or update.get("step_index") in seen:
+                continue
+            seen.add(update.get("step_index"))
+            name = update.get("tool_name") or "?"
+            parameters = (update.get("tool_info") or {}).get("parameters") or {}
+            u.call(name, str(parameters.get(self.READS.get(name, ""), "")) if name in self.READS else "")
+        return u
 
     def activity(self, event: dict) -> str | None:
         """What one line of the live stream (--output-format stream-json) shows, for the dashboard."""

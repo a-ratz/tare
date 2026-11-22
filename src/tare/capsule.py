@@ -56,6 +56,7 @@ class Tail:
     detail: str
     usage: dict | None = None  # the agent's tokens and cost
     check_usage: dict | None = None  # what the check spent, for example a judge agent
+    uses: dict | None = None  # the skills the agent loaded and the tools it called
 
 
 def _contents(path: Path) -> dict[str, str]:
@@ -163,6 +164,15 @@ def read_usage(agent, log_dir: Path) -> dict | None:
     return agent.usage(stream.read_text(errors="replace") if stream.exists() else "").to_dict()
 
 
+def read_uses(agent, log_dir: Path) -> dict | None:
+    """The skills loaded and tools called in the run whose stream is in log_dir (None for an agent
+    that cannot tell)."""
+    stream = log_dir / "stdout.jsonl"
+    if not hasattr(agent, "uses"):
+        return None
+    return agent.uses(stream.read_text(errors="replace") if stream.exists() else "").to_dict()
+
+
 def read_check_usage(path: Path) -> dict | None:
     if not path.exists():
         return None
@@ -171,16 +181,17 @@ def read_check_usage(path: Path) -> dict | None:
 
 
 def _finish(tail_dir: Path, work: Path, step: int, ran: str, check: str, extra: dict | None = None,
-            keep: bool = False, usage: dict | None = None) -> Tail:
+            keep: bool = False, usage: dict | None = None, uses: dict | None = None) -> Tail:
     # without a check (calibrate only) a run counts when its agent ended normally
     log = tail_dir / "check-usage.jsonl"
     passed, detail = run_check(check, work, usage_log=log) if check else (ran == "agent exit 0", "no check")
     check_usage = read_check_usage(log)
     (tail_dir / "result.json").write_text(json.dumps({"step": step, "passed": passed, "agent": ran, "check": detail,
-                                                      "usage": usage, "check_usage": check_usage, **(extra or {})}))
+                                                      "usage": usage, "check_usage": check_usage, "uses": uses,
+                                                      **(extra or {})}))
     if not keep:
         shutil.rmtree(work, ignore_errors=True)
-    return Tail(step, passed, f"{ran}; {detail}", usage, check_usage)
+    return Tail(step, passed, f"{ran}; {detail}", usage, check_usage, uses)
 
 
 def run_tail(agent, real, out: Path, capsule: Capsule, prompt: str, args: list[str], check: str,
@@ -200,7 +211,8 @@ def run_tail(agent, real, out: Path, capsule: Capsule, prompt: str, args: list[s
             agent.place_session(room, sid, session_lines(out)[:capsule.cut])
             command = [agent.name, *agent.room_flags, *agent.resume_args(sid, CONTINUE, args)]
         ran = _run_in(room, agent, real, command, env, timeout, tail_dir)
-    return _finish(tail_dir, work, capsule.step, ran, check, keep=keep, usage=read_usage(agent, tail_dir))
+    return _finish(tail_dir, work, capsule.step, ran, check, keep=keep, usage=read_usage(agent, tail_dir),
+                   uses=read_uses(agent, tail_dir))
 
 
 def check_original(agent, out: Path, check: str) -> tuple[bool, str, dict]:
@@ -224,7 +236,7 @@ def run_handoff(agent, real, tail_dir: Path, capsule: Capsule, events: list[trai
         ran = _run_in(room, agent, real, [agent.name, *agent.room_flags, *agent.run_args(handoff, args, room=room)],
                       env, timeout, tail_dir)
     return _finish(tail_dir, work, capsule.step, ran, check, {"agent_name": agent.name},
-                   usage=read_usage(agent, tail_dir))
+                   usage=read_usage(agent, tail_dir), uses=read_uses(agent, tail_dir))
 
 
 # a check that runs an agent itself (tare judge) appends that agent's usage to this file

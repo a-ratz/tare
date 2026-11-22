@@ -295,6 +295,30 @@ subscription login is marked, because its cost is notional.
 **Measured:** a calibrate run with one Haiku run, one Codex run with gpt-6.1-sol and a Sonnet
 judge read 186.4k tokens in and $0.093 in total, the Codex part estimated from LiteLLM's table.
 
+### Skills and tools
+
+For an evaluation with several skills, tare counts per run which skills the agent loaded and which
+tools it called. The counts come from the run's stream, not from its trail: every run keeps its
+stream (`stdout.jsonl`), and Calibrate keeps no session file. The stream shows each tool call with
+its arguments, and each call is counted once by its id, although some agents report a call when it
+starts and again when it is done. A tool's name is the name the stream gives it. Codex's stream
+names the kind of item instead of the tool (`command_execution` for a shell command, `file_change`
+for a patch), and an MCP call as server and tool.
+
+A skill counts as loaded when the agent invoked it (Claude Code's `Skill` tool, whose input names
+the skill) or read its `SKILL.md`. Codex has no skill tool and reads the file with a shell command,
+Pi and the Antigravity CLI read it with their read tools, and Claude Code may read one too. A read
+is a read tool's path or a shell command that names the file. The skill's name is the folder that
+holds the `SKILL.md`. A write to a `SKILL.md` through a write or edit tool is not a load. The count
+says nothing about whether the agent then followed the skill: it says loaded, not followed. Each run keeps its counts in its `result.json`.
+
+**Measured** on macOS 27.0.1, each agent asked to "Use the greet skill." in a project whose skill
+writes a file: Claude Code 2.1.330 in a room called `Skill` with `greet`, Codex 0.166.0 in a room ran
+`cat .agents/skills/greet/SKILL.md`, Pi 1.6.0 read `.pi/skills/greet/SKILL.md` with `read`, and the
+Antigravity CLI 1.5.13 read `.agents/skills/greet/SKILL.md` with `read_file`. Each counted one load
+of `greet`. Pi and the Antigravity CLI ran outside a room: Pi aborts in a macOS room (#172), and the
+Antigravity CLI is not supported there. The streams are kept in `tests/streams/`.
+
 ### Run directory, dashboard and recipes
 
 Calibrate, Swap and Cliff write everything into a run directory: a journal (one JSON line per
