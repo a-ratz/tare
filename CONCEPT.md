@@ -112,8 +112,10 @@ directory under `/var/folders` (other programs' temporary files and caches), the
 `/private/tmp` (where Claude Code keeps its temporary files), `/private/var/tmp`,
 `/Users/Shared` and the pasteboard. Then it allows the room. When the room closes, the run's
 changes to the clone are copied back to the project. A file the run did not touch stays as it
-is. On macOS, Claude Code keeps its login in the Keychain. tare reads it there the way Claude
-Code does and gives the room a copy as a file, which Claude Code uses when the room has no
+is. Sockets and pipes the run left (git's fsmonitor keeps one in `.git`) cannot be copied and are
+left out. Up to tare 0.5.0 the first one stopped the copy: the changes after it never reached the
+project, and the room stayed behind in `/private/tmp`.
+On macOS, Claude Code keeps its login in the Keychain. tare reads it there the way Claude Code does and gives the room a copy as a file, which Claude Code uses when the room has no
 Keychain item. No further Seatbelt profile can start inside a Seatbelt room, so the agents' own
 sandboxes do not work there. Codex runs without its sandbox anyway, and tare turns Claude Code's
 off in a macOS room, because a project that turns it on would make every Bash call fail there.
