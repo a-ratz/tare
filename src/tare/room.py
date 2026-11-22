@@ -197,7 +197,8 @@ def _user_dir() -> Path:
 
 
 def profile(room: Room) -> str:
-    """The Seatbelt profile of a room. The last matching rule wins, so it denies broadly, then allows the room."""
+    """The Seatbelt profile of a room. The last matching rule wins, so it denies broadly, then allows the room.
+    Reading stays open outside the denied places; writing does not (devices aside)."""
     base = room.home.parent
 
     def q(path) -> str:  # an SBPL string
@@ -205,6 +206,9 @@ def profile(room: Room) -> str:
 
     denied = (Path.home().resolve(), _user_dir(), "/private/tmp", "/private/var/tmp", "/Users/Shared")
     rules = ["(version 1)", "(allow default)",
+             # writes stay in the room, as in bubblewrap's: an install outside it (Homebrew, /Applications)
+             # would change the user's machine
+             '(deny file-write* (subpath "/"))', '(allow file-write* (subpath "/dev"))',
              f"(deny file-read* file-write* {' '.join(f'(subpath {q(p)})' for p in denied)})",
              # the pasteboard holds whatever the user copied last
              '(deny mach-lookup (global-name "com.apple.pasteboard.1"))',

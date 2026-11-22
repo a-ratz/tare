@@ -159,6 +159,10 @@ def test_seatbelt_profile_denies_the_home_and_shared_places_and_allows_the_room(
     allow = lines.index(f'(allow file-read* file-write* (subpath "{base}"))')
     assert lines.index(deny) < allow < lines.index(f'(deny file-write* (subpath "{base}/opt"))')
     assert f'(allow file-read* file-write* (subpath "{tmp_path / "run"}"))' in lines
+    # writes go nowhere outside the room but the devices; the room and the run's store come after
+    no_writes = lines.index('(deny file-write* (subpath "/"))')
+    assert no_writes < lines.index('(allow file-write* (subpath "/dev"))') < allow
+    assert lines[no_writes - 1] == "(allow default)"
 
 
 def test_seatbelt_profile_allows_the_runs_store_by_its_resolved_path(tmp_path, mac):
@@ -205,19 +209,23 @@ class Tool:
 @pytest.mark.skipif(HOST != "darwin", reason="runs sandbox-exec")
 def test_a_real_seatbelt_room_hides_the_home_and_keeps_the_runs_work(tmp_path, monkeypatch):
     script = tmp_path / "tool.sh"
+    outside = next((p for p in ("/opt/homebrew", "/Applications", "/Library/Caches", "/usr/local")
+                    if os.access(p, os.W_OK)), "/nowhere")  # a place the user may write, outside the room
     script.write_text('#!/bin/sh\nls "$REAL_HOME" >/dev/null 2>&1 && echo "home: listed" || echo "home: denied"\n'
-                      'echo "cwd: $(pwd)"\necho made > made.txt\nrm gone.txt\n')
+                      'echo "cwd: $(pwd)"\necho made > made.txt\nrm gone.txt\necho tmp > "$TMPDIR/t" && echo "tmp: written"\n'
+                      'f=$(mktemp "$OUTSIDE/.tare-test.XXXXXX" 2>/dev/null) && { rm -f "$f"; echo "outside: written"; }'
+                      ' || echo "outside: denied"\n')
     script.chmod(0o755)
     work = project(tmp_path)
     real = Real(tmp_path, tmp_path, script)
     monkeypatch.setattr(sys, "platform", HOST)  # the fixture pinned linux; this test needs the real one
     with Seatbelt().open(Tool(script), real, work) as r:
-        argv = Seatbelt().argv(r, Tool(script), real, ["tool"], {"REAL_HOME": str(Path.home())})
+        argv = Seatbelt().argv(r, Tool(script), real, ["tool"], {"REAL_HOME": str(Path.home()), "OUTSIDE": outside})
         proc = subprocess.run(argv, capture_output=True, text=True, timeout=60, cwd=Path.home())
         out = proc.stdout
         config = r.config(Tool(script))
         assert (config / "login").exists()
-    assert "home: denied" in out
+    assert "home: denied" in out and "outside: denied" in out and "tmp: written" in out
     assert f"cwd: {r.inside_work}" in out
     assert "getcwd" not in proc.stderr  # started from a directory the room cannot read
     assert (work / "made.txt").read_text() == "made\n" and not (work / "gone.txt").exists()
