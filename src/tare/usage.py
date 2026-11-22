@@ -91,15 +91,14 @@ def describe(u: "Usage | None") -> str:
         return "no usage recorded"
     runs = f"{u.runs} run{'s' if u.runs != 1 else ''}, "
     tokens = f"{_count(u.input)} in ({_count(u.cached)} cached), {_count(u.output)} out"
+    priced = u.runs - u.unpriced
+    part = f" for {priced} run{'s' if priced != 1 else ''}, cost unknown for {u.unpriced}" if u.unpriced else ""
     if u.cost_usd is None:
         cost = "cost unknown"
     elif u.estimated:
-        cost = f"about {money(u.cost_usd)} (estimated from {u.estimated})"
-    elif u.unpriced:
-        priced = u.runs - u.unpriced
-        cost = f"{money(u.cost_usd)} for {priced} run{'s' if priced != 1 else ''}, cost unknown for {u.unpriced}"
+        cost = f"about {money(u.cost_usd)}{part} (estimated from {u.estimated})"
     else:
-        cost = money(u.cost_usd)
+        cost = f"{money(u.cost_usd)}{part}"
     return f"{runs}{tokens}, {cost}"
 
 

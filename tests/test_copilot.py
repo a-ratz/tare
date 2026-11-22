@@ -473,3 +473,6 @@ def test_a_run_without_counts_stays_unpriced_beside_priced_runs_of_its_side(tmp_
                {"event": "original", "side": "a", "usage": empty.to_dict()}]
     side = of_run(events_)["sides"]["a"]["usage"]
     assert side["runs"] == 2 and side["unpriced"] == 1 and abs(side["cost_usd"] - (1000 * 1e-6 + 100 * 2e-6)) < 1e-12
+    from tare.usage import describe
+    assert describe(Usage.from_dict(side)).endswith(
+        "about $0.001 for 1 run, cost unknown for 1 (estimated from prices.json (test, 2026-11-22))")
