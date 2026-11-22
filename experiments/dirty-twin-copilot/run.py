@@ -3,6 +3,7 @@
 usage:
   uv run experiments/dirty-twin-copilot/run.py markers              # write markers.local.json, print hashes
   uv run experiments/dirty-twin-copilot/run.py run t0|t0off|t1|t1f|t2|r1
+  uv run experiments/dirty-twin-copilot/run.py run t2p               # post-hoc: T0 plus an enabled plugin
   uv run experiments/dirty-twin-copilot/run.py check                # score every run against the markers
 
 The fake is reached through Copilot's "bring your own key" variables (COPILOT_PROVIDER_BASE_URL,
@@ -39,6 +40,8 @@ PLANTED = {
     "K10": "tare-planted-agent",
     "K11": "tare-planted-mcp",
 }
+# post-hoc (RESULTS.md): every installed plugin of the user's is disabled, so T2p plants an enabled one
+PLUGIN, PLUGIN_SKILL = "tare-planted-plugin", "tare-planted-plugin-skill"
 MAC_TARGETS = [str(HOME / "Library" / p) for p in ("Keychains", "Preferences", "Application Support")]
 
 
@@ -96,6 +99,23 @@ def plant(copy: Path):
     (copy / "mcp-config.json").write_text(json.dumps({"mcpServers": servers}))
 
 
+def plant_plugin(copy: Path):
+    """T2p: an enabled plugin with one skill, in the copy only (the user's own plugins have hooks)."""
+    folder = copy / "installed-plugins" / "tare" / PLUGIN
+    (folder / ".claude-plugin").mkdir(parents=True)
+    (folder / ".claude-plugin" / "plugin.json").write_text(json.dumps(
+        {"name": PLUGIN, "description": "A plugin planted by tare's dirty-twin test.", "version": "1.0.0"}))
+    (folder / "skills" / PLUGIN_SKILL).mkdir(parents=True)
+    (folder / "skills" / PLUGIN_SKILL / "SKILL.md").write_text(
+        f"---\nname: {PLUGIN_SKILL}\ndescription: A plugin skill planted by tare's dirty-twin test.\n---\nDo nothing.\n")
+    text = (copy / "config.json").read_text()
+    data = json.loads("\n".join(line for line in text.splitlines() if not line.lstrip().startswith("//")))
+    data.setdefault("installedPlugins", []).append({
+        "name": PLUGIN, "marketplace": "tare", "installed_at": "2026-11-22T00:00:00.000Z", "enabled": True,
+        "version": "1.0.0", "cache_path": str(folder), "source_sha": ""})
+    (copy / "config.json").write_text(json.dumps(data))
+
+
 def gh_token(login: str) -> str:
     """The gh CLI's token for Copilot's own login: Copilot takes `gh auth token` too. Never printed."""
     token = subprocess.run(["gh", "auth", "token", "-u", login], capture_output=True, text=True).stdout.strip()
@@ -147,7 +167,7 @@ def run(condition: str):
         (work / "AGENTS.md").write_text(PROJECT_RULE + "\n")
         with Fake() as fake:
             byok = {"COPILOT_PROVIDER_BASE_URL": fake.url, "COPILOT_PROVIDER_TYPE": "anthropic", "COPILOT_MODEL": "tare-fake"}
-            if condition in ("t0", "t0off", "t2"):
+            if condition in ("t0", "t0off", "t2", "t2p"):
                 before = fingerprint(COPILOT_HOME, HOME / ".agents")
                 with tempfile.TemporaryDirectory(prefix="tare-copilot-twin-") as tmp:
                     copy, cache = Path(tmp) / "copilot", Path(tmp) / "cache"
@@ -155,6 +175,8 @@ def run(condition: str):
                     cache.mkdir()
                     if condition == "t2":
                         plant(copy)
+                    if condition == "t2p":
+                        plant_plugin(copy)
                     env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE")} | byok | {
                         "COPILOT_HOME": str(copy), "COPILOT_CACHE_HOME": str(cache)}
                     if condition == "t0off":
@@ -194,8 +216,8 @@ def text_of(condition: str) -> tuple[str, set[str]]:
 
 
 def check():
-    found = json.loads((HERE / "markers.local.json").read_text())
-    for c in ("t0", "t0off", "t1", "t1f", "t2", "r1"):
+    found = json.loads((HERE / "markers.local.json").read_text()) | {"K12": PLUGIN_SKILL}
+    for c in ("t0", "t0off", "t1", "t1f", "t2", "t2p", "r1"):
         out = HERE / "runs" / c
         if not (out / "exit").exists():
             continue
