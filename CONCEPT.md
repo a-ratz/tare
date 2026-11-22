@@ -4,15 +4,16 @@ tare starts a coding agent in an isolated room without your personal setup, and 
 clean before the run. It prints `tare: 0.00`, names every leak and where it came from, or says
 that it could not see your setup (`tare: not proven (blind)`). It refuses to start the agent
 until the reading is `tare: 0.00`, unless you pass `--allow-dirty`. It supports Claude Code, Codex, Pi
-and the Antigravity CLI (`agy`) on Linux and WSL, and Claude Code, Codex and Pi on macOS.
+and the Antigravity CLI (`agy`) on Linux and WSL, and Claude Code, Codex, Pi and the GitHub Copilot
+CLI on macOS.
 
 This document describes the design and the measurements behind it. The documentation explains the
 words this document uses: room, probe, reading, leak, declared and control run in
 [docs/words.md](docs/words.md), check, restart and handover note in [docs/measuring.md](docs/measuring.md).
 The experiment records under `experiments/` call the control run the control run and a restart a
 tail.
-Every claim marked **measured** was observed on WSL2. The section [Measurements](#measurements)
-lists the agent versions and links each result.
+Every claim marked **measured** was observed on WSL2, unless it names macOS. The section
+[Measurements](#measurements) lists the agent versions and links each result.
 
 ## Why
 
@@ -247,8 +248,8 @@ What each agent needed:
   leaked into the room would not match yours, because its path differs.
 - **Copilot CLI:** its model calls reach the fake as Anthropic Messages through its "bring your
   own key" variables, online with the login, so the context that comes with the login shows too.
-  Its control run runs on a copy of `~/.copilot` and an empty cache folder; **measured:**
-  `~/.copilot` and `~/.agents` kept their fingerprints. The login lives in a Keychain item only
+  Its control run runs on a copy of `~/.copilot` and an empty cache folder; **measured** on macOS
+  27.0.1 with Copilot CLI 1.0.114: `~/.copilot` and `~/.agents` kept their fingerprints. The login lives in a Keychain item only
   the `copilot` binary reads without asking, so the room gets a token in its `config.json`, taken
   from a token variable, from a token the user's `config.json` keeps as plain text, from gh for the
   same account (no question), or last from that item. The
@@ -423,7 +424,7 @@ room and Node.js agents' output, which ran on macOS 27.0.1 on 2026-11-22. The ro
 | Control run and room | Pi 1.0.2 | the room read `tare: 0.00` without flags | [results](experiments/dirty-twin-pi/RESULTS.md) |
 | Control run and room | Antigravity CLI 1.2.16 | the room read `tare: 0.00` without flags, and `~/.gemini` stayed unchanged | [results](experiments/dirty-twin-agy/RESULTS.md) |
 | Control run and room, macOS 27.0.1 | Copilot CLI 1.0.114 | ten of eleven predictions held (P4 failed: the user's plugins are all disabled, and `~/.agents/skills/` came through the walk up from the work directory); `~/.copilot` stayed unchanged; with `--disable-builtin-mcps` the room showed none of the tested markers but the project's `AGENTS.md`, and offered 21 tools, none of an MCP server; the room answered the real model with gh's token as its login. Afterwards `tare probe copilot` read `tare: 0.00` in this repository and in a folder under the home | [results](experiments/dirty-twin-copilot/RESULTS.md) |
-| Rooms given copies of real settings on purpose | all four | Claude Code 4 leaks, Codex 6, Pi 5, Antigravity CLI 3, each named with its source | the results above |
+| Rooms given copies of real settings on purpose | Claude Code, Codex, Pi, Antigravity CLI | Claude Code 4 leaks, Codex 6, Pi 5, Antigravity CLI 3, each named with its source | the results of those four above |
 | Scripted Cliff and Swap | Claude Code against scripted models | Cliff found step 4. Swap passed the start check and found the blame passing from the agent to the workspace between the handovers at 0 and 0.5 | `experiments/cliff-scripted`, `experiments/swap-scripted` |
 | Real task 1: a data migration | Claude Code with Sonnet and Haiku, Codex | Deleting the source file after a wrong-encoding import was planned as the point of no return. Swap showed that the workspace could still be repaired. Haiku passed about 1 in 14 runs, Codex with gpt-6.1-sol 4 of 4 | [results](experiments/migration/RESULTS.md) |
 | Real task 2: a web page judged by Sonnet | Claude Code with Haiku, Codex with gpt-6.1-sol | Swap confirmed all four predictions of the plan written before the runs. Cliff called a failed run unlucky, and a later rescoring of the same page confirmed it | [results](experiments/html/RESULTS.md) |

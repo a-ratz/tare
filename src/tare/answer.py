@@ -10,7 +10,7 @@ import re
 from .cliff import wilson
 from .swap import leader, newcombe
 
-PRODUCTS = {"claude": "Claude Code", "codex": "Codex", "pi": "Pi", "agy": "Antigravity CLI"}
+PRODUCTS = {"claude": "Claude Code", "codex": "Codex", "pi": "Pi", "agy": "Antigravity CLI", "copilot": "Copilot CLI"}
 JUDGE = re.compile(r"score (\d+) \(threshold (\d+)\)(?:: (.*))?", re.S)
 # a step's tool and its argument, as the trail describes it: "Bash echo hi > a.txt", "Write /work/x"
 ACTS = {"Bash": "ran", "Write": "wrote", "Edit": "edited", "MultiEdit": "edited", "Read": "read",

@@ -38,8 +38,8 @@ This is the output of a real run, with only the home path shortened. Line by lin
   and lets the run start. The room also holds a copy of your login, because the agent needs one
   to run.
 
-`tare claude` then starts Claude Code in that room. `tare codex`, `tare pi` and `tare agy` do the
-same for the other agents ([Running agents in rooms](running-agents.md)).
+`tare claude` then starts Claude Code in that room. `tare codex`, `tare pi`, `tare agy` and
+`tare copilot` do the same for the other agents ([Running agents in rooms](running-agents.md)).
 
 ## What the probe measures
 

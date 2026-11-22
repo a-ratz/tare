@@ -18,7 +18,7 @@ tare claude --project ../other     # another project directory (default: the cur
 tare claude --continue             # a fresh room that resumes this project's last session
 tare cleanup                       # remove leftover rooms, setup copies and kept sessions (--dry-run lists them)
 
-tare probe codex                   # the same for Codex, Pi and the Antigravity CLI
+tare probe codex                   # the same for Codex, Pi, the Antigravity CLI and the Copilot CLI
 tare codex -- exec -m MODEL "..."  # one-shot Codex run: arguments after -- go to codex
 tare pi                            # Pi in a room
 tare agy                           # the Antigravity CLI in a room
@@ -26,8 +26,8 @@ tare copilot                       # the GitHub Copilot CLI in a room
 tare prices update                 # fetch the price table for costs an agent does not report
 ```
 
-`tare claude`, `tare codex`, `tare pi` and `tare agy` mount your project at `/work` directly. The
-agent changes your real files, as it would outside the room. On macOS the room works on a clone
+`tare claude`, `tare codex`, `tare pi`, `tare agy` and `tare copilot` mount your project at `/work`
+directly. The agent changes your real files, as it would outside the room. On macOS the room works on a clone
 of your project instead, and the agent's changes are copied back when it exits; sockets and pipes
 it left in the project are not copied. When the room closes, tare ends your
 processes whose command line names a path in the room or whose working directory is in it: a

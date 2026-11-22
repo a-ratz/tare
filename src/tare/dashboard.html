@@ -36,7 +36,7 @@ const dur = (s) => { s = Math.max(0, Math.round(s)); if (s >= 3600) return `${Ma
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const join = (items) => items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 const multi = location.pathname.startsWith("/run/");
-const PRODUCTS = { claude: "Claude Code", codex: "Codex", pi: "Pi", agy: "Antigravity CLI" };
+const PRODUCTS = { claude: "Claude Code", codex: "Codex", pi: "Pi", agy: "Antigravity CLI", copilot: "Copilot CLI" };
 const KINDS = { mcp: "MCP servers", reach: "files", "parent files": "your parent folder's files", env: "environment",
   "home path": "home path", instructions: "instructions", skills: "skills", plugins: "plugins", email: "email",
   memories: "memories", agents: "agents", extensions: "extensions" };
