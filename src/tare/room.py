@@ -112,7 +112,7 @@ class Bubblewrap:
             agent.seed(real, room.config(agent), room)
             yield room
         finally:
-            shutil.rmtree(home, ignore_errors=True)
+            _rmtree(home)
 
     def argv(self, room: Room, agent, real, command: list[str], extra_env: dict[str, str] | None = None,
              extra_binds: list[str] | None = None) -> list[str]:
@@ -173,9 +173,19 @@ class Seatbelt:
                 _say(f"tare: could not end the processes left in the room: {type(e).__name__}: {e}")
             except BaseException as e:
                 interrupted = e
-            if before is not None:
-                _copy_back(before, clone, work)
-            shutil.rmtree(base, ignore_errors=True)
+            copied = False
+            try:
+                if before is not None:
+                    _copy_back(before, clone, work)
+                copied = True
+            finally:
+                if copied:
+                    _rmtree(base)
+                else:  # the run's changes are only in the clone: keep it, remove the rest, the login copy too (#187)
+                    for part in base.iterdir() if base.is_dir() else []:
+                        if part != clone:
+                            _rmtree(part)
+                    _say(f"tare: could not copy the run's changes back to {work}; they are in {clone}")
             if interrupted is not None:
                 raise interrupted
 
@@ -267,6 +277,27 @@ def profile(room: Room) -> str:
     return "\n".join(rules) + "\n"
 
 
+def _rmtree(path: Path):
+    """Remove a room or a part of it, also where the agent left folders read-only (Go's module cache);
+    nothing outside it is touched."""
+    root = str(path)
+
+    def writable(function, failed, *_):
+        if function not in (os.rmdir, os.unlink, os.remove) or not str(failed).startswith(root):
+            return
+        try:
+            parent = os.path.dirname(failed)
+            if parent.startswith(root):
+                os.chmod(parent, 0o700)
+            function(failed)
+        except OSError:
+            pass
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=writable)
+    else:
+        shutil.rmtree(path, onerror=writable)
+
+
 def _say(message: str):
     """A line on stderr, which may be gone: a closed terminal, a closed stream, or no stderr at all
     (print would then write to stdout, where a check reads its output)."""
@@ -285,7 +316,7 @@ def _number(text: str) -> bool:
 def _listing(argv: list[str]) -> str:
     """A listing from ps or lsof; empty when the program is missing, fails or stalls."""
     try:
-        return subprocess.run(argv, capture_output=True, timeout=30).stdout.decode(errors="replace")
+        return subprocess.run(argv, capture_output=True, timeout=5).stdout.decode(errors="replace")
     except (OSError, subprocess.SubprocessError):
         return ""
 
@@ -299,8 +330,8 @@ def _room_processes(base: Path) -> list[int]:
     pids = set()
     for line in _listing(["/bin/ps", "-xww", "-o", "pid=,command="]).splitlines():
         pid, _, command = line.strip().partition(" ")
-        if _number(pid) and any(re.search(rf"(?<![^\s\"'=:/<>(;&|]){re.escape(root)}(?=[/\s\"';:)<>&|]|$)", command)
-                                for root in roots):
+        if _number(pid) and any(re.search(rf"(?:(?<![^\s\"'=:<>(;&|])|(?<=file://)){re.escape(root)}(?=[/\s\"';:)<>&|]|$)",
+                                          command) for root in roots):
             pids.add(int(pid))
     pid = None
     for line in _listing(["/usr/sbin/lsof", "-b", "-w", "-a", "-u", str(os.getuid()), "-d", "cwd", "-Fpn"]).splitlines():
@@ -341,7 +372,7 @@ def _alive(pids: list[int]) -> list[int]:
 def _end_processes(base: Path, grace: float = 3.0) -> int:
     """End what the agent left running in a Seatbelt room (a browser, a daemon, a server): Seatbelt,
     unlike bubblewrap's own PID namespace, ends nothing with the room. SIGTERM, then SIGKILL for
-    whatever still runs after the grace period. Returns how many it signalled."""
+    whatever still runs after the grace period. Returns how many it ended; it names those that survive."""
     signalled = [pid for pid in _room_processes(base) if _signal(pid, signal.SIGTERM)]
     deadline = time.monotonic() + grace
     alive = signalled
@@ -354,7 +385,9 @@ def _end_processes(base: Path, grace: float = 3.0) -> int:
     while alive and time.monotonic() < deadline:
         time.sleep(0.05)
         alive = _alive(alive)
-    return len(signalled)
+    if alive:
+        _say(f"tare: {len(alive)} process{'es' if len(alive) != 1 else ''} of the room still run: {', '.join(map(str, alive))}")
+    return len(signalled) - len(alive)
 
 
 def _mounts(binds: list[str]) -> list[tuple[str, str]]:
@@ -427,8 +460,10 @@ def _copy_back(before: dict[str, tuple], clone: Path, work: Path):
                 target.symlink_to(os.readlink(source))
             else:
                 shutil.copy2(source, target)
-        except FileNotFoundError:  # gone from the clone since the state was taken
-            pass
+        except FileNotFoundError:
+            if os.path.lexists(source):  # the project's side is missing (the user removed a folder): not ours to hide
+                raise
+            # gone from the clone since the state was taken
 
 
 def backend():

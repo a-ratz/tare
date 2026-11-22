@@ -301,12 +301,15 @@ def test_a_real_seatbelt_room_ends_what_the_agent_left_running(tmp_path, monkeyp
         with Seatbelt().open(Tool(script), real, work) as r:
             subprocess.run(Seatbelt().argv(r, Tool(script), real, ["tool"]), timeout=60, cwd=Path.home())
             time.sleep(0.5)
-            pids = [int((Path(r.inside_work) / f"{n}.pid").read_text()) for n in ("in-room", "names-room", "stubborn")]
-            assert room._alive(pids) == pids
+            for n in ("in-room", "names-room", "stubborn"):
+                pid = (Path(r.inside_work) / f"{n}.pid").read_text().strip()
+                if pid.isdigit():
+                    pids.append(int(pid))
+            assert len(pids) == 3 and room._alive(pids) == pids
         assert room._alive(pids) == []
         assert "tare: ended 3 processes the agent left running in the room" in capsys.readouterr().err
     finally:
-        for pid in pids:
+        for pid in room._alive(pids):  # only what still runs, never a reused pid of an ended one
             room._signal(pid, signal.SIGKILL)
 
 
@@ -321,6 +324,7 @@ def test_only_processes_that_name_the_room_or_work_in_it_are_its_own(monkeypatch
           f" 107 /bin/sh -c cd \"{base}\"; sleep 300\n"  # the room itself, quoted
           f" 108 /Applications/Chrome file://{base}/work/index.html\n"  # a browser opened a page in the room
           f" 109 /bin/sh -c (cd {base}) </dev/null\n ² {base}/x\n"
+          f" 110 vim /Users/me/backups//tmp/{base.name}/report\n"  # a double slash is no file:// URL
           f"   1 {base}/x\n   0 {base}/x\n garbage line {base}\n"
           f" {os.getpid()} python {base}/self\n")
     lsof = f"p201\nn{base}/tmp\np202\nn{base}\np203\nn/\npnotapid\nn{base}\np204\nn{base}-copy\np²\nn{base}\n"
@@ -463,9 +467,50 @@ def test_copy_back_passes_over_a_file_that_vanished_meanwhile(tmp_path, monkeypa
     copy = room.shutil.copy2
 
     def vanishing(source, target):
-        if Path(source).name == "gone.txt":  # a process the room left running removed it
+        if Path(source).name == "gone.txt":  # a process the room left running removed it meanwhile
+            os.unlink(source)
             raise FileNotFoundError(source)
         return copy(source, target)
     monkeypatch.setattr(room.shutil, "copy2", vanishing)
     room._copy_back(before, clone, work)
     assert (work / "kept.txt").read_text() == "y" and not (work / "gone.txt").exists()
+
+
+
+def test_a_copy_back_that_fails_keeps_only_the_clone_and_says_where(tmp_path, monkeypatch, mac, capsys):
+    real, _ = claude_on_mac(tmp_path, monkeypatch)
+    work = project(tmp_path)
+
+    def failing(before, clone, target):
+        raise PermissionError("the project is read-only")
+    monkeypatch.setattr(room, "_copy_back", failing)
+    with pytest.raises(PermissionError):
+        with Seatbelt().open(Claude(), real, work) as r:
+            base, clone = r.home.parent, Path(r.inside_work)
+            (clone / "made.txt").write_text("the run's work\n")
+    assert (clone / "made.txt").read_text() == "the run's work\n"
+    assert sorted(p.name for p in base.iterdir()) == ["work"]  # the home, with the login copy, is gone
+    assert f"they are in {clone}" in capsys.readouterr().err
+
+
+def test_a_room_with_read_only_folders_is_removed_all_the_same(tmp_path, monkeypatch, mac):
+    real, _ = claude_on_mac(tmp_path, monkeypatch)
+    with Seatbelt().open(Claude(), real, project(tmp_path)) as r:
+        base = r.home.parent
+        cache = r.home / "go" / "pkg" / "mod"
+        cache.mkdir(parents=True)
+        (cache / "m.go").write_text("package m")
+        cache.chmod(0o555)
+    assert not base.exists()
+
+
+def test_copy_back_does_not_hide_a_folder_the_user_removed_from_the_project(tmp_path):
+    clone, work = tmp_path / "c", tmp_path / "w"
+    (clone / "sub").mkdir(parents=True)
+    (work / "sub").mkdir(parents=True)
+    before = room._state(clone)
+    (clone / "sub" / "new.txt").write_text("x")
+    import shutil
+    shutil.rmtree(work / "sub")  # the user removed it meanwhile
+    with pytest.raises(FileNotFoundError):
+        room._copy_back(before, clone, work)

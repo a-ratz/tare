@@ -112,6 +112,8 @@ def _serve(out: Path | list[Path], port: int) -> str:
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     original_argv = list(argv)
+    for signum in (signal.SIGTERM, signal.SIGHUP):  # every command that opens a room, the judge's too
+        signal.signal(signum, _exit_on)
     if argv[:1] == ["watch"]:
         return _watch(argv[1:])
     if argv[:1] == ["rerun"]:
@@ -216,8 +218,6 @@ def main(argv: list[str] | None = None) -> int:
     else:
         names = [args.agent if args.command in ("probe", "cliff") else args.command]
     project = args.project.resolve()
-    for signum in (signal.SIGTERM, signal.SIGHUP):
-        signal.signal(signum, _exit_on)
 
     try:
         reals = {name: AGENTS[name].discover() for name in dict.fromkeys(names)}
