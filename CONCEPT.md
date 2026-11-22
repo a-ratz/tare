@@ -121,6 +121,13 @@ On macOS, Claude Code keeps its login in the Keychain. tare reads it there the w
 Keychain item. No further Seatbelt profile can start inside a Seatbelt room, so the agents' own
 sandboxes do not work there. Codex runs without its sandbox anyway, and tare turns Claude Code's
 off in a macOS room, because a project that turns it on would make every Bash call fail there.
+The same holds for Chromium's sandbox, so a macOS room sets `AGENT_BROWSER_ARGS=--no-sandbox` for
+agent-browser (Playwright passes the flag anyway). Chromium also ignores `TMPDIR` on macOS and
+takes the denied directory under `/var/folders`, so the room sets `MAC_CHROMIUM_TMPDIR` to its own
+temporary directory, as `tare judge` does for its Chrome. The developer tools in `/usr/bin` are
+shims whose xcrun cache lives in that denied directory too, and each call would print that it
+cannot write it, so the room's `PATH` holds the developer directory's `usr/bin` before `/usr/bin`
+([docs/tools.md](docs/tools.md)).
 On macOS, `tar` stores extended attributes as `._` files, so the snapshot hook runs it with
 `COPYFILE_DISABLE=1`. **Measured** on macOS 27.0 (Claude Code 2.1.289, Codex CLI 0.159.0,
 Pi 0.99.1): each agent answered in such a room with its real login. Afterwards the room was

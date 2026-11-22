@@ -54,6 +54,9 @@ The room is not a security boundary against a hostile agent: it has network acce
 login. tare keeps your setup out of a measurement. It does not contain an agent that tries to
 break out.
 
+None of your tools are in the room either. The agent installs what a task needs into the room's
+home, and the install is gone after the run ([Tools in a room](tools.md)).
+
 ## Your login
 
 Each room gets a fresh copy of your login, which tare deletes after the run. Claude Code may
