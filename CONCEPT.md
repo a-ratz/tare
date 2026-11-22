@@ -112,11 +112,19 @@ directory under `/var/folders` (other programs' temporary files and caches), the
 `/private/tmp` (where Claude Code keeps its temporary files), `/private/var/tmp`,
 `/Users/Shared` and the pasteboard. It denies every write outside the room, so an install the
 agent makes (a `brew install`, an app in `/Applications`) cannot change the machine, as a Linux
-room's read-only mounts ensure. Then it allows the room. When the room closes, the run's
+room's read-only mounts ensure. Then it allows the room. When the room closes, tare first ends
+every process of the user's whose command line names a path in the room or whose working directory
+is in it: a browser the agent installed there, or a server it started in the project, which
+Seatbelt, unlike bubblewrap's own PID namespace, would let live on. A process that does neither,
+such as a daemon that moved to `/` and runs a program from outside the room, is not found; one of
+your own that names the room, such as a `tail -f` on a room's file, is ended with it. Process ids are
+not checked again between finding and ending, which a reused id in those seconds would defeat. Then the run's
 changes to the clone are copied back to the project. A file the run did not touch stays as it
 is. Sockets and pipes the run left (git's fsmonitor keeps one in `.git`) cannot be copied and are
 left out. Up to tare 0.5.0 the first one stopped the copy: the changes after it never reached the
-project, and the room stayed behind in `/private/tmp`.
+project, and the room stayed behind in `/private/tmp`. When the copy-back fails now, tare keeps only
+the clone with the run's changes, removes the rest of the room with the login copy, and says where
+the clone is (#187); folders the agent left read-only are removed too.
 On macOS, Claude Code keeps its login in the Keychain. tare reads it there the way Claude Code does and gives the room a copy as a file, which Claude Code uses when the room has no
 Keychain item. No further Seatbelt profile can start inside a Seatbelt room, so the agents' own
 sandboxes do not work there. Codex runs without its sandbox anyway, and tare turns Claude Code's

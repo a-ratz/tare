@@ -26,7 +26,14 @@ tare prices update                 # fetch the price table for costs an agent do
 `tare claude`, `tare codex`, `tare pi` and `tare agy` mount your project at `/work` directly. The
 agent changes your real files, as it would outside the room. On macOS the room works on a clone
 of your project instead, and the agent's changes are copied back when it exits; sockets and pipes
-it left in the project are not copied. `--yolo` adds the agent's own flag
+it left in the project are not copied. When the room closes, tare ends your
+processes whose command line names a path in the room or whose working directory is in it: a
+browser the agent installed there, a server it started in the project. Unlike on Linux, where
+everything of a room ends with it, a process that does neither is not found: a daemon that left the
+room's folders and runs a program from elsewhere, or by a bare name, or renamed itself, and anything
+started after tare looked. A process of yours that names the room, such as `tail -f` on one of its
+files, is ended too. If the run's changes cannot be copied back, tare keeps the clone that holds
+them, removes the rest of the room with the login copy, and says where the clone is. `--yolo` adds the agent's own flag
 for skipping permission prompts. Pi has no such prompts. The [measuring tools](measuring.md) work
 on copies instead.
 

@@ -10,7 +10,9 @@ from the `Room` its backend built, never from a constant.
 import functools
 import json
 import os
+import re
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -110,7 +112,7 @@ class Bubblewrap:
             agent.seed(real, room.config(agent), room)
             yield room
         finally:
-            shutil.rmtree(home, ignore_errors=True)
+            _rmtree(home)
 
     def argv(self, room: Room, agent, real, command: list[str], extra_env: dict[str, str] | None = None,
              extra_binds: list[str] | None = None) -> list[str]:
@@ -160,9 +162,32 @@ class Seatbelt:
             agent.seed(real, room.config(agent), room)
             yield room
         finally:
-            if before is not None:
-                _copy_back(before, clone, work)
-            shutil.rmtree(base, ignore_errors=True)
+            # ending the room's processes must never stop the copy-back or the room's removal: a signal
+            # that arrives meanwhile (Ctrl-C, SIGTERM, SIGHUP) is raised again once the room is gone
+            interrupted = None
+            try:
+                ended = _end_processes(base)
+                if ended:
+                    _say(f"tare: ended {ended} process{'es' if ended != 1 else ''} the agent left running in the room")
+            except Exception as e:
+                _say(f"tare: could not end the processes left in the room: {type(e).__name__}: {e}")
+            except BaseException as e:
+                interrupted = e
+            copied = False
+            try:
+                if before is not None:
+                    _copy_back(before, clone, work)
+                copied = True
+            finally:
+                if copied:
+                    _rmtree(base)
+                else:  # the run's changes are only in the clone: keep it, remove the rest, the login copy too (#187)
+                    for part in base.iterdir() if base.is_dir() else []:
+                        if part != clone:
+                            _rmtree(part)
+                    _say(f"tare: could not copy the run's changes back to {work}; they are in {clone}")
+            if interrupted is not None:
+                raise interrupted
 
     def argv(self, room: Room, agent, real, command: list[str], extra_env: dict[str, str] | None = None) -> list[str]:
         """The command line that runs `command` in the room. `command[0]` may be the agent's own name."""
@@ -252,6 +277,119 @@ def profile(room: Room) -> str:
     return "\n".join(rules) + "\n"
 
 
+def _rmtree(path: Path):
+    """Remove a room or a part of it, also where the agent left folders read-only (Go's module cache);
+    nothing outside it is touched."""
+    root = str(path)
+
+    def writable(function, failed, *_):
+        if function not in (os.rmdir, os.unlink, os.remove) or not str(failed).startswith(root):
+            return
+        try:
+            parent = os.path.dirname(failed)
+            if parent.startswith(root):
+                os.chmod(parent, 0o700)
+            function(failed)
+        except OSError:
+            pass
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=writable)
+    else:
+        shutil.rmtree(path, onerror=writable)
+
+
+def _say(message: str):
+    """A line on stderr, which may be gone: a closed terminal, a closed stream, or no stderr at all
+    (print would then write to stdout, where a check reads its output)."""
+    if sys.stderr is None:
+        return
+    try:
+        print(message, file=sys.stderr)
+    except (OSError, ValueError):
+        pass
+
+
+def _number(text: str) -> bool:
+    return text.isascii() and text.isdigit()  # isdigit alone takes digits int() does not
+
+
+def _listing(argv: list[str]) -> str:
+    """A listing from ps or lsof; empty when the program is missing, fails or stalls."""
+    try:
+        return subprocess.run(argv, capture_output=True, timeout=5).stdout.decode(errors="replace")
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def _room_processes(base: Path) -> list[int]:
+    """The user's processes that run from the room or in it: their command line names a path in the
+    room (a program the agent put there, the sandbox itself), or their working directory is in it.
+    A process that does neither, such as a daemon that moved to / and runs a program from outside
+    the room, is not found."""
+    roots = {str(base), str(base.resolve()), f"/tmp/{base.name}"}  # /tmp is a link to /private/tmp
+    pids = set()
+    for line in _listing(["/bin/ps", "-xww", "-o", "pid=,command="]).splitlines():
+        pid, _, command = line.strip().partition(" ")
+        if _number(pid) and any(re.search(rf"(?:(?<![^\s\"'=:<>(;&|])|(?<=file://)){re.escape(root)}(?=[/\s\"';:)<>&|]|$)",
+                                          command) for root in roots):
+            pids.add(int(pid))
+    pid = None
+    for line in _listing(["/usr/sbin/lsof", "-b", "-w", "-a", "-u", str(os.getuid()), "-d", "cwd", "-Fpn"]).splitlines():
+        if line.startswith("p"):
+            pid = int(line[1:]) if _number(line[1:]) else None
+        elif line.startswith("n") and pid and any(line[1:] == root or line[1:].startswith(root + "/") for root in roots):
+            pids.add(pid)
+    return sorted(p for p in pids if p > 1 and p != os.getpid())
+
+
+def _signal(pid: int, sig: int) -> bool:
+    try:
+        os.kill(pid, sig)
+        return True
+    except OSError:
+        return False
+
+
+def _alive(pids: list[int]) -> list[int]:
+    """Those of pids still running. A zombie (ended, but not yet reaped by its parent) has ended."""
+    existing = []
+    for pid in pids:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            continue
+        except PermissionError:
+            pass
+        existing.append(pid)
+    if not existing:
+        return []
+    states = _listing(["/bin/ps", "-o", "pid=,stat=", "-p", ",".join(map(str, existing))])
+    zombies = {int(f[0]) for f in (line.split() for line in states.splitlines()) if len(f) == 2 and _number(f[0])
+               and f[1].startswith("Z")}
+    return [pid for pid in existing if pid not in zombies]
+
+
+def _end_processes(base: Path, grace: float = 3.0) -> int:
+    """End what the agent left running in a Seatbelt room (a browser, a daemon, a server): Seatbelt,
+    unlike bubblewrap's own PID namespace, ends nothing with the room. SIGTERM, then SIGKILL for
+    whatever still runs after the grace period. Returns how many it ended; it names those that survive."""
+    signalled = [pid for pid in _room_processes(base) if _signal(pid, signal.SIGTERM)]
+    deadline = time.monotonic() + grace
+    alive = signalled
+    while alive and time.monotonic() < deadline:
+        time.sleep(0.1)
+        alive = _alive(alive)
+    for pid in alive:
+        _signal(pid, signal.SIGKILL)
+    deadline = time.monotonic() + 1
+    while alive and time.monotonic() < deadline:
+        time.sleep(0.05)
+        alive = _alive(alive)
+    if alive:
+        _say(f"tare: {len(alive)} process{'es' if len(alive) != 1 else ''} of the room still run: {', '.join(map(str, alive))}")
+    return len(signalled) - len(alive)
+
+
 def _mounts(binds: list[str]) -> list[tuple[str, str]]:
     """The (host, inside) pairs of an adapter's bwrap binds (`--ro-bind host inside`)."""
     return [(binds[i + 1], binds[i + 2]) for i in range(0, len(binds), 3)]
@@ -317,10 +455,15 @@ def _copy_back(before: dict[str, tuple], clone: Path, work: Path):
             target.chmod(stat.S_IMODE(after[rel][1]))
             continue
         _remove(target)
-        if after[rel][0] == "link":
-            target.symlink_to(os.readlink(source))
-        else:
-            shutil.copy2(source, target)
+        try:
+            if after[rel][0] == "link":
+                target.symlink_to(os.readlink(source))
+            else:
+                shutil.copy2(source, target)
+        except FileNotFoundError:
+            if os.path.lexists(source):  # the project's side is missing (the user removed a folder): not ours to hide
+                raise
+            # gone from the clone since the state was taken
 
 
 def backend():
