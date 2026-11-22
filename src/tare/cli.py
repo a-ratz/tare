@@ -50,24 +50,26 @@ def _run_attached(argv: list[str]) -> int:
         to_file = {fd: _is_file(fd) for fd in (0, 1, 2)}
         if not any(to_file.values()):
             return subprocess.call(argv)
-        sys.stdout.flush()
-        sys.stderr.flush()
+        for stream in (sys.stdout, sys.stderr):  # None where the descriptor was closed
+            if stream:
+                stream.flush()
         pipe = {fd: subprocess.PIPE if to_file[fd] else None for fd in (0, 1, 2)}
-        with subprocess.Popen(argv, stdin=pipe[0], stdout=pipe[1], stderr=pipe[2]) as proc:
-            try:
-                pumps = [threading.Thread(target=_pump, args=(source, target), daemon=True)
-                         for source, target in ((proc.stdout, sys.stdout.buffer), (proc.stderr, sys.stderr.buffer))
-                         if source]
-                feed = [threading.Thread(target=_feed, args=(sys.stdin.buffer, proc.stdin), daemon=True)] if proc.stdin else []
-                for thread in pumps + feed:
-                    thread.start()
-                code = proc.wait()
-                _join(pumps)  # the rest of the output
-                return code
-            except BaseException:  # SIGTERM or SIGHUP (SystemExit): the agent ends before its room does
-                proc.kill()
-                proc.wait()
-                raise
+        # no `with`: the threads own the pipes and close them; the main thread never waits on them
+        proc = subprocess.Popen(argv, stdin=pipe[0], stdout=pipe[1], stderr=pipe[2])
+        try:
+            pumps = [threading.Thread(target=_pump, args=(source, target), daemon=True)
+                     for source, target in ((proc.stdout, to_file[1] and sys.stdout.buffer),
+                                            (proc.stderr, to_file[2] and sys.stderr.buffer)) if source]
+            feed = [threading.Thread(target=_feed, args=(sys.stdin.buffer, proc.stdin), daemon=True)] if proc.stdin else []
+            for thread in pumps + feed:
+                thread.start()
+            code = proc.wait()
+        except BaseException:  # SIGTERM or SIGHUP (SystemExit): the agent ends before its room does
+            proc.kill()
+            proc.wait()
+            raise
+        _join(pumps)  # the rest of the output
+        return code
     finally:
         signal.signal(signal.SIGINT, previous)
 

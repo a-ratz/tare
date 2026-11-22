@@ -124,10 +124,16 @@ def _pump(source, target):
                     writing = False
     except (OSError, ValueError):
         pass
+    finally:  # the pump owns its end of the pipe: nothing else closes it while it reads
+        try:
+            source.close()
+        except OSError:
+            pass
 
 
 def _feed(source, target):
-    """Copy a file into the agent's stdin pipe, then close it, so the agent sees the end."""
+    """Copy a file into the agent's stdin pipe, then close it, so the agent sees the end. An agent
+    that stops reading (it exited) ends the copy."""
     try:
         for chunk in iter(lambda: source.read1(65536), b""):
             target.write(chunk)
@@ -137,7 +143,7 @@ def _feed(source, target):
     finally:
         try:
             target.close()
-        except OSError:
+        except (OSError, ValueError):
             pass
 
 
@@ -160,7 +166,7 @@ def _stream(argv: list[str], log_dir: Path, timeout: float | None) -> int:
             pump.start()
         try:
             return proc.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
+        except BaseException:  # a timeout, or a signal (SystemExit) or Ctrl-C: the agent ends before its room
             proc.kill()
             proc.wait()
             raise

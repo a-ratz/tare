@@ -113,11 +113,13 @@ def test_a_process_left_holding_the_pipe_does_not_hold_up_the_run(tmp_path, monk
     from tare import capsule
     monkeypatch.setattr(capsule, "PUMP_GRACE", 0.3)
     started = time.monotonic()
-    script = f"echo done; (sleep 30; echo late) & echo $! > {tmp_path}/left.pid"
-    assert capsule._stream(["/bin/sh", "-c", script], tmp_path, 30) == 0
-    assert time.monotonic() - started < 10  # not the 30 seconds the left process holds the pipe
-    assert (tmp_path / "stdout.jsonl").read_text().startswith("done\n")
-    os.kill(int((tmp_path / "left.pid").read_text()), signal.SIGKILL)
+    script = f"echo done; sleep 30 & echo $! > {tmp_path}/left.pid"
+    try:
+        assert capsule._stream(["/bin/sh", "-c", script], tmp_path, 30) == 0
+        assert time.monotonic() - started < 10  # not the 30 seconds the left process holds the pipe
+        assert (tmp_path / "stdout.jsonl").read_text().startswith("done\n")
+    finally:
+        os.kill(int((tmp_path / "left.pid").read_text()), signal.SIGKILL)
 
 
 def test_a_pump_that_cannot_write_drains_on_so_the_agent_never_blocks(tmp_path):
@@ -150,8 +152,8 @@ def attached(tmp_path, argv, stdin=None):
     """tare's attached run in a process of its own, its stdout and stderr files, as `tare pi -- ... > out`."""
     import subprocess
     import sys
-    out, err = (tmp_path / "out").open("w"), (tmp_path / "err").open("w")
-    return subprocess.Popen([sys.executable, "-c", ATTACHED, *argv], stdin=stdin, stdout=out, stderr=err)
+    with (tmp_path / "out").open("w") as out, (tmp_path / "err").open("w") as err:  # the child keeps its copies
+        return subprocess.Popen([sys.executable, "-c", ATTACHED, *argv], stdin=stdin, stdout=out, stderr=err)
 
 
 def test_an_attached_run_redirected_to_files_hands_the_agent_pipes_and_its_exit(tmp_path):
@@ -182,3 +184,29 @@ def test_a_signal_ends_the_agent_of_an_attached_run_before_its_room_goes(tmp_pat
         return
     os.kill(agent, signal.SIGKILL)
     pytest.fail("the agent outlived tare")
+
+
+def test_an_attached_run_does_not_wait_for_a_process_left_holding_its_pipes(tmp_path):
+    import os
+    import signal
+    import time
+    started = time.monotonic()
+    proc = attached(tmp_path, ["/bin/sh", "-c", f"echo hi; sleep 20 & echo $! > {tmp_path}/left.pid"])
+    try:
+        assert proc.wait(timeout=15) == 0
+        assert time.monotonic() - started < 10
+        assert (tmp_path / "out").read_text() == "hi\n"
+    finally:
+        os.kill(int((tmp_path / "left.pid").read_text()), signal.SIGKILL)
+
+
+def test_an_attached_run_with_a_closed_descriptor_and_a_file_runs(tmp_path):
+    import subprocess
+    import sys
+    (tmp_path / "in").write_text("x\n")
+    code = subprocess.run([sys.executable, "-c", ATTACHED, "/bin/sh", "-c", "cat > /dev/null; exit 5"],
+                          stdin=(tmp_path / "in").open(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                          close_fds=True, pass_fds=()).returncode
+    assert code == 5
+    script = f"import os, subprocess, sys; os.close(1); sys.exit(subprocess.run([sys.executable, '-c', {ATTACHED!r}, '/usr/bin/true'], stdin=open({str(tmp_path / 'in')!r})).returncode)"
+    assert subprocess.run([sys.executable, "-c", script], stderr=subprocess.PIPE).returncode == 0
