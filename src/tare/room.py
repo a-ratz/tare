@@ -208,13 +208,23 @@ def _browser_env(tmp: str) -> dict[str, str]:
 def _developer_bin() -> list[str]:
     """The active developer directory's usr/bin, where git, python3 and make run as themselves. Those in
     /usr/bin are shims that ask xcrun, whose cache lives in the user's temporary directory: in a room
-    each call would print that it cannot write the cache."""
+    each call would print that it cannot write the cache. The system's choice only (`xcode-select -s`,
+    not the caller's DEVELOPER_DIR), and never a place the room denies, such as the home."""
     try:
-        out = subprocess.run(["/usr/bin/xcode-select", "-p"], capture_output=True, text=True, timeout=10).stdout
+        found = subprocess.run(["/usr/bin/xcode-select", "-p"], capture_output=True, text=True, timeout=10, env={})
     except (OSError, subprocess.SubprocessError):
         return []
-    tools = Path(out.strip(), "usr", "bin")
-    return [str(tools)] if out.strip() and tools.is_dir() else []
+    tools = Path(found.stdout.strip(), "usr", "bin")
+    if found.returncode or not tools.is_absolute() or not tools.is_dir():
+        return []
+    resolved = tools.resolve()
+    return [] if any(resolved.is_relative_to(Path(d).resolve()) for d in _denied()) else [str(tools)]
+
+
+def _denied() -> tuple:
+    """Where a Seatbelt room may neither read nor write: the home, the user's directory under
+    /var/folders, and the places other programs share."""
+    return (Path.home().resolve(), _user_dir(), "/private/tmp", "/private/var/tmp", "/Users/Shared")
 
 
 def profile(room: Room) -> str:
@@ -225,7 +235,7 @@ def profile(room: Room) -> str:
     def q(path) -> str:  # an SBPL string
         return json.dumps(str(path), ensure_ascii=False)
 
-    denied = (Path.home().resolve(), _user_dir(), "/private/tmp", "/private/var/tmp", "/Users/Shared")
+    denied = _denied()
     rules = ["(version 1)", "(allow default)",
              # writes stay in the room, as in bubblewrap's: an install outside it (Homebrew, /Applications)
              # would change the user's machine

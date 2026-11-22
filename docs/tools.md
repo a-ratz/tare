@@ -9,8 +9,8 @@ what a browser needs in a room.
 ## What the room has
 
 - **`PATH`** holds the agent's own CLI, `/usr/bin` and `/bin`. On macOS it also holds the active
-  developer directory's `usr/bin` (from `xcode-select -p`), so `git`, `python3`, `make` and `pip3`
-  run as themselves. Nothing else from your `PATH` comes along: no Homebrew, no `~/.local/bin`, no
+  developer directory's `usr/bin` (from `xcode-select -p`), so `git`, `python3` and `make` run as
+  themselves. Nothing else from your `PATH` comes along: no Homebrew, no `~/.local/bin`, no
   nvm, no uv. That is the point of the room: an evaluation must not depend on what your machine
   happens to have installed.
 - **The network is open.** An agent installs what a task needs into the room's home, for example
@@ -78,8 +78,12 @@ git: error: couldn't create cache file '/var/folders/…/T/xcrun_db-…' (errno=
 ```
 
 and then runs the tool. That is why the room's `PATH` has the developer directory's `usr/bin`
-before `/usr/bin`. The tools of the toolchain (`clang`, `swift`) are not in that directory, so they
-still print the lines; the tool still runs.
+before `/usr/bin`: the system's choice from `xcode-select -s`, not a `DEVELOPER_DIR` of your
+shell, and never a directory the room denies. Some tools still print the lines, because they ask
+xcrun themselves: `pip3` is a script that starts with `#!/usr/bin/xcrun python3`, and with Xcode
+selected, `clang` and `swift` live in Xcode's toolchain, not in its `usr/bin`. With the Command
+Line Tools selected, `clang` and `swift` are in `usr/bin` and run without xcrun. Either way the
+tool runs.
 
 ## What this does not change
 

@@ -151,6 +151,11 @@ def test_bwrap_clears_the_environment_down_to_the_allowlist(tmp_path, monkeypatc
     assert [t for t in targets if t.startswith("/home")] == [room.ROOM_HOME]
 
 
+def test_a_bubblewrap_room_adds_no_variables_of_its_own(tmp_path):
+    with room.Bubblewrap().open(Claude(), claude_real(tmp_path), tmp_path) as r:
+        assert r.env == {}  # a macOS room's PATH, TMPDIR and browser variables are its own
+
+
 def test_bwrap_for_codex_points_codex_home_into_the_room(tmp_path):
     argv = bwrap(Codex(), codex_real(tmp_path), tmp_path, tmp_path, ["codex", "exec"])
     env = {argv[i + 1]: argv[i + 2] for i, a in enumerate(argv) if a == "--setenv"}

@@ -165,17 +165,29 @@ def test_seatbelt_profile_denies_the_home_and_shared_places_and_allows_the_room(
     no_writes = lines.index('(deny file-write* (subpath "/"))')
     assert no_writes < lines.index('(allow file-write* (subpath "/dev"))') < allow
     assert lines[no_writes - 1] == "(allow default)"
+    assert lines.index(deny) < lines.index(f'(allow file-read* file-write* (subpath "{tmp_path / "run"}"))')
 
 
 def test_the_developer_tools_are_on_the_path_only_where_xcode_select_names_them(tmp_path, monkeypatch):
     tools = tmp_path / "Developer" / "usr" / "bin"
     tools.mkdir(parents=True)
-    answer = lambda out: lambda *a, **k: subprocess.CompletedProcess(a, 0, out, "")
+    monkeypatch.setattr(room, "_denied", lambda: (tmp_path / "home",))
+    calls = []
+    answer = lambda out, code=0: lambda *a, **k: calls.append(k.get("env")) or subprocess.CompletedProcess(a, code, out, "")
     monkeypatch.setattr(room.subprocess, "run", answer(f"{tmp_path / 'Developer'}\n"))
     assert room._developer_bin() == [str(tools)]
+    assert calls == [{}]  # the system's choice, not the caller's DEVELOPER_DIR
     monkeypatch.setattr(room.subprocess, "run", answer(f"{tmp_path / 'gone'}\n"))
     assert room._developer_bin() == []
     monkeypatch.setattr(room.subprocess, "run", answer(""))  # no developer directory selected
+    assert room._developer_bin() == []
+    monkeypatch.setattr(room.subprocess, "run", answer(f"{tmp_path / 'Developer'}\n", 2))  # xcode-select failed
+    assert room._developer_bin() == []
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(room.subprocess, "run", answer("Developer\n"))  # relative
+    assert room._developer_bin() == []
+    (tmp_path / "home" / "Xcode" / "usr" / "bin").mkdir(parents=True)  # in a place the room denies
+    monkeypatch.setattr(room.subprocess, "run", answer(f"{tmp_path / 'home' / 'Xcode'}\n"))
     assert room._developer_bin() == []
 
     def missing(*a, **k):
@@ -229,7 +241,9 @@ class Tool:
 def test_a_real_seatbelt_room_hides_the_home_and_keeps_the_runs_work(tmp_path, monkeypatch):
     script = tmp_path / "tool.sh"
     outside = next((p for p in ("/opt/homebrew", "/Applications", "/Library/Caches", "/usr/local")
-                    if os.access(p, os.W_OK)), "/nowhere")  # a place the user may write, outside the room
+                    if os.access(p, os.W_OK)), None)  # a place the user may write, outside the room
+    if outside is None:
+        pytest.skip("no place outside the room that this user may write, so a denied write would prove nothing")
     script.write_text('#!/bin/sh\nls "$REAL_HOME" >/dev/null 2>&1 && echo "home: listed" || echo "home: denied"\n'
                       'echo "cwd: $(pwd)"\necho made > made.txt\nrm gone.txt\necho tmp > "$TMPDIR/t" && echo "tmp: written"\n'
                       'f=$(mktemp "$OUTSIDE/.tare-test.XXXXXX" 2>/dev/null) && { rm -f "$f"; echo "outside: written"; }'
