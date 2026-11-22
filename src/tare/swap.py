@@ -192,11 +192,13 @@ def report(sides: dict[str, Side], plan: list[Cut], prompt: str, check: str, pro
                                           "workspaces are the same. Do not trust the effects above."))
     shown = [i for i, d in enumerate(dominant) if d != "neither"]
     late = next((i for i, d in enumerate(dominant) if d in ("room", "tie") and "model" in dominant[:i]), None)
-    if late is not None and dominant[late] == "tie" and "room" not in dominant:
+    at = dominant.index("room") if "room" in dominant else None
+    # "From X on" and "passes" speak for every point from X to the end, so each of them has to read
+    # that way (the same rule as the answer at the top of the run page)
+    if late is not None and "room" not in dominant and set(dominant[late:]) == {"tie"}:
         verdict = (f"The agent explains more than the workspace until the handover at {plan[late - 1].fraction:.2f}. From "
                    f"the handover at {plan[late].fraction:.2f} on, workspace and agent explain about the same.")
-    elif "room" in dominant and "model" in dominant[:dominant.index("room")]:
-        at = dominant.index("room")
+    elif at is not None and "model" in dominant[:at] and set(dominant[at:]) == {"room"}:
         before = max(i for i in range(at) if dominant[i] == "model")
         verdict = (f"Blame passes from the agent to the workspace between the handovers at "
                    f"{plan[before].fraction:.2f} and {plan[at].fraction:.2f}.")
