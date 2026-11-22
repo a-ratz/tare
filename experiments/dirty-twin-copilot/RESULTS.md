@@ -22,7 +22,8 @@ conditions were added after the planned runs and are post-hoc: T2p (an enabled p
 | K11 planted MCP server | | | | | | **yes** | |
 | K12 skill of a planted, enabled plugin | | | | | | | **yes** |
 
-- Every run ended with exit 0 and one model request with tools: 19 tools offline (T0off), 27 in
+- Every run ended with exit 0. Every run against the fake sent one model request with tools (R1
+  went to Copilot's own API, so the fake saw none): 19 tools offline (T0off), 27 in
   the twin online (5 of them the GitHub MCP server's), 40 in the room online (18 of the GitHub
   MCP server's), 21 in the room with `--disable-builtin-mcps`, 31 in T2 (the planted MCP
   server's four tools on top). The extra built-in tools online are `web_fetch`,
@@ -65,8 +66,8 @@ By the plan:
 - **The fake through the "bring your own key" variables is Copilot's context probe, online with
   the login, and the copy twin its control** (P1 to P3 held).
 - **The room passes `--disable-builtin-mcps`** (T1 showed K7, T1f did not). The GitHub MCP server
-  reaches into the user's GitHub account. It is a default for every logged-in user, not a
-  setting of theirs, but it is the account's reach into the room.
+  came with this login and reaches into the user's GitHub account: not a setting of theirs, but
+  the account's reach into the room.
 - **The room's login is a `config.json` with `copilotTokens`** (P11 held), filled from the first
   of `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN` and `gh auth token` for Copilot's own login,
   with Copilot's Keychain item last.
@@ -78,3 +79,11 @@ By the plan:
   organisation settings.
 - Two things the probe must learn: Copilot's MCP tools are named `<server>-<tool>`, not
   `mcp__<server>__<tool>`, and its custom agents are listed as `- **name**: description`.
+
+## After the runs
+
+Not part of the pre-registered test: where the walk up stops. The first `tare probe copilot` in this
+repository, whose root is the work directory, was blind for skills: the probe expected
+`~/.agents/skills/`, which Copilot did not load there. With the probe stopping at the repository's
+root too, it read `tare: 0.00`. That one reading is the evidence for the stopping rule.
+

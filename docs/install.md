@@ -22,8 +22,10 @@ Claude Code, Codex, Pi and the Copilot CLI; the Antigravity CLI stops with a mes
 because its control run needs an overlay over `~/.gemini` that macOS does not have. The Copilot
 CLI has not been tested on Linux yet. tare runs its native executable (the install script or
 Homebrew), not the npm package, and copies its login for the account `copilot` last logged in
-with: from `COPILOT_GITHUB_TOKEN`, `GH_TOKEN` or `GITHUB_TOKEN`, else from the gh CLI logged in as
-the same account, else from Copilot's Keychain item, which macOS asks you about once.
+with: from `COPILOT_GITHUB_TOKEN`, `GH_TOKEN` or `GITHUB_TOKEN`, else from a token Copilot keeps as
+plain text in `~/.copilot/config.json`, else from the gh CLI logged in as the same account, else
+from Copilot's Keychain item, which macOS may ask you to allow. A classic `ghp_` token is skipped,
+as Copilot refuses it.
 
 ## From PyPI
 

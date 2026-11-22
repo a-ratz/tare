@@ -943,13 +943,21 @@ def _frontmatter(path: Path) -> dict[str, str]:
         return {}
     if not lines or lines[0].strip() != "---":
         return {}
-    found = {}
+    found, block = {}, None
     for line in lines[1:]:
         if line.strip() == "---":
             break
+        if block and line.startswith((" ", "\t")):  # a `key: >` or `key: |` value goes on indented
+            found[block] = (found[block] + "\n" + line.strip()).strip()
+            continue
+        block = None
         key, sep, value = line.partition(":")
         if sep and key.strip() and not key.startswith((" ", "\t")):
-            found[key.strip()] = value.strip().strip("\"'")
+            value = value.strip()
+            if value in (">", "|", ">-", "|-", ">+", "|+"):
+                found[key.strip()], block = "", key.strip()
+            else:
+                found[key.strip()] = value.strip("\"'")
     return found
 
 
@@ -969,7 +977,6 @@ class Copilot:
     token_variables = ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN")
     # the user's sessions, logs and history: not setup, and a control run on a copy only adds to them
     not_setup = ("session-state", "session-store.db*", "logs", "chats", "command-history-state.json", "ide")
-    usage_file = "tare-usage.json"
 
     def discover(self) -> Real:
         home = Path.home()
@@ -1004,22 +1011,24 @@ class Copilot:
         """The login's token, in Copilot's order: a token variable (not a classic ghp_ one, which Copilot
         refuses), a token config.json keeps as plain text, gh's token for the same account, and last
         the Keychain item, which only the copilot binary reads without asking the user. Never printed."""
+        def usable(token) -> bool:
+            return isinstance(token, str) and bool(token) and not token.startswith("ghp_")
         for variable in self.token_variables:
-            value = os.environ.get(variable, "")
-            if value and not value.startswith("ghp_"):
-                return value
+            if usable(os.environ.get(variable)):
+                return os.environ[variable]
         key = f"{user['host']}:{user['login']}"
         plain = _dict(self._config(real).get("copilotTokens")).get(key)
-        if isinstance(plain, str) and plain:
+        if usable(plain):
             return plain
         gh = shutil.which("gh")
         if gh:
             host = re.sub(r"^https?://", "", user["host"]).rstrip("/")
             found = subprocess.run([gh, "auth", "token", "--hostname", host, "--user", user["login"]],
                                    capture_output=True, text=True)
-            if found.returncode == 0 and found.stdout.strip():
+            if found.returncode == 0 and usable(found.stdout.strip()):
                 return found.stdout.strip()
-        return _security(key, self.keychain_service) if sys.platform == "darwin" else None
+        keychain = _security(key, self.keychain_service) if sys.platform == "darwin" else None
+        return keychain if usable(keychain) else None
 
     def _login(self, real: Real) -> tuple[dict, str]:
         user = self._user(real)
@@ -1062,13 +1071,16 @@ class Copilot:
     @contextmanager
     def twin(self, real: Real, fake_url: str):
         """The control run runs on a copy of the user's Copilot home and an empty cache folder; the real
-        ones are never written. HOME stays the user's, as their skills above the project need it."""
+        ones are never written. HOME stays the user's, as their skills above the project need it. The
+        user's hooks run, as in every control run."""
         with tempfile.TemporaryDirectory(prefix="tare-copilot-twin-") as tmp:
             copy, cache = Path(tmp) / "copilot", Path(tmp) / "cache"
-            shutil.copytree(real.config, copy, symlinks=True, ignore=shutil.ignore_patterns(*self.not_setup))
-            _absolute_links(real.config, copy)
+            # what links point to is copied, not the links: a write through one would reach the real setup
+            shutil.copytree(real.config, copy, symlinks=False, ignore_dangling_symlinks=True,
+                            ignore=shutil.ignore_patterns(*self.not_setup))
             cache.mkdir()
-            yield {"COPILOT_HOME": str(copy), "COPILOT_CACHE_HOME": str(cache)}
+            # the control run is online with the login, so the login's context shows (T0 vs T0off)
+            yield {"COPILOT_HOME": str(copy), "COPILOT_CACHE_HOME": str(cache), "COPILOT_OFFLINE": "false"}
 
     def prepare_probe(self, config: Path, fake_url: str):
         pass
@@ -1132,6 +1144,13 @@ class Copilot:
             found[meta.get("name") or path.name.split(".")[0]] = next(iter((meta.get("description") or "").splitlines()), "")
         return folder, found
 
+    login_mcp = ("github-mcp-server",)  # comes with the login, not with a setting of the user's
+
+    def mcp_configured(self, real: Real) -> list[str]:
+        """The MCP servers the user configured: a control run that connects none of them cannot see them."""
+        servers = _dict(_json(real.config / "mcp-config.json")).get("mcpServers")
+        return sorted(name for name in _dict(servers) if isinstance(name, str))
+
     def agent_entry(self, name: str, line: str) -> re.Pattern:
         """How the request lists a custom agent: `- **name**: description`."""
         return re.compile(rf"^- \*\*{re.escape(name)}\*\*: {re.escape(line)}", re.M)
@@ -1142,35 +1161,31 @@ class Copilot:
     def billing(self, real: Real) -> str | None:
         return "subscription"  # a Copilot plan, counted in premium requests
 
-    # unattended runs (Calibrate): the usage file holds the tokens, which the stream leaves out
+    # unattended runs (Calibrate)
     def run_args(self, prompt: str, extra: list[str], hook: str | None = None, room=None) -> list[str]:
         if hook:
             raise TareError("the Copilot CLI does not run in Cliff and Swap yet")
-        usage = ["--usage-output-file", f"{room.inside_config(self)}/{self.usage_file}"] if room else []
-        return ["--yolo", "--no-auto-update", *usage, *extra, "-p", prompt, "--output-format", "json"]
-
-    def collect(self, room, log_dir: Path):
-        """After a run: the usage file, appended to the run's stream as one `tare.usage` line."""
-        path = room.config(self) / self.usage_file
-        try:
-            data = json.loads(path.read_text())
-        except (OSError, ValueError):
-            return
-        with (log_dir / "stdout.jsonl").open("a") as out:
-            out.write(json.dumps({"type": "tare.usage", "data": data}) + "\n")
+        return ["--yolo", "--no-auto-update", *extra, "-p", prompt, "--output-format", "json"]
 
     def usage(self, stdout: str) -> Usage:
-        """From the `tare.usage` line: tokens per model. inputTokens holds the cached ones too (measured
-        on a real run). The cost is in premium requests, not in dollars."""
+        """From the last `session.usage_checkpoint` of the stream: the session's tokens so far. Its
+        input count leaves out the cache, so the cache is added (as the usage file Copilot can write
+        reports it, measured on real runs). The cost is in premium requests, not in dollars."""
         u = Usage(cost_usd=None)
+        last = None
         for e in _objects(stdout):
-            if e.get("type") != "tare.usage":
-                continue
-            for model, metrics in _dict(_dict(e.get("data")).get("modelMetrics")).items():
-                n = _dict(_dict(metrics).get("usage"))
-                u = u + Usage(int(n.get("inputTokens") or 0), int(n.get("cacheReadTokens") or 0),
-                              int(n.get("cacheWriteTokens") or 0), int(n.get("outputTokens") or 0),
-                              int(n.get("reasoningTokens") or 0), None, str(model))
+            if e.get("type") == "session.usage_checkpoint":
+                last = _dict(e.get("data"))
+        if last is not None:
+            tokens = _dict(_dict(last.get("accountingSnapshot")).get("tokenDetails"))
+
+            def count(kind: str) -> int:
+                n = _dict(tokens.get(kind)).get("tokenCount")
+                return n if isinstance(n, int) and not isinstance(n, bool) and n >= 0 else 0
+            states = [m for m in last.get("modelCacheState") or [] if isinstance(m, dict) and isinstance(m.get("modelId"), str)]
+            u = Usage(count("input") + count("cache_read") + count("cache_write"), count("cache_read"),
+                      count("cache_write"), count("output"), count("reasoning"), None,
+                      states[0]["modelId"] if len(states) == 1 else None)
         return _one_run(u)
 
     def uses(self, stdout: str) -> Uses:

@@ -152,12 +152,15 @@ def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_
     # MCP servers and connectors
     twin_servers = _mcp_prefixes(twin)
     connected = [s["name"] for s in twin.init.get("mcp_servers", []) if s.get("status") == "connected"]
-    if any(_server_prefix(name) not in twin_servers for name in connected):
+    # servers the user configured that the control run did not connect: it cannot see them (Copilot)
+    configured = agent.mcp_configured(real) if hasattr(agent, "mcp_configured") else []
+    if any(_server_prefix(name) not in twin_servers for name in [*connected, *configured]):
         r.blind.append("mcp")
     elif twin_servers:
         r.seen.append("mcp")
     for prefix in sorted(_mcp_prefixes(room)):
-        source = "connected account (login)" if prefix.startswith("mcp__claude_ai_") else "MCP server"
+        login = prefix.startswith("mcp__claude_ai_") or prefix[5:-2] in getattr(agent, "login_mcp", ())
+        source = "connected account (login)" if login else "MCP server"
         r.leaks.append(Finding("mcp", prefix[5:-2], source))
 
     # skills from plugins, the user's skill directories and the account

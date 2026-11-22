@@ -217,9 +217,7 @@ def _run_in(room: Room, agent, real, command: list[str], env, timeout: float, lo
         return f"agent exit {_stream(backend().argv(room, agent, real, command, env), log_dir, timeout)}"
     except subprocess.TimeoutExpired:
         return f"agent stopped after {int(timeout)} s"
-    finally:
-        if hasattr(agent, "collect"):  # what the agent keeps in the room rather than in its stream (Copilot's tokens)
-            agent.collect(room, log_dir)
+
 
 
 def read_usage(agent, log_dir: Path) -> dict | None:

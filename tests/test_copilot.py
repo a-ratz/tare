@@ -175,23 +175,19 @@ def test_skills_above_the_project_count_up_to_the_repositorys_root(tmp_path):
     assert Copilot().parent_skill_dirs(project) == []
 
 
-def test_an_unattended_run_writes_its_usage_into_the_room_and_tare_appends_it_to_the_stream(tmp_path):
-    room = Room(tmp_path / "room-home", tmp_path / "work")
-    args = Copilot().run_args("do it", ["--model", "gpt-x"], room=room)
-    assert args[:2] == ["--yolo", "--no-auto-update"]
-    assert args[args.index("--usage-output-file") + 1] == "/home/tare/.copilot/tare-usage.json"
-    assert args[-5:] == ["--model", "gpt-x", "-p", "do it", "--output-format", "json"][-5:]
+def test_an_unattended_run_reads_its_tokens_from_the_streams_last_checkpoint():
+    args = Copilot().run_args("do it", ["--model", "gpt-x"])
+    assert args == ["--yolo", "--no-auto-update", "--model", "gpt-x", "-p", "do it", "--output-format", "json"]
     with pytest.raises(TareError, match="Cliff and Swap"):
         Copilot().run_args("do it", [], hook="snapshot")
-    room.config(Copilot()).mkdir(parents=True)
-    (room.config(Copilot()) / "tare-usage.json").write_text(json.dumps({"modelMetrics": {"gpt-x": {"usage": {
-        "inputTokens": 1200, "outputTokens": 30, "cacheReadTokens": 800, "cacheWriteTokens": 0}}}}))
-    (tmp_path / "stdout.jsonl").write_text('{"type": "result"}\n')
-    Copilot().collect(room, tmp_path)
-    u = Copilot().usage((tmp_path / "stdout.jsonl").read_text())
-    assert (u.input, u.cached, u.output, u.model, u.cost_usd, u.runs) == (1200, 800, 30, "gpt-x", None, 1)
-    Copilot().collect(Room(tmp_path / "none", tmp_path), tmp_path)  # no usage file: nothing appended
-    assert len((tmp_path / "stdout.jsonl").read_text().splitlines()) == 2
+    u = Copilot().usage((STREAMS / "copilot-skill.jsonl").read_text())
+    assert (u.input, u.cached, u.cache_write, u.output, u.model, u.cost_usd, u.runs) == \
+        (40633, 27000, 13624, 64, "gpt-6.1-sol", None, 1)
+    odd = json.dumps({"type": "session.usage_checkpoint", "data": {"accountingSnapshot": {"tokenDetails": {
+        "input": {"tokenCount": "12"}, "output": {"tokenCount": True}, "cache_read": {"tokenCount": -3}}}}})
+    u = Copilot().usage(odd + "\n" + '{"type": "result"')  # odd counts, and a last line cut off
+    assert (u.input, u.output, u.model) == (0, 0, None)
+    assert Copilot().usage("").input == 0
 
 
 def test_a_recorded_copilot_run_counts_its_skill_and_tools():
@@ -213,3 +209,44 @@ def test_cliff_and_swap_refuse_copilot(capsys):
         cli.main(["swap", "task", "--check", "true", "--b", "copilot"])
     assert "copilot does not run in Cliff and Swap yet" in capsys.readouterr().err
     assert "copilot" in AGENTS
+
+
+def test_the_control_run_copies_what_links_point_to_and_runs_online(setup, tmp_path):
+    shared = tmp_path / "shared-skills"
+    (shared / "s").mkdir(parents=True)
+    (setup.config / "skills").symlink_to(shared)
+    with Copilot().twin(setup, "http://fake") as env:
+        copy = Path(env["COPILOT_HOME"]) / "skills"
+        assert copy.is_dir() and not copy.is_symlink()
+        (copy / "written-by-the-run").write_text("x")
+        assert env["COPILOT_OFFLINE"] == "false"
+    assert not (shared / "written-by-the-run").exists()
+
+
+def test_a_configured_mcp_server_the_control_run_did_not_connect_makes_the_probe_blind(setup, tmp_path):
+    c = Copilot()
+    (setup.config / "mcp-config.json").write_text(json.dumps({"mcpServers": {"local-search": {"command": "x"}}}))
+    twin = c.capture(stream("github-mcp-server"), [request("bash", "github-mcp-server-list_issues")])
+    room = c.capture(stream(), [request("bash")])
+    reading = score(c, setup, twin, room, "", "", project=tmp_path / "p")
+    assert "mcp" in reading.blind and not reading.zero
+    (setup.config / "mcp-config.json").write_text("{}")
+    leaked = score(c, setup, twin, twin, "", "", project=tmp_path / "p")
+    assert [(f.what, f.source) for f in leaked.leaks if f.kind == "mcp"] == [("github-mcp-server", "connected account (login)")]
+
+
+def test_a_classic_token_is_refused_from_every_source(setup, monkeypatch):
+    c = Copilot()
+    user = c._user(setup)
+    monkeypatch.setattr(agents.shutil, "which", lambda name: "/usr/bin/gh")
+    monkeypatch.setattr(agents.subprocess, "run", lambda argv, **k: SimpleNamespace(returncode=0, stdout="ghp_classic\n"))
+    monkeypatch.setattr(agents.sys, "platform", "darwin")
+    monkeypatch.setattr(agents, "_security", lambda account, service: "ghp_also_classic")
+    assert c._token(setup, user) is None
+
+
+def test_an_agent_description_written_as_a_yaml_block_is_read(setup):
+    (setup.config / "agents").mkdir()
+    (setup.config / "agents" / "deep.agent.md").write_text(
+        "---\nname: deep\ndescription: >\n  Looks into things.\n  Thoroughly.\ntools: [x]\n---\nBody.\n")
+    assert Copilot().custom_agents(setup)[1] == {"deep": "Looks into things."}

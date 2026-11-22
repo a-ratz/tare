@@ -17,8 +17,8 @@ check (a judge agent costs tokens too) and of the whole run:
 Claude Code and Pi report their cost themselves. Codex and the Antigravity CLI report only
 tokens, so tare estimates their cost from a price table, and only when it knows the model: pass
 it with `-m` or `--model`. The Copilot CLI counts its cost in premium requests of your plan, not
-in dollars; tare reads its tokens per model from the usage file it writes (`--usage-output-file`)
-and estimates a notional cost the same way.
+in dollars; tare reads its tokens from the last usage checkpoint in its stream and estimates a
+notional cost the same way.
 
 - `tare prices update` fetches LiteLLM's public price table.
 - `~/.config/tare/prices.json` overrides single models with your own prices (in dollars per
