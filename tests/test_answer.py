@@ -22,6 +22,7 @@ def test_names_add_the_model_only_when_two_sides_share_an_agent():
     shared = names({"a": CLAUDE, "b": {"agent": "claude", "args": ["--model", "sonnet"]}})
     assert (shared["a"]["full"], shared["b"]["full"]) == ("Claude Code with haiku", "Claude Code with sonnet")
     assert shared["a"]["label"] == "Claude Code · haiku"
+    assert names({"a": {"agent": "copilot", "args": []}, "b": CODEX})["a"]["full"] == "Copilot CLI"
 
 
 def test_judge_detail_gives_score_threshold_and_reason():
