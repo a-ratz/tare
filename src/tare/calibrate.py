@@ -76,7 +76,7 @@ def calibrate(sides: list[Side], project: Path, prompt: str | None, check: str |
             if score := re.search(r"score (\d+)", tail.detail):
                 side.scores.append(int(score.group(1)))
 
-    width = max(len(s.label()) for s in sides) + 2
+    width = max(len("agent"), *(len(s.label()) for s in sides)) + 2  # never narrower than its header
     lines = [f"tare calibrate · {project}"]
     if prompt and not all(s.prompt for s in sides):
         lines.append(f"  task      {prompt}")

@@ -36,6 +36,18 @@ def test_calibrate_reports_each_side_with_its_interval_and_journals_every_run(tm
     assert state["rates"]["a"]["passes"] == 1 and state["rates"]["b"]["n"] == 4
 
 
+def test_the_agent_column_is_never_narrower_than_its_header(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    out = tmp_path / "run"
+    out.mkdir()
+    monkeypatch.setattr(caps, "run_tail", lambda *a, **k: caps.Tail(0, False, "d"))
+    text = cal.calibrate([cal.Side("a", Named("pi"), None, [])], project, "task", "check", out, runs=1, jobs=1,
+                         journal=Journal(out))
+    assert "  side  agent  pass  rate  likely range" in text
+    assert "  a     pi      0/1  0.00  0.00-0.79" in text
+
+
 def test_each_side_runs_its_own_prompt_and_without_a_check_every_run_is_kept(tmp_path, monkeypatch):
     project = tmp_path / "project"
     project.mkdir()
