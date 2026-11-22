@@ -24,7 +24,9 @@ tare prices update                 # fetch the price table for costs an agent do
 ```
 
 `tare claude`, `tare codex`, `tare pi` and `tare agy` mount your project at `/work` directly. The
-agent changes your real files, as it would outside the room. `--yolo` adds the agent's own flag
+agent changes your real files, as it would outside the room. On macOS the room works on a clone
+of your project instead, and the agent's changes are copied back when it exits; sockets and pipes
+it left in the project are not copied. `--yolo` adds the agent's own flag
 for skipping permission prompts. Pi has no such prompts. The [measuring tools](measuring.md) work
 on copies instead.
 

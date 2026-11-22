@@ -1,5 +1,6 @@
 import json
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -106,6 +107,28 @@ def test_seatbelt_copies_the_runs_changes_back_and_leaves_the_rest(tmp_path, mon
     assert (work / "new" / "deep" / "file.txt").read_text() == "added\n"
     assert os.readlink(work / "link") == "src/keep.py"
     assert (work / "src" / "keep.py").read_text() == "the user's edit meanwhile\n"
+
+
+def test_seatbelt_copy_back_leaves_out_sockets_and_pipes_and_copies_the_rest(tmp_path, monkeypatch, mac):
+    real, _ = claude_on_mac(tmp_path, monkeypatch)
+    work = project(tmp_path)
+    (work / ".git").mkdir()
+    os.mkfifo(work / "old-pipe")  # in the project before the run, which removes it
+    with Seatbelt().open(Claude(), real, work) as r:
+        clone = Path(r.inside_work)
+        (clone / "old-pipe").unlink()
+        server = socket.socket(socket.AF_UNIX)  # as git's fsmonitor keeps one in .git
+        monkeypatch.chdir(clone / ".git")  # a socket's path has room for about 100 bytes
+        server.bind("fsmonitor--daemon.ipc")
+        monkeypatch.chdir(tmp_path)
+        os.mkfifo(clone / "pipe")
+        (clone / "gone.txt").unlink()
+        os.mkfifo(clone / "gone.txt")  # a file the run replaced with a pipe
+        (clone / "z-after.txt").write_text("after the socket\n")
+    server.close()
+    assert (work / "z-after.txt").read_text() == "after the socket\n"
+    assert not (work / ".git" / "fsmonitor--daemon.ipc").exists() and not (work / "pipe").exists()
+    assert not (work / "gone.txt").exists() and not (work / "old-pipe").exists()
 
 
 def test_seatbelt_argv_clears_the_environment_and_runs_the_clone_in_the_work_clone(tmp_path, monkeypatch, mac):

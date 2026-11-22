@@ -234,7 +234,8 @@ def _clone(source: Path, target: Path):
 
 
 def _state(root: Path) -> dict[str, tuple]:
-    """Every entry under `root`, by relative path: its kind and what a change would alter."""
+    """Every entry under `root`, by relative path: its kind and what a change would alter. A socket,
+    a pipe or a device is "special": it cannot be copied (git's fsmonitor keeps a socket in .git)."""
     state = {}
     for directory, dirs, files in os.walk(root):
         for name in dirs + files:
@@ -244,8 +245,10 @@ def _state(root: Path) -> dict[str, tuple]:
                 state[str(path.relative_to(root))] = ("link", os.readlink(path))
             elif stat.S_ISDIR(st.st_mode):
                 state[str(path.relative_to(root))] = ("dir", st.st_mode)
-            else:
+            elif stat.S_ISREG(st.st_mode):
                 state[str(path.relative_to(root))] = ("file", st.st_mode, st.st_size, st.st_mtime_ns)
+            else:
+                state[str(path.relative_to(root))] = ("special",)
     return state
 
 
@@ -259,7 +262,8 @@ def _remove(path: Path):
 def _copy_back(before: dict[str, tuple], clone: Path, work: Path):
     """Apply what the run changed in the clone to `work`: new and changed entries are copied over,
     removed ones are removed. An entry the run did not touch stays as it is in `work`, even if
-    the user changed it meanwhile."""
+    the user changed it meanwhile. A socket or a pipe the run left is not copied; what it
+    replaced counts as removed."""
     after = _state(clone)
     for rel in sorted(before.keys() - after.keys(), reverse=True):  # a directory's entries before the directory
         _remove(work / rel)
@@ -267,6 +271,10 @@ def _copy_back(before: dict[str, tuple], clone: Path, work: Path):
         if before.get(rel) == after[rel]:
             continue
         source, target = clone / rel, work / rel
+        if after[rel][0] == "special":
+            if rel in before:
+                _remove(target)
+            continue
         if after[rel][0] == "dir":
             if not target.is_dir() or target.is_symlink():
                 _remove(target)
