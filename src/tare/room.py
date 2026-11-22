@@ -479,14 +479,20 @@ LEGACY_IDLE = 3600  # seconds
 def _hold(base: Path):
     """A lock that the room's tare holds from the room's making until it is gone, beside the room
     (out of the agent's reach). `tare cleanup` removes only a room whose lock is free."""
-    try:  # a new file of the user's alone; never one that is already there, never through a link
-        fd = os.open(f"{base}.lock", os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    # locked before it has the lock's name, so cleanup never finds it unlocked: a new file of the
+    # user's alone, locked, then linked to the name, which must not be there yet
+    part = Path(f"{base}.lock-{os.getpid()}")
+    try:
+        fd = os.open(part, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        try:
+            os.link(part, f"{base}.lock")
+        finally:
+            part.unlink(missing_ok=True)
     except OSError as e:
         shutil.rmtree(base, ignore_errors=True)
         raise TareError(f"cannot lock the room {base}: {e}") from None
-    lock = os.fdopen(fd, "w")
-    fcntl.flock(lock, fcntl.LOCK_EX)
-    return lock
+    return os.fdopen(fd, "w")
 
 
 def _release(lock, base: Path, kept: bool = False):
@@ -496,6 +502,23 @@ def _release(lock, base: Path, kept: bool = False):
     if kept or not os.path.lexists(base):
         Path(f"{base}.lock").unlink(missing_ok=True)
     lock.close()
+
+
+def remove_room(room_dir: Path) -> bool:
+    """Remove a room, also where the agent left folders read-only (Go's module cache); True when it is gone."""
+    def writable(function, path, *_):
+        try:
+            os.chmod(os.path.dirname(path), 0o700)
+            if os.path.isdir(path) and not os.path.islink(path):
+                os.chmod(path, 0o700)
+            function(path)
+        except OSError:
+            pass
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(room_dir, onexc=writable)
+    else:
+        shutil.rmtree(room_dir, onerror=writable)
+    return not os.path.lexists(room_dir)
 
 
 def rooms_on_disk() -> list[Path]:

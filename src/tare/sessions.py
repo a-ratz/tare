@@ -80,9 +80,15 @@ def keep(agent, room, project: Path) -> Path | None:
     folder = store(agent, project)
     _private(folder)
     target = folder / f"{time.strftime('%Y%m%d-%H%M%S')}-{sid}.jsonl"
-    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)  # never readable by others, not even while copied
-    with os.fdopen(fd, "wb") as out, found.open("rb") as source:
-        shutil.copyfileobj(source, out)
+    part = folder / f".{target.name}.part"  # not a *.jsonl: a copy that fails half-way is never the latest
+    fd = os.open(part, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)  # the user's alone from the start
+    try:
+        with os.fdopen(fd, "wb") as out, found.open("rb") as source:
+            shutil.copyfileobj(source, out)
+        os.replace(part, target)
+    except BaseException:
+        part.unlink(missing_ok=True)
+        raise
     return target
 
 

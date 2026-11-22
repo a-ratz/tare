@@ -34,7 +34,7 @@ from .journal import Journal
 from .swap import Side, swap
 from .probe import probe, render
 from .capsule import _feed, _join, _pump
-from .room import TareError, backend, leftover_rooms, remove_lock
+from .room import TareError, backend, leftover_rooms, remove_lock, remove_room
 
 
 def _exit_on(signum, _frame):
@@ -346,12 +346,17 @@ def _cleanup(argv: list[str]) -> int:
     args = ap.parse_args(argv)
     rooms, kept = leftover_rooms(), sessions.kept()
     verb = "would remove" if args.dry_run else "removed"
+    left = []
     for path in rooms:
         size = _size(path)
         if not args.dry_run:
-            shutil.rmtree(path, ignore_errors=True)
+            if not remove_room(path):  # its lock stays, so the next cleanup finds it again
+                left.append(path)
+                print(f"could not remove  room  {path}", file=sys.stderr)
+                continue
             remove_lock(path)
         print(f"{verb}  room     {path}  {size // 1024} KB")
+    rooms = [p for p in rooms if p not in left]
     for path in kept:
         size = _size(path)
         if not args.dry_run:
@@ -361,7 +366,7 @@ def _cleanup(argv: list[str]) -> int:
         sessions.remove_empty_folders()
     print(f"tare cleanup: {len(rooms)} room{'s' if len(rooms) != 1 else ''} and {len(kept)} "
           f"session{'s' if len(kept) != 1 else ''} " + ("would be removed (dry run)" if args.dry_run else "removed"))
-    return 0
+    return 1 if left else 0
 
 
 def _watch(argv: list[str]) -> int:

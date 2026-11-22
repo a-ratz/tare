@@ -319,3 +319,49 @@ def test_cleanup_removes_leftover_rooms_and_kept_sessions_and_nothing_else(home,
         assert "2 rooms and 1 session removed" in capsys.readouterr().out
     finally:
         room._release(lock, held)
+
+
+def test_a_copy_that_fails_half_way_leaves_no_session_to_continue_from(home, tmp_path, monkeypatch):
+    r = Room(tmp_path / "room-home", tmp_path / "work")
+    claude_session(r.home, "s1", "x")
+    first = sessions.keep(Claude(), r, tmp_path / "project")
+
+    def full(source, out):
+        out.write(b"{\"sessionId\": \"s1\", \"half")
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(sessions.shutil, "copyfileobj", full)
+    monkeypatch.setattr(sessions.time, "strftime", lambda fmt: "29991231-235959")
+    with pytest.raises(OSError):
+        sessions.keep(Claude(), r, tmp_path / "project")
+    assert sessions.latest(Claude(), tmp_path / "project") == first
+    assert sorted(p.name for p in first.parent.iterdir()) == [first.name]
+
+
+def test_a_room_lock_is_held_under_its_name_from_the_start(rooms_dir):
+    base = rooms_dir / "tare-room-new"
+    base.mkdir()
+    lock = room._hold(base)
+    try:
+        assert room.in_use(base) and sorted(p.name for p in rooms_dir.iterdir()) == ["tare-room-new", "tare-room-new.lock"]
+    finally:
+        lock.close()
+
+
+def test_cleanup_removes_read_only_folders_and_says_what_it_could_not_remove(home, rooms_dir, monkeypatch, capsys):
+    stuck, readonly = rooms_dir / "tare-room-stuck", rooms_dir / "tare-room-readonly"
+    for r in (stuck, readonly):
+        (r / "home").mkdir(parents=True)
+    cache = readonly / "home" / "go" / "pkg" / "mod"
+    cache.mkdir(parents=True)
+    (cache / "module.go").write_text("package x")
+    cache.chmod(0o555)
+    for r in (stuck, readonly):
+        aged(r)
+        room._hold(r).close()  # crashed tares
+    real_remove = room.remove_room
+    monkeypatch.setattr(cli, "remove_room", lambda p: False if p == stuck else real_remove(p))
+    assert cli.main(["cleanup"]) == 1
+    assert not readonly.exists() and not Path(f"{readonly}.lock").exists()
+    assert stuck.exists() and Path(f"{stuck}.lock").exists()  # found again next time
+    captured = capsys.readouterr()
+    assert f"could not remove  room  {stuck}" in captured.err and "1 room and 0 sessions removed" in captured.out
