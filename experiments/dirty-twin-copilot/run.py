@@ -4,6 +4,7 @@ usage:
   uv run experiments/dirty-twin-copilot/run.py markers              # write markers.local.json, print hashes
   uv run experiments/dirty-twin-copilot/run.py run t0|t0off|t1|t1f|t2|r1
   uv run experiments/dirty-twin-copilot/run.py run t2p               # post-hoc: T0 plus an enabled plugin
+  uv run experiments/dirty-twin-copilot/run.py run t0out             # post-hoc: T0 in a work directory outside the home
   uv run experiments/dirty-twin-copilot/run.py check                # score every run against the markers
 
 The fake is reached through Copilot's "bring your own key" variables (COPILOT_PROVIDER_BASE_URL,
@@ -162,12 +163,12 @@ def run(condition: str):
     out.mkdir(parents=True, exist_ok=True)
     binary = Path(shutil.which("copilot")).resolve()
     real = Real(HOME, COPILOT_HOME, binary)
-    work = Path(tempfile.mkdtemp(prefix=".tare-copilot-twin-work-", dir=HOME))
+    work = Path(tempfile.mkdtemp(prefix=".tare-copilot-twin-work-", dir=None if condition == "t0out" else HOME)).resolve()
     try:
         (work / "AGENTS.md").write_text(PROJECT_RULE + "\n")
         with Fake() as fake:
             byok = {"COPILOT_PROVIDER_BASE_URL": fake.url, "COPILOT_PROVIDER_TYPE": "anthropic", "COPILOT_MODEL": "tare-fake"}
-            if condition in ("t0", "t0off", "t2", "t2p"):
+            if condition in ("t0", "t0off", "t0out", "t2", "t2p"):
                 before = fingerprint(COPILOT_HOME, HOME / ".agents")
                 with tempfile.TemporaryDirectory(prefix="tare-copilot-twin-") as tmp:
                     copy, cache = Path(tmp) / "copilot", Path(tmp) / "cache"
@@ -217,7 +218,7 @@ def text_of(condition: str) -> tuple[str, set[str]]:
 
 def check():
     found = json.loads((HERE / "markers.local.json").read_text()) | {"K12": PLUGIN_SKILL}
-    for c in ("t0", "t0off", "t1", "t1f", "t2", "t2p", "r1"):
+    for c in ("t0", "t0off", "t0out", "t1", "t1f", "t2", "t2p", "r1"):
         out = HERE / "runs" / c
         if not (out / "exit").exists():
             continue
