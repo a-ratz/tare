@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import signal
@@ -318,11 +319,13 @@ def test_only_processes_that_name_the_room_or_work_in_it_are_its_own(monkeypatch
           f" 104 vim /Users/me/tare-room-abc12345/notes\n"  # the same name elsewhere
           f" 105 vim /Users/me/tmp/tare-room-abc12345/notes\n 106 vim /var/tmp/tare-room-abc12345/notes\n"
           f" 107 /bin/sh -c cd \"{base}\"; sleep 300\n"  # the room itself, quoted
+          f" 108 /Applications/Chrome file://{base}/work/index.html\n"  # a browser opened a page in the room
+          f" 109 /bin/sh -c (cd {base}) </dev/null\n ² {base}/x\n"
           f"   1 {base}/x\n   0 {base}/x\n garbage line {base}\n"
           f" {os.getpid()} python {base}/self\n")
-    lsof = f"p201\nn{base}/tmp\np202\nn{base}\np203\nn/\npnotapid\nn{base}\np204\nn{base}-copy\n"
+    lsof = f"p201\nn{base}/tmp\np202\nn{base}\np203\nn/\npnotapid\nn{base}\np204\nn{base}-copy\np²\nn{base}\n"
     monkeypatch.setattr(room, "_listing", lambda argv: ps if argv[0].endswith("ps") else lsof)
-    assert room._room_processes(base) == [101, 102, 107, 201, 202]
+    assert room._room_processes(base) == [101, 102, 107, 108, 109, 201, 202]
     monkeypatch.setattr(room, "_listing", lambda argv: "")  # ps and lsof missing
     assert room._room_processes(base) == []
 
@@ -355,6 +358,14 @@ def test_a_closed_stderr_does_not_stop_the_room_from_going(tmp_path, monkeypatch
         base = r.home.parent
         monkeypatch.setattr(sys, "stderr", Gone())
     assert not base.exists()
+    closed = io.StringIO()
+    closed.close()
+    for stderr in (closed, None):  # a closed stream, and no stderr at all
+        with Seatbelt().open(Claude(), real, project(tmp_path / str(id(stderr)))) as r:
+            base = r.home.parent
+            monkeypatch.setattr(sys, "stderr", stderr)
+        monkeypatch.setattr(sys, "stderr", sys.__stderr__)
+        assert not base.exists()
 
 
 def test_a_failure_while_ending_processes_still_copies_back_and_removes_the_room(tmp_path, monkeypatch, mac, capsys):
@@ -440,3 +451,21 @@ def test_claude_code_keeps_its_own_sandbox_off_in_a_macos_room(monkeypatch, mac)
 def test_the_antigravity_cli_says_it_is_not_supported_on_macos(mac):
     with pytest.raises(TareError, match="not supported on macOS"):
         agents.AGENTS["agy"].discover()
+
+
+def test_copy_back_passes_over_a_file_that_vanished_meanwhile(tmp_path, monkeypatch):
+    clone, work = tmp_path / "c", tmp_path / "w"
+    clone.mkdir()
+    work.mkdir()
+    before = room._state(clone)
+    (clone / "gone.txt").write_text("x")
+    (clone / "kept.txt").write_text("y")
+    copy = room.shutil.copy2
+
+    def vanishing(source, target):
+        if Path(source).name == "gone.txt":  # a process the room left running removed it
+            raise FileNotFoundError(source)
+        return copy(source, target)
+    monkeypatch.setattr(room.shutil, "copy2", vanishing)
+    room._copy_back(before, clone, work)
+    assert (work / "kept.txt").read_text() == "y" and not (work / "gone.txt").exists()

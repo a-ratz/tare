@@ -268,11 +268,18 @@ def profile(room: Room) -> str:
 
 
 def _say(message: str):
-    """A line on stderr, which may be gone (a closed terminal)."""
+    """A line on stderr, which may be gone: a closed terminal, a closed stream, or no stderr at all
+    (print would then write to stdout, where a check reads its output)."""
+    if sys.stderr is None:
+        return
     try:
         print(message, file=sys.stderr)
-    except OSError:
+    except (OSError, ValueError):
         pass
+
+
+def _number(text: str) -> bool:
+    return text.isascii() and text.isdigit()  # isdigit alone takes digits int() does not
 
 
 def _listing(argv: list[str]) -> str:
@@ -292,12 +299,13 @@ def _room_processes(base: Path) -> list[int]:
     pids = set()
     for line in _listing(["/bin/ps", "-xww", "-o", "pid=,command="]).splitlines():
         pid, _, command = line.strip().partition(" ")
-        if pid.isdigit() and any(re.search(rf"(?<![^\s\"'=:]){re.escape(root)}(?=[/\s\"';:]|$)", command) for root in roots):
+        if _number(pid) and any(re.search(rf"(?<![^\s\"'=:/<>(;&|]){re.escape(root)}(?=[/\s\"';:)<>&|]|$)", command)
+                                for root in roots):
             pids.add(int(pid))
     pid = None
     for line in _listing(["/usr/sbin/lsof", "-b", "-w", "-a", "-u", str(os.getuid()), "-d", "cwd", "-Fpn"]).splitlines():
         if line.startswith("p"):
-            pid = int(line[1:]) if line[1:].isdigit() else None
+            pid = int(line[1:]) if _number(line[1:]) else None
         elif line.startswith("n") and pid and any(line[1:] == root or line[1:].startswith(root + "/") for root in roots):
             pids.add(pid)
     return sorted(p for p in pids if p > 1 and p != os.getpid())
@@ -325,7 +333,7 @@ def _alive(pids: list[int]) -> list[int]:
     if not existing:
         return []
     states = _listing(["/bin/ps", "-o", "pid=,stat=", "-p", ",".join(map(str, existing))])
-    zombies = {int(f[0]) for f in (line.split() for line in states.splitlines()) if len(f) == 2 and f[0].isdigit()
+    zombies = {int(f[0]) for f in (line.split() for line in states.splitlines()) if len(f) == 2 and _number(f[0])
                and f[1].startswith("Z")}
     return [pid for pid in existing if pid not in zombies]
 
@@ -414,10 +422,13 @@ def _copy_back(before: dict[str, tuple], clone: Path, work: Path):
             target.chmod(stat.S_IMODE(after[rel][1]))
             continue
         _remove(target)
-        if after[rel][0] == "link":
-            target.symlink_to(os.readlink(source))
-        else:
-            shutil.copy2(source, target)
+        try:
+            if after[rel][0] == "link":
+                target.symlink_to(os.readlink(source))
+            else:
+                shutil.copy2(source, target)
+        except FileNotFoundError:  # gone from the clone since the state was taken
+            pass
 
 
 def backend():
