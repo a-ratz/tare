@@ -14,8 +14,10 @@
 import argparse
 import json
 import shlex
+import os
 import threading
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -29,6 +31,7 @@ from .cliff import cliff
 from .journal import Journal
 from .swap import Side, swap
 from .probe import probe, render
+from .capsule import _pump
 from .room import TareError, backend
 
 
@@ -39,10 +42,26 @@ def _exit_on(signum, _frame):
 
 def _run_attached(argv: list[str]) -> int:
     """Run the room in the foreground. Ctrl-C belongs to the agent (it interrupts a
-    turn there), so tare ignores it instead of dying and removing the room under it."""
+    turn there), so tare ignores it instead of dying and removing the room under it. An
+    output redirected to a file reaches it through a pipe: a Node.js agent aborts at start
+    when its stdout is a file in a place the room denies (#172)."""
     previous = signal.signal(signal.SIGINT, signal.SIG_IGN)
     try:
-        return subprocess.call(argv)
+        to_file = {fd: stat.S_ISREG(os.fstat(fd).st_mode) for fd in (1, 2)}
+        if not any(to_file.values()):
+            return subprocess.call(argv)
+        sys.stdout.flush()
+        sys.stderr.flush()
+        proc = subprocess.Popen(argv, stdout=subprocess.PIPE if to_file[1] else None,
+                                stderr=subprocess.PIPE if to_file[2] else None)
+        pumps = [threading.Thread(target=_pump, args=(pipe, target), daemon=True)
+                 for pipe, target in ((proc.stdout, sys.stdout.buffer), (proc.stderr, sys.stderr.buffer)) if pipe]
+        for pump in pumps:
+            pump.start()
+        code = proc.wait()
+        for pump in pumps:
+            pump.join(timeout=2)
+        return code
     finally:
         signal.signal(signal.SIGINT, previous)
 

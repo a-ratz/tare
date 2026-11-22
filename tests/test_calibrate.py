@@ -93,3 +93,23 @@ def test_the_report_ends_with_usage_per_side_the_judge_and_the_total(tmp_path, m
     assert "            b codex: 2 runs, 2.0k in (800 cached), 100 out, cost unknown" in text
     assert "            check (the judge): 4 runs, 1.2k in (0 cached), 80 out, $0.008" in text
     assert "total: 8 runs" in text and (out / "usage.json").exists()
+
+
+def test_a_runs_output_reaches_its_files_through_pipes(tmp_path):
+    """The agent's stdout is a pipe, never the run directory's file: a Node.js agent aborts at start
+    when its stdout is a file in a place the room denies (#172)."""
+    from tare.capsule import _stream
+    code = _stream(["/bin/sh", "-c", 'if [ -p /dev/stdout ]; then echo pipe; else echo file; fi; echo oops >&2; exit 3'],
+                   tmp_path, 30)
+    assert code == 3
+    assert (tmp_path / "stdout.jsonl").read_text() == "pipe\n"
+    assert (tmp_path / "stderr.log").read_text() == "oops\n"
+
+
+def test_a_process_left_holding_the_pipe_does_not_hold_up_the_run(tmp_path):
+    import time
+    from tare.capsule import _stream
+    started = time.time()
+    assert _stream(["/bin/sh", "-c", "echo done; (sleep 5; echo late) &"], tmp_path, 30) == 0
+    assert time.time() - started < 3.5
+    assert (tmp_path / "stdout.jsonl").read_text().startswith("done\n")

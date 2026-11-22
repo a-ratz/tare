@@ -129,6 +129,12 @@ shims whose xcrun cache lives in that denied directory too, and each call would 
 cannot write it, so the room's `PATH` holds the developer directory's `usr/bin` (the system's
 choice, never a denied place) before `/usr/bin`. `git`, `python3` and `make` then start without
 xcrun; `pip3`, and with Xcode `clang` and `swift`, still ask it ([docs/tools.md](docs/tools.md)).
+A Node.js agent (Pi, and the Copilot CLI) aborts at start, before any of its own code runs, when
+its stdout is a file in a place the room denies (measured: `SIGABRT` in Node's start-up, while the
+same run with stdout in an allowed place or a pipe answered). A measuring run's output goes into
+the run directory under the home, which the room denies, so tare hands every agent its output
+through pipes and writes the files itself (#172). The same holds for `tare pi` with its output
+redirected to a file.
 On macOS, `tar` stores extended attributes as `._` files, so the snapshot hook runs it with
 `COPYFILE_DISABLE=1`. **Measured** on macOS 27.0 (Claude Code 2.1.289, Codex CLI 0.159.0,
 Pi 0.99.1): each agent answered in such a room with its real login. Afterwards the room was

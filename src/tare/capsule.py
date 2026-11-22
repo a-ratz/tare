@@ -14,6 +14,8 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -102,16 +104,37 @@ def record(agent, real, project: Path, out: Path, prompt: str, args: list[str],
     return code
 
 
+def _pump(source, target):
+    """Copy a pipe into a file as it comes. A process the agent left running may hold the pipe after
+    the run and write on after the file is closed: that is dropped."""
+    try:
+        for chunk in iter(lambda: source.read1(65536), b""):
+            target.write(chunk)
+            target.flush()
+    except (OSError, ValueError):
+        pass
+
+
 def _stream(argv: list[str], log_dir: Path, timeout: float | None) -> int:
-    """Run a room with the agent's stdout and stderr written to log_dir as they come (the dashboard reads them)."""
-    with (log_dir / "stdout.jsonl").open("w") as out, (log_dir / "stderr.log").open("w") as err:
-        proc = subprocess.Popen(argv, stdout=out, stderr=err, stdin=subprocess.DEVNULL)
+    """Run a room with the agent's stdout and stderr written to log_dir as they come (the dashboard reads them).
+    Through pipes, not the files themselves: a Node.js agent (Pi, the Copilot CLI) aborts at start when its
+    stdout is a file in a place the room denies (#172), and the run directory, under the home, is one."""
+    with (log_dir / "stdout.jsonl").open("wb") as out, (log_dir / "stderr.log").open("wb") as err:
+        proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL)
+        pumps = [threading.Thread(target=_pump, args=(pipe, file), daemon=True)
+                 for pipe, file in ((proc.stdout, out), (proc.stderr, err))]
+        for pump in pumps:
+            pump.start()
         try:
             return proc.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
             proc.kill()
             proc.wait()
             raise
+        finally:
+            deadline = time.time() + 2  # the rest of the output; a process left holding the pipe ends with the room
+            for pump in pumps:
+                pump.join(timeout=max(0.0, deadline - time.time()))
 
 
 def session_lines(out: Path) -> list[str]:
