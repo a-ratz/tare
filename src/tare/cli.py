@@ -376,10 +376,12 @@ def _cleanup(argv: list[str]) -> int:
     twins = leftover_twins()
     for path in twins:
         size = _size(path)
-        if not args.dry_run and not remove_room(path):
-            left.append(path)
-            print(f"could not remove  copy  {path}", file=sys.stderr)
-            continue
+        if not args.dry_run:
+            if not remove_room(path):  # its lock stays, so the next cleanup finds it again
+                left.append(path)
+                print(f"could not remove  copy  {path}", file=sys.stderr)
+                continue
+            remove_lock(path)
         print(f"{verb}  copy     {path}  {size // 1024} KB")
     twins = [p for p in twins if p not in left]
     for path in kept:

@@ -81,9 +81,10 @@ def instruction_lines(path: Path) -> list[str]:
     except (OSError, UnicodeDecodeError):
         return []
     lines = [line.strip() for line in text.splitlines()]
-    return ([line[:80] for line in lines if len(line) >= 30]
-            or sorted((line for line in lines if len(line) >= 12), key=len, reverse=True)
-            or [text.strip()] * (len(text.strip()) >= 12))[:5]
+    short = [line for line in lines if len(line) >= 12]
+    return ([line[:80] for line in lines if len(line) >= 30][:5]
+            or ([max(short, key=len)] if short else [])
+            or [text.strip()] * (len(text.strip()) >= 12))
 
 
 def _mcp_prefixes(capture: Capture) -> set[str]:
@@ -163,13 +164,22 @@ def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_
         r.leaks.append(Finding("home path", home, "your files"))
 
     # MCP servers and connectors
-    twin_servers = _mcp_prefixes(twin)
+    # the project's own servers (workspace, where the agent says: Copilot) are not the user's setup
+    twin_reported = {s["name"]: s for s in twin.init.get("mcp_servers", []) if s.get("source") != "workspace"}
+    theirs = {_server_prefix(s["name"]) for s in twin.init.get("mcp_servers", []) if s.get("source") == "workspace"}
+    twin_servers = _mcp_prefixes(twin) - theirs
     # servers the control run should offer tools of: connected ones, and for an agent that says so
-    # (Copilot) ones still connecting or failed; a server reported with no tools offers none
+    # (Copilot) ones still connecting or failed; a server reported with no tools, or switched off,
+    # offers none
     expected = getattr(agent, "mcp_expected", ("connected",))
-    connected = [s["name"] for s in twin.init.get("mcp_servers", []) if s.get("status") in expected and s.get("tools") != 0]
-    # servers the user configured that the control run did not connect: it cannot see them (Copilot)
-    configured = agent.mcp_configured(real) if hasattr(agent, "mcp_configured") else []
+
+    def offers(s: dict) -> bool:
+        return s.get("tools") != 0 and (s.get("status") in expected or (s.get("status") is None and bool(s.get("tools"))))
+    connected = [name for name, s in twin_reported.items() if offers(s)]
+    # servers the user configured that the control run did not connect: it cannot see them
+    # (Copilot), unless the run reports them as offering nothing
+    configured = [name for name in (agent.mcp_configured(real) if hasattr(agent, "mcp_configured") else [])
+                  if name not in twin_reported or offers(twin_reported[name])]
     if any(_server_prefix(name) not in twin_servers for name in [*connected, *configured]):
         r.blind.append("mcp")
     elif twin_servers:

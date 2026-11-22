@@ -87,8 +87,8 @@ tare: session kept in ~/.local/state/tare/sessions/claude/<project>; `tare claud
 session into it where the agent keeps its sessions, and starts the agent resuming it: Claude Code
 with `--resume`, Codex with `resume`, Pi with `--session`. Your arguments after `--` follow. The
 continued room holds the earlier conversation because you asked for it; the probe reads the room
-before it is placed. The Antigravity CLI cannot continue a session yet; tare says so and starts
-nothing.
+before it is placed. The Antigravity CLI and the Copilot CLI cannot continue a session yet; tare
+says so and starts nothing.
 
 Kept sessions stay until you remove them, in folders only you can read: a session holds the whole
 conversation. `tare cleanup` removes them, and the rooms that no running tare holds any more (a
@@ -100,7 +100,9 @@ for a day. Any other folder named `tare-room-*` is left alone, and so is every r
 lookup of running processes fails. Half-written copies of a session that a killed tare left go too,
 once they are an hour old, and so do the copies of your setup a probe's control run works on
 (`tare-<agent>-twin-*` in the temporary folder, which can hold a copy of your login) when tare was
-killed during the probe: once nothing names them and nothing in them changed for an hour. `tare cleanup --dry-run` lists what it would remove. When the latest kept
+killed during the probe. A probe holds a lock on its copy as a room's tare does on the room, and
+`tare cleanup` takes a copy only once its lock is free; a copy of tare 0.5.0 or older has no lock and
+goes only when it holds what such a copy holds and nothing in it changed for an hour. `tare cleanup --dry-run` lists what it would remove. When the latest kept
 session is damaged (a crash cut it), `--continue` says so and takes the one before.
 
 **Measured** on macOS 27.0.1 with Claude Code 2.1.330 and Haiku: a first room was told a code word

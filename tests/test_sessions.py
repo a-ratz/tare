@@ -500,17 +500,33 @@ def test_cleanup_removes_only_old_half_written_copies(home, tmp_path):
     assert sessions.parts() == [old]
 
 
-def test_cleanup_removes_copies_of_the_setup_a_killed_probe_left_and_nothing_fresh(home, rooms_dir, tmp_path, capsys):
-    old, fresh = rooms_dir / "tare-copilot-twin-old", rooms_dir / "tare-pi-twin-fresh"
-    for twin in (old, fresh):
-        (twin / "copilot").mkdir(parents=True)
-        (twin / "copilot" / "config.json").write_text("{}")
-    aged(old, 2 * 3600)
-    elsewhere = tmp_path / "precious"
-    elsewhere.mkdir()
-    (rooms_dir / "tare-agy-twin-link").symlink_to(elsewhere)
-    assert room.leftover_twins() == [old]
-    assert cli.main(["cleanup", "--dry-run"]) == 0 and old.exists()
-    assert "0 rooms, 1 copy of your setup and 0 sessions would be removed" in capsys.readouterr().out
-    assert cli.main(["cleanup"]) == 0
-    assert not old.exists() and fresh.exists() and elsewhere.exists()
+def test_cleanup_takes_a_probes_copy_of_the_setup_once_its_lock_is_free_and_nothing_else(home, rooms_dir, tmp_path, capsys):
+    with room.twin_folder("tare-copilot-twin-") as live:  # a running probe's copy, however old
+        assert live.parent == rooms_dir
+        (live / "copilot").mkdir()
+        aged(live, 2 * 3600)
+        assert room.leftover_twins() == []
+        killed = rooms_dir / "tare-pi-twin-killed"  # its probe was killed: the lock is free at once
+        (killed / "agent").mkdir(parents=True)
+        room._hold(killed).close()
+        legacy_old, legacy_new = rooms_dir / "tare-copilot-twin-old", rooms_dir / "tare-copilot-twin-new"
+        for twin in (legacy_old, legacy_new):  # copies of tare 0.5, without a lock
+            for part in ("copilot", "cache"):
+                (twin / part).mkdir(parents=True)
+        aged(legacy_old, 2 * 3600)
+        backup = rooms_dir / "tare-copilot-twin-backup"  # the user's, by the name only
+        (backup / "photos").mkdir(parents=True)
+        aged(backup, 2 * 3600)
+        other = rooms_dir / "tare-mine-twin-x"  # no agent's copy
+        (other / "agent").mkdir(parents=True)
+        aged(other, 2 * 3600)
+        elsewhere = tmp_path / "precious"
+        elsewhere.mkdir()
+        (rooms_dir / "tare-agy-twin-link").symlink_to(elsewhere)
+        assert room.leftover_twins() == [legacy_old, killed]
+        assert cli.main(["cleanup", "--dry-run"]) == 0 and killed.exists()
+        assert "0 rooms, 2 copies of your setup and 0 sessions would be removed" in capsys.readouterr().out
+        assert cli.main(["cleanup"]) == 0
+        assert not killed.exists() and not Path(f"{killed}.lock").exists() and not legacy_old.exists()
+        assert live.exists() and legacy_new.exists() and backup.exists() and other.exists() and elsewhere.exists()
+    assert not live.exists() and not Path(f"{live}.lock").exists()

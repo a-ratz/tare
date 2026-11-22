@@ -390,6 +390,8 @@ def test_instruction_files_of_short_lines_still_give_markers(tmp_path):
     assert instruction_lines(path) == ["# Rules\n- be brief"]
     path.write_text("ok\n")
     assert instruction_lines(path) == []
+    path.write_text("# Instructions\nNever use emojis in answers.\n")  # the heading is no marker
+    assert instruction_lines(path) == ["Never use emojis in answers."]
 
 
 def test_plugins_are_on_unless_switched_off_and_found_where_copilot_installs_them(setup):
@@ -399,3 +401,75 @@ def test_plugins_are_on_unless_switched_off_and_found_where_copilot_installs_the
     (setup.config / "config.json").write_text(json.dumps(data))
     assert Copilot()._enabled_plugins(setup) == [setup.config / "installed-plugins/m/on",
                                                  setup.config / "installed-plugins" / "mk" / "implicit"]
+
+
+def test_only_a_server_that_can_offer_tools_takes_a_tool_name(setup, tmp_path):
+    c = Copilot()
+    # the room lists the GitHub server as disabled; a project server's name starts with it
+    room = c.capture(events(("session.mcp_servers_loaded", {"servers": [
+        {"name": "github-mcp-server", "status": "disabled", "source": "builtin"},
+        {"name": "github-mcp-server-docs", "status": "connected", "source": "workspace"}]})),
+        [request("github-mcp-server-docs-search")], known=("github-mcp-server",))
+    assert room.tools == {"mcp__github-mcp-server-docs__search"}
+    twin = c.capture(stream("github-mcp-server"), [request("github-mcp-server-x")])
+    assert not [f for f in score(c, setup, twin, room, "", "", project=tmp_path / "p").leaks if f.kind == "mcp"]
+    # a failed server does not take a working one's tool, so the control run stays blind for it
+    failed = c.capture(events(("session.mcp_servers_loaded", {"servers": [
+        {"name": "team", "status": "failed"}, {"name": "team-search", "status": "connected"}]})), [request("team-search-query")])
+    assert failed.tools == {"mcp__team-search__query"}
+    assert "mcp" in score(c, setup, failed, c.capture(stream(), [request("bash")]), "", "", project=tmp_path / "p").blind
+    # a server the stream switched off is not found again by its name in the configuration
+    off = c.capture(events(("session.mcp_server_status_changed", {"serverName": "team", "status": "disabled"})),
+                    [request("team-search-query", "team-x")], known=("team", "team-search"))
+    assert off.tools == {"mcp__team-search__query", "team-x"}
+
+
+def test_the_projects_own_servers_and_servers_without_tools_ask_nothing_of_the_control_run(setup, tmp_path):
+    c = Copilot()
+    (setup.config / "mcp-config.json").write_text(json.dumps({"mcpServers": {"prompts": {"command": "x"}}}))
+    clean = c.capture(stream(), [request("bash")])
+    no_tools = c.capture(events(("session.mcp_server_status_changed", {"serverName": "prompts", "status": "connected"}),
+                                ("session.mcp_server_tools_loaded", {"serverName": "prompts", "toolCount": 0})), [request("bash")])
+    assert "mcp" not in score(c, setup, no_tools, clean, "", "", project=tmp_path / "p").blind
+    (setup.config / "mcp-config.json").write_text("{}")
+    project_failed = c.capture(events(("session.mcp_servers_loaded", {"servers": [
+        {"name": "proj-db", "status": "failed", "source": "workspace"}]})), [request("bash")])
+    assert "mcp" not in score(c, setup, project_failed, clean, "", "", project=tmp_path / "p").blind
+    project_only = c.capture(events(("session.mcp_servers_loaded", {"servers": [
+        {"name": "proj-db", "status": "connected", "source": "workspace"}]})), [request("proj-db-query")])
+    assert "mcp" not in score(c, setup, project_only, clean, "", "", project=tmp_path / "p").seen
+
+
+def test_the_setup_copy_never_follows_a_link_back_into_itself_or_to_the_root(tmp_path):
+    source = tmp_path / "setup"
+    (source / "skills").mkdir(parents=True)
+    (source / "agents").mkdir()
+    (source / "skills" / "s.md").write_text("x")
+    (source / "skills" / "a").symlink_to("../agents")  # two links that lead to each other
+    (source / "agents" / "b").symlink_to("../skills")
+    (source / "root").symlink_to("/")
+    agents._copy_setup(source, tmp_path / "copy")
+    copy = tmp_path / "copy"
+    assert (copy / "skills" / "s.md").exists() and (copy / "skills" / "a").is_dir()
+    assert not os.path.lexists(copy / "root") and not os.path.lexists(copy / "skills" / "a" / "b")
+    assert not os.path.lexists(copy / "agents" / "b" / "a")
+
+
+def test_yaml_quotes_keep_their_escapes_and_a_comment_alone_is_no_value(tmp_path):
+    path = tmp_path / "a.agent.md"
+    path.write_text("---\ndescription: # todo\nsingle: 'Don''t break.'\ndouble: \"Say \\\"hi\\\"\"\n---\n")
+    assert agents._frontmatter(path) == {"description": "", "single": "Don't break.", "double": 'Say "hi"'}
+
+
+def test_a_run_without_counts_stays_unpriced_beside_priced_runs_of_its_side(tmp_path, monkeypatch):
+    from tare.usage import Usage, of_run
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    (tmp_path / "tare").mkdir()
+    (tmp_path / "tare" / "prices.json").write_text(json.dumps({"source": "test", "date": "2026-11-22",
+                                                              "models": {"gpt-x": {"input": 1, "output": 2}}}))
+    priced, empty = Usage(1000, 0, 0, 100, 0, None, "gpt-x"), Copilot().usage("")
+    events_ = [{"event": "start", "sides": {"a": {"agent": "copilot", "args": []}}},
+               {"event": "original", "side": "a", "usage": priced.to_dict()},
+               {"event": "original", "side": "a", "usage": empty.to_dict()}]
+    side = of_run(events_)["sides"]["a"]["usage"]
+    assert side["runs"] == 2 and side["unpriced"] == 1 and abs(side["cost_usd"] - (1000 * 1e-6 + 100 * 2e-6)) < 1e-12

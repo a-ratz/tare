@@ -546,14 +546,42 @@ def rooms_on_disk() -> list[Path]:
 
 
 TWIN_IDLE = 3600  # a probe's control runs end within minutes
+# the folders a probe's control run works in, by name, and what each holds
+TWINS = {"tare-pi-twin-": ("agent",), "tare-copilot-twin-": ("copilot", "cache"), "tare-agy-twin-": ()}
+
+
+@contextmanager
+def twin_folder(prefix: str):
+    """A folder for a probe's control run (a copy of the user's setup, which can hold their login),
+    locked as a room is while it exists: `tare cleanup` takes only one whose lock is free, after a
+    killed probe."""
+    base = Path(tempfile.mkdtemp(prefix=prefix))
+    lock = _hold(base)
+    try:
+        yield base
+    finally:
+        _rmtree(base)
+        _release(lock, base)
+
+
+def _looks_like_a_twin(path: Path) -> bool:
+    """A probe's folder of tare 0.5 (no lock): its agent's folders, and nothing but them."""
+    parts = next((v for k, v in TWINS.items() if path.name.startswith(k)), None)
+    try:
+        names = {p.name for p in path.iterdir()}
+    except OSError:
+        return False
+    return parts is not None and names == set(parts) and all(
+        (path / n).is_dir() and not (path / n).is_symlink() for n in parts)
 
 
 def leftover_twins() -> list[Path]:
-    """Copies of an agent's setup a probe's control run worked on (tare-<agent>-twin-*), left when
-    tare was killed during the probe. They can hold a copy of the login. Left over: no process names
-    them or works in them, and nothing in them changed within TWIN_IDLE."""
-    return [p for p in _own_folders([tempfile.gettempdir()], "tare-*-twin-*")
-            if _room_processes(p, sure=True) == [] and time.time() - _newest_change(p) >= TWIN_IDLE]
+    """Copies of an agent's setup a probe's control run worked on (TWINS), left when tare was killed
+    during the probe. Taken as rooms are: the lock free and no process naming them; one without a
+    lock (tare 0.5) only when it holds what such a copy holds and nothing in it changed within
+    TWIN_IDLE."""
+    found = [p for prefix in TWINS for p in _own_folders([tempfile.gettempdir()], f"{prefix}*")]
+    return [p for p in sorted(found) if not in_use(p, looks_like=_looks_like_a_twin, idle=TWIN_IDLE)]
 
 
 def _newest_change(root: Path) -> float:
@@ -575,18 +603,19 @@ def _looks_like_a_room(room_dir: Path) -> bool:
                for mark in ROOM_MARKS)
 
 
-def in_use(room_dir: Path) -> bool:
+def in_use(room_dir: Path, looks_like=None, idle: float = LEGACY_IDLE) -> bool:
     """Whether a tare, or anything else, may still use the room. In use: its lock is held, or a
     process names it or works in it (the agent of a tare that was killed). A folder without a lock
     counts as a room of tare 0.5.0 or older only when it looks like one, and as left over only when
-    nothing in it changed within LEGACY_IDLE; anything else is never taken."""
+    nothing in it changed within `idle`; anything else is never taken. `looks_like` tells a room
+    (or a probe's copy) of an older tare by its contents."""
     if _room_processes(room_dir, sure=True) != []:  # some, or the lookup failed: leave it
         return True
     lock = Path(f"{room_dir}.lock")
     try:
         st = lock.lstat()
     except FileNotFoundError:
-        return not _looks_like_a_room(room_dir) or time.time() - _newest_change(room_dir) < LEGACY_IDLE
+        return not (looks_like or _looks_like_a_room)(room_dir) or time.time() - _newest_change(room_dir) < idle
     except OSError:
         return True
     if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid():  # not a lock tare made: leave the room

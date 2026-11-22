@@ -13,7 +13,6 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 import time
 import tomllib
 import unicodedata
@@ -23,7 +22,7 @@ from pathlib import Path
 
 from . import trail as trails
 from .fake import FAKE_MODEL
-from .room import TareError
+from .room import TareError, twin_folder
 from .usage import Usage
 from .uses import Uses
 
@@ -644,8 +643,8 @@ class Pi:
     @contextmanager
     def twin(self, real: Real, fake_url: str):
         """The control run runs on a copy of the user's agent directory; the real one is never written."""
-        with tempfile.TemporaryDirectory(prefix="tare-pi-twin-") as copy:
-            agent_dir = Path(copy) / "agent"
+        with twin_folder("tare-pi-twin-") as copy:
+            agent_dir = copy / "agent"
             shutil.copytree(real.config, agent_dir, symlinks=True, ignore=shutil.ignore_patterns("sessions"))
             _absolute_links(real.config, agent_dir)
             self._provider(agent_dir / "models.json", fake_url)
@@ -816,11 +815,8 @@ class Antigravity:
         """The control run sees the real setup, but agy writes into ~/.gemini on every run (its
         conversations, caches, onboarding state). So it runs with an overlay over ~/.gemini
         whose writes go to a tmpfs that dies with the run; see twin_argv."""
-        mount = tempfile.mkdtemp(prefix="tare-agy-twin-")
-        try:
-            yield {"TARE_TWIN_MOUNT": mount}
-        finally:
-            shutil.rmtree(mount, ignore_errors=True)
+        with twin_folder("tare-agy-twin-") as mount:
+            yield {"TARE_TWIN_MOUNT": str(mount)}
 
     def twin_argv(self, argv: list[str], env: dict[str, str], plant: str = "") -> list[str]:
         """Wrap the twin's command: as mapped root in a user and mount namespace, put a tmpfs on
@@ -938,12 +934,33 @@ class Antigravity:
 _BLOCK = re.compile(r"[>|](?:[1-9][+-]?|[+-][1-9]?)?(?:\s+#.*)?")  # a block scalar's header, comment and all
 
 
+_ESCAPES = {"n": "\n", "t": "\t", '"': '"', "\\": "\\", "/": "/", "0": "\0"}
+
+
 def _scalar(value: str) -> str:
-    """A one-line YAML value: a quoted one without its quotes, a plain one without its comment."""
-    if value[:1] in ("'", '"'):
-        end = value.find(value[0], 1)
-        return value[1:end] if end > 0 else value[1:]
-    return re.sub(r"\s+#.*$", "", value)
+    """A one-line YAML value: a quoted one without its quotes and with its escapes ('' in single
+    quotes, a backslash in double quotes), a plain one without its comment."""
+    if value.startswith("'"):
+        out, i = [], 1
+        while i < len(value):
+            if value[i] == "'":
+                if value[i + 1:i + 2] != "'":
+                    break
+                i += 1
+            out.append(value[i])
+            i += 1
+        return "".join(out)
+    if value.startswith('"'):
+        out, i = [], 1
+        while i < len(value) and value[i] != '"':
+            if value[i] == "\\" and i + 1 < len(value):
+                i += 1
+                out.append(_ESCAPES.get(value[i], "\\" + value[i]))
+            else:
+                out.append(value[i])
+            i += 1
+        return "".join(out)
+    return "" if value.startswith("#") else re.sub(r"\s+#.*$", "", value)
 
 
 def _frontmatter(path: Path) -> dict[str, str]:
@@ -974,21 +991,25 @@ def _frontmatter(path: Path) -> dict[str, str]:
 
 def _copy_setup(source: Path, target: Path, top: tuple[str, ...] = ()):
     """A copy of an agent's setup folder with what links point to, not the links: a write through
-    a link would reach the real setup. A link that points nowhere, or to a folder that holds it,
-    is left out; `top` names entries left out of the folder itself only (glob patterns)."""
-    root = source.resolve()
+    a link would reach the real setup. A link that points nowhere, or back to a folder the copy is
+    already in (or one above it), is left out; `top` names entries left out of the folder itself
+    only (glob patterns)."""
+    source = Path(source)
 
     def leave_out(directory: str, names: list[str]) -> set[str]:
-        out = set(shutil.ignore_patterns(*top)(directory, names)) if Path(directory).resolve() == root else set()
-        here = os.path.realpath(directory)
+        out = set(shutil.ignore_patterns(*top)(directory, names)) if Path(directory) == source else set()
+        # where the copy has been on its way down, links followed: a link to any of these, or to a
+        # folder above one, would copy them again and again
+        steps = Path(directory).relative_to(source).parts
+        been = [Path(os.path.realpath(source.joinpath(*steps[:i]))) for i in range(len(steps) + 1)]
         for name in names:
             path = os.path.join(directory, name)
             if not os.path.islink(path):
                 continue
             if not os.path.exists(path):  # resolved from the link's own folder
                 out.add(name)
-            elif os.path.isdir(path) and (here + os.sep).startswith(os.path.realpath(path) + os.sep):
-                out.add(name)  # a loop: the link points to a folder above it
+            elif os.path.isdir(path) and any(b.is_relative_to(os.path.realpath(path)) for b in been):
+                out.add(name)
         return out
     shutil.copytree(source, target, symlinks=False, ignore=leave_out)
 
@@ -1108,15 +1129,15 @@ class Copilot:
         """The control run runs on a copy of the user's Copilot home and an empty cache folder; the real
         ones are never written. HOME stays the user's, as their skills above the project need it. The
         user's hooks run, as in every control run."""
-        with tempfile.TemporaryDirectory(prefix="tare-copilot-twin-") as tmp:
-            copy, cache = Path(tmp) / "copilot", Path(tmp) / "cache"
+        with twin_folder("tare-copilot-twin-") as tmp:
+            copy, cache = tmp / "copilot", tmp / "cache"
             _copy_setup(real.config, copy, self.not_setup)
             cache.mkdir()
             # the control run is online with the login, so the login's context shows (T0 vs T0off);
             # the package cache comes before COPILOT_CACHE_HOME (its launcher), and logs the user
             # sends elsewhere go to the copy too
-            places = {"COPILOT_PKG_CACHE_HOME": str(cache), "COPILOT_EVENTS_LOG_DIRECTORY": str(Path(tmp) / "events"),
-                      "COPILOT_PROCESS_LOG_FILE": str(Path(tmp) / "process.log")}
+            places = {"COPILOT_PKG_CACHE_HOME": str(cache), "COPILOT_EVENTS_LOG_DIRECTORY": str(tmp / "events"),
+                      "COPILOT_PROCESS_LOG_FILE": str(tmp / "process.log")}
             yield {"COPILOT_HOME": str(copy), "COPILOT_CACHE_HOME": str(cache), "COPILOT_OFFLINE": "false",
                    **{k: v for k, v in places.items() if k == "COPILOT_PKG_CACHE_HOME" or k in os.environ}}
 
@@ -1152,21 +1173,25 @@ class Copilot:
     def capture(self, stdout: str, requests: list[dict], known: tuple[str, ...] = ()) -> Capture | None:
         """The first request with tools. Copilot names an MCP tool `<server>-<tool>`; the capture names
         it `mcp__<server>__<tool>`, as the probe reads MCP tools. The servers come from the stream;
-        `known` (the user's configured ones and the login's) count when the stream names none that
-        fits, as when it ends before the servers are reported. A tool whose name fits several servers
-        counts for each: the request does not say which one offers it."""
+        `known` (the user's configured ones and the login's) count when no server of the stream fits,
+        as when it ends before the servers are reported. Only a server that can offer tools counts: not
+        one the stream reports switched off, stopped, failed, or with no tools (the room lists the
+        GitHub server as disabled), and not by its name in `known` either. A tool whose name fits
+        several servers counts for each: the request does not say which one offers it."""
         main = next((r for r in requests if r.get("tools")), None)
         if main is None:
             return None
         found = list(_objects(stdout))
         servers = self._servers(found)
         start = next((_dict(e.get("data")) for e in found if e.get("type") == "session.start"), {})
+        offering = [n for n, s in servers.items() if s.get("tools") != 0 and s.get("status") in (None, "connected", "pending")]
+        unnamed = [n for n in known if n not in servers]
         tools = set()
         for tool in main["tools"]:
             name = tool.get("name") if isinstance(tool, dict) else None
             if not isinstance(name, str):
                 continue
-            fits = [s for s in servers if name.startswith(f"{s}-")] or [s for s in known if name.startswith(f"{s}-")]
+            fits = [s for s in offering if name.startswith(f"{s}-")] or [s for s in unnamed if name.startswith(f"{s}-")]
             tools |= {f"mcp__{re.sub(r'[^A-Za-z0-9_-]', '_', s)}__{name[len(s) + 1:]}" for s in fits} or {name}
         text = "\n".join(strings({k: main.get(k) for k in ("system", "messages", "tools")}))
         return Capture(text, tools, {"version": start.get("copilotVersion"), "mcp_servers": list(servers.values())})

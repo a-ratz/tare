@@ -128,9 +128,10 @@ def of_run(events: list[dict]) -> dict:
     per_side = {}
     for k, v in sides.items():
         side = info.get(k) or {}
-        found = total(v)
-        per_side[k] = found and estimate(found, model_from_args(side.get("args") or []),
-                                         reasoning_extra=side.get("agent") == "agy")
+        model = model_from_args(side.get("args") or [])
+        # each run priced on its own: one without counts stays unknown instead of $0 inside a sum
+        runs = (Usage.from_dict(u) if isinstance(u, dict) else u for u in v)
+        per_side[k] = total(estimate(u, model, reasoning_extra=side.get("agent") == "agy") for u in runs if u is not None)
     checks = total(check)
     everything = total([*per_side.values(), checks])
     return {"sides": {k: {"label": labels.get(k, k), "usage": u.to_dict() if u else None,
