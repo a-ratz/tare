@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import signal
 import socket
 import subprocess
 import sys
@@ -14,6 +15,8 @@ from tare import agents, probe, room
 from tare.agents import Claude, Codex, Pi, Real
 from tare.room import Room, Seatbelt, TareError
 
+REAL_END = room._end_processes
+
 
 @pytest.fixture
 def mac(monkeypatch, tmp_path):
@@ -23,6 +26,7 @@ def mac(monkeypatch, tmp_path):
     monkeypatch.setattr(room, "_user_dir", lambda: Path("/private/var/folders/xy/user"))
     monkeypatch.setattr(probe, "_user_dir", room._user_dir)
     monkeypatch.setattr(room, "_developer_bin", lambda: ["/Library/Developer/CommandLineTools/usr/bin"])
+    monkeypatch.setattr(room, "_end_processes", lambda base, grace=3.0: 0)  # no ps or lsof in unit tests
     (tmp_path / "rooms").mkdir()
     return tmp_path
 
@@ -283,21 +287,57 @@ def test_a_real_seatbelt_room_cannot_write_outside_the_room(tmp_path, monkeypatc
 
 @pytest.mark.skipif(HOST != "darwin", reason="runs sandbox-exec")
 def test_a_real_seatbelt_room_ends_what_the_agent_left_running(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(room, "_end_processes", REAL_END)  # the mac fixture's stub is not in this test
     script = tmp_path / "tool.sh"
-    script.write_text('#!/bin/sh\nw=$(pwd)\n'
-                      '(cd "$TMPDIR" && nohup sleep 300 >/dev/null 2>&1 & echo $! > "$w/in-room.pid")\n'  # cwd in the room
-                      'mkfifo "$TMPDIR/fifo"\n'
-                      '(cd / && nohup /bin/sh -c "read x < $TMPDIR/fifo" >/dev/null 2>&1 & echo $! > "$w/from-room.pid")\n')  # names the room
+    script.write_text('#!/bin/sh\nw=$(pwd)\nmkfifo "$TMPDIR/fifo"\n'
+                      '(cd "$TMPDIR"; exec sleep 300) & echo $! > "$w/in-room.pid"\n'  # found by its working directory
+                      '(cd /; exec /bin/sh -c "read x < $TMPDIR/fifo") & echo $! > "$w/names-room.pid"\n'  # by its command line
+                      '(cd "$TMPDIR"; trap "" TERM; exec sleep 302) & echo $! > "$w/stubborn.pid"\n')  # needs SIGKILL
     script.chmod(0o755)
     real, work = Real(tmp_path, tmp_path, script), project(tmp_path)
     monkeypatch.setattr(sys, "platform", HOST)
-    with Seatbelt().open(Tool(script), real, work) as r:
-        subprocess.run(Seatbelt().argv(r, Tool(script), real, ["tool"]), timeout=60, cwd=Path.home())
-        time.sleep(0.5)
-        pids = [int((Path(r.inside_work) / name).read_text()) for name in ("in-room.pid", "from-room.pid")]
-        assert all(room._running(pid) for pid in pids)
-    assert not any(room._running(pid) for pid in pids)
-    assert re.search(r"tare: ended [2-9] processes the agent left running in the room", capsys.readouterr().err)
+    pids = []
+    try:
+        with Seatbelt().open(Tool(script), real, work) as r:
+            subprocess.run(Seatbelt().argv(r, Tool(script), real, ["tool"]), timeout=60, cwd=Path.home())
+            time.sleep(0.5)
+            pids = [int((Path(r.inside_work) / f"{n}.pid").read_text()) for n in ("in-room", "names-room", "stubborn")]
+            assert room._alive(pids) == pids
+        assert room._alive(pids) == []
+        assert "tare: ended 3 processes the agent left running in the room" in capsys.readouterr().err
+    finally:
+        for pid in pids:
+            room._signal(pid, signal.SIGKILL)
+
+
+def test_only_processes_that_name_the_room_or_work_in_it_are_its_own(monkeypatch, tmp_path):
+    base = tmp_path / "tare-room-abc12345"
+    base.mkdir()
+    ps = (f" 101 /bin/sh -c read x < {base}/tmp/fifo\n"
+          f" 102 {base}/opt/agent/claude -p hi\n"
+          f" 103 tail -f {base}-copy/log\n"  # another directory whose name starts the same
+          f" 104 vim /Users/me/tare-room-abc12345/notes\n"  # the same name elsewhere
+          f"   1 {base}/x\n   0 {base}/x\n garbage line {base}\n"
+          f" {os.getpid()} python {base}/self\n")
+    lsof = f"p201\nn{base}/tmp\np202\nn{base}\np203\nn/\npnotapid\nn{base}\np204\nn{base}-copy\n"
+    monkeypatch.setattr(room, "_listing", lambda argv: ps if argv[0].endswith("ps") else lsof)
+    assert room._room_processes(base) == [101, 102, 201, 202]
+    monkeypatch.setattr(room, "_listing", lambda argv: "")  # ps and lsof missing
+    assert room._room_processes(base) == []
+
+
+def test_a_failure_while_ending_processes_still_copies_back_and_removes_the_room(tmp_path, monkeypatch, mac, capsys):
+    real, _ = claude_on_mac(tmp_path, monkeypatch)
+    work = project(tmp_path)
+
+    def broken(base, grace=3.0):
+        raise ValueError("unparsable listing")
+    monkeypatch.setattr(room, "_end_processes", broken)
+    with Seatbelt().open(Claude(), real, work) as r:
+        (Path(r.inside_work) / "made.txt").write_text("kept\n")
+        base = r.home.parent
+    assert (work / "made.txt").read_text() == "kept\n" and not base.exists()
+    assert "could not end the processes left in the room: ValueError" in capsys.readouterr().err
 
 
 def test_the_probe_looks_for_the_places_macos_keeps_and_for_the_pasteboard(tmp_path, monkeypatch, mac):

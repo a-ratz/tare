@@ -10,6 +10,7 @@ from the `Room` its backend built, never from a constant.
 import functools
 import json
 import os
+import re
 import shutil
 import signal
 import stat
@@ -161,7 +162,11 @@ class Seatbelt:
             agent.seed(real, room.config(agent), room)
             yield room
         finally:
-            ended = _end_processes(base)
+            try:
+                ended = _end_processes(base)
+            except Exception as e:  # ending processes must never stop the copy-back or the room's removal
+                ended = 0
+                print(f"tare: could not end the processes left in the room: {type(e).__name__}: {e}", file=sys.stderr)
             if ended:
                 print(f"tare: ended {ended} process{'es' if ended != 1 else ''} the agent left running in the room",
                       file=sys.stderr)
@@ -257,59 +262,78 @@ def profile(room: Room) -> str:
     return "\n".join(rules) + "\n"
 
 
+def _listing(argv: list[str]) -> str:
+    """A listing from ps or lsof; empty when the program is missing, fails or stalls."""
+    try:
+        return subprocess.run(argv, capture_output=True, timeout=30).stdout.decode(errors="replace")
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
 def _room_processes(base: Path) -> list[int]:
-    """Processes that run from the room or in it: their command line names the room (a program the
-    agent installed there, the sandbox itself) or their working directory is in it."""
-    def listing(argv: list[str]) -> str:
-        try:
-            return subprocess.run(argv, capture_output=True, text=True, timeout=30).stdout
-        except (OSError, subprocess.SubprocessError):
-            return ""
-    named = listing(["ps", "-axww", "-o", "pid=,command="])
-    pids = {int(line.split(None, 1)[0]) for line in named.splitlines() if base.name in line}
-    cwds = listing(["lsof", "-a", "-d", "cwd", "-Fpn"])
+    """The user's processes that run from the room or in it: their command line names a path in the
+    room (a program the agent put there, the sandbox itself), or their working directory is in it.
+    A process that does neither, such as a daemon that moved to / and runs a program from outside
+    the room, is not found."""
+    roots = {str(base), str(base.resolve()), f"/tmp/{base.name}"}  # /tmp is a link to /private/tmp
+    pids = set()
+    for line in _listing(["/bin/ps", "-xww", "-o", "pid=,command="]).splitlines():
+        pid, _, command = line.strip().partition(" ")
+        if pid.isdigit() and any(re.search(re.escape(root) + r"(/|\s|$)", command) for root in roots):
+            pids.add(int(pid))
     pid = None
-    for line in cwds.splitlines():
+    for line in _listing(["/usr/sbin/lsof", "-b", "-w", "-a", "-u", str(os.getuid()), "-d", "cwd", "-Fpn"]).splitlines():
         if line.startswith("p"):
-            pid = int(line[1:])
-        elif line.startswith("n") and pid and base.name in line:
+            pid = int(line[1:]) if line[1:].isdigit() else None
+        elif line.startswith("n") and pid and any(line[1:] == root or line[1:].startswith(root + "/") for root in roots):
             pids.add(pid)
-    return sorted(pids - {os.getpid()})
+    return sorted(p for p in pids if p > 1 and p != os.getpid())
+
+
+def _signal(pid: int, sig: int) -> bool:
+    try:
+        os.kill(pid, sig)
+        return True
+    except OSError:
+        return False
+
+
+def _alive(pids: list[int]) -> list[int]:
+    """Those of pids still running. A zombie (ended, but not yet reaped by its parent) has ended."""
+    existing = []
+    for pid in pids:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            continue
+        except PermissionError:
+            pass
+        existing.append(pid)
+    if not existing:
+        return []
+    states = _listing(["/bin/ps", "-o", "pid=,stat=", "-p", ",".join(map(str, existing))])
+    zombies = {int(f[0]) for f in (line.split() for line in states.splitlines()) if len(f) == 2 and f[0].isdigit()
+               and f[1].startswith("Z")}
+    return [pid for pid in existing if pid not in zombies]
 
 
 def _end_processes(base: Path, grace: float = 3.0) -> int:
     """End what the agent left running in a Seatbelt room (a browser, a daemon, a server): Seatbelt,
     unlike bubblewrap's own PID namespace, ends nothing with the room. SIGTERM, then SIGKILL for
-    whatever still runs after the grace period. Returns how many it ended."""
-    pids = _room_processes(base)
-    for pid in pids:
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except OSError:
-            pass
-    deadline = time.time() + grace
-    alive = list(pids)
-    while alive and time.time() < deadline:
+    whatever still runs after the grace period. Returns how many it signalled."""
+    signalled = [pid for pid in _room_processes(base) if _signal(pid, signal.SIGTERM)]
+    deadline = time.monotonic() + grace
+    alive = signalled
+    while alive and time.monotonic() < deadline:
         time.sleep(0.1)
-        alive = [pid for pid in alive if _running(pid)]
+        alive = _alive(alive)
     for pid in alive:
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except OSError:
-            pass
-    return len(pids)
-
-
-def _running(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except OSError:
-        return False
-    # a child of ours that ended stays a zombie until it is reaped
-    try:
-        return os.waitpid(pid, os.WNOHANG) == (0, 0)
-    except ChildProcessError:
-        return True
+        _signal(pid, signal.SIGKILL)
+    deadline = time.monotonic() + 1
+    while alive and time.monotonic() < deadline:
+        time.sleep(0.05)
+        alive = _alive(alive)
+    return len(signalled)
 
 
 def _mounts(binds: list[str]) -> list[tuple[str, str]]:
