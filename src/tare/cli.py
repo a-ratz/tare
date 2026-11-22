@@ -34,7 +34,7 @@ from .journal import Journal
 from .swap import Side, swap
 from .probe import probe, render
 from .capsule import _feed, _join, _pump
-from .room import TareError, backend, leftover_rooms
+from .room import TareError, backend, leftover_rooms, remove_lock
 
 
 def _exit_on(signum, _frame):
@@ -350,7 +350,7 @@ def _cleanup(argv: list[str]) -> int:
         size = _size(path)
         if not args.dry_run:
             shutil.rmtree(path, ignore_errors=True)
-            Path(f"{path}.lock").unlink(missing_ok=True)
+            remove_lock(path)
         print(f"{verb}  room     {path}  {size // 1024} KB")
     for path in kept:
         size = _size(path)

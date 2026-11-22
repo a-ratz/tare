@@ -479,7 +479,12 @@ LEGACY_IDLE = 3600  # seconds
 def _hold(base: Path):
     """A lock that the room's tare holds from the room's making until it is gone, beside the room
     (out of the agent's reach). `tare cleanup` removes only a room whose lock is free."""
-    lock = open(f"{base}.lock", "w")
+    try:  # a new file of the user's alone; never one that is already there, never through a link
+        fd = os.open(f"{base}.lock", os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    except OSError as e:
+        shutil.rmtree(base, ignore_errors=True)
+        raise TareError(f"cannot lock the room {base}: {e}") from None
+    lock = os.fdopen(fd, "w")
     fcntl.flock(lock, fcntl.LOCK_EX)
     return lock
 
@@ -527,15 +532,37 @@ def in_use(room_dir: Path) -> bool:
     """Whether a tare still holds the room. A room of tare 0.5.0 or older has no lock: it counts as
     in use while anything in it changed within LEGACY_IDLE."""
     lock = Path(f"{room_dir}.lock")
-    if not lock.exists():
-        return time.time() - _newest_change(room_dir) < LEGACY_IDLE
     try:
-        with open(lock) as f:
-            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            fcntl.flock(f, fcntl.LOCK_UN)
-        return False
-    except OSError:  # held by the room's tare (BlockingIOError), or unreadable: leave it
+        st = lock.lstat()
+    except FileNotFoundError:
+        return time.time() - _newest_change(room_dir) < LEGACY_IDLE
+    except OSError:
         return True
+    if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid():  # not a lock tare made: leave the room
+        return True
+    try:
+        fd = os.open(lock, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        return True
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return False
+    except OSError:  # held by the room's tare
+        return True
+    finally:
+        os.close(fd)
+
+
+def remove_lock(room_dir: Path):
+    """The lock file of a removed room, if it is tare's: a regular file of the user's."""
+    lock = Path(f"{room_dir}.lock")
+    try:
+        st = lock.lstat()
+        if stat.S_ISREG(st.st_mode) and st.st_uid == os.getuid():
+            lock.unlink()
+    except OSError:
+        pass
 
 
 def leftover_rooms() -> list[Path]:

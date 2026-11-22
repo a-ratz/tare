@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 # a session id as the agents write them (UUIDs and the like); anything else could name a path
-SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")  # whole, with fullmatch
 
 
 def root() -> Path:
@@ -46,8 +46,14 @@ def session_id(lines: list[str]) -> str | None:
         sid = entry.get("sessionId") or (entry["payload"].get("id") if meta else None) \
             or (entry.get("id") if entry.get("type") == "session" else None)
         if isinstance(sid, str) and sid:
-            return sid if SAFE_ID.match(sid) else None
+            return sid if SAFE_ID.fullmatch(sid) else None
     return None
+
+
+def lines_of(text: str) -> list[str]:
+    """A JSONL file's lines: split at newlines only. A JSON string may hold U+2028 and the like,
+    which str.splitlines() would split at too."""
+    return [line.removesuffix("\r") for line in text.split("\n") if line.strip()]
 
 
 def _private(folder: Path):
@@ -68,7 +74,7 @@ def keep(agent, room, project: Path) -> Path | None:
     found = find(room.home) if find else None
     if found is None or not found.is_file():
         return None
-    sid = session_id(found.read_text(errors="replace").splitlines())
+    sid = session_id(lines_of(found.read_text(errors="replace")))
     if sid is None:
         return None
     folder = store(agent, project)
@@ -116,7 +122,7 @@ def latest(agent, project: Path) -> Path | None:
 
 def read(path: Path) -> tuple[str, list[str]]:
     """A kept session's id and lines, for --continue; ValueError when it holds no safe id."""
-    lines = path.read_text(errors="replace").splitlines()
+    lines = lines_of(path.read_text(errors="replace"))
     sid = session_id(lines)
     if sid is None:
         raise ValueError(f"no session id in {path}")

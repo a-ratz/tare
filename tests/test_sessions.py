@@ -90,8 +90,22 @@ def test_the_session_id_of_each_agents_file_and_only_a_safe_one():
                                 '{"type": "session_meta", "payload": {"id": "x1"}}']) == "x1"
     assert sessions.session_id(['{"type": "session", "id": "p1"}']) == "p1"
     assert sessions.session_id(["[1]", '{"id": "not a session"}', ""]) is None
-    for unsafe in ("/tmp/evil", "../up", "-flag", ".hidden", "a/b", "x" * 200):
+    for unsafe in ("/tmp/evil", "../up", "-flag", ".hidden", "a/b", "x" * 200, "valid-id\n"):
         assert sessions.session_id([json.dumps({"sessionId": unsafe})]) is None
+
+
+def test_a_line_separator_inside_a_json_string_survives_keeping_and_placing(home, tmp_path):
+    r = Room(tmp_path / "room-home", tmp_path / "work", inside_work="/work")
+    path = r.home / ".claude-config" / "projects" / "-work" / "s1.jsonl"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"sessionId": "s1", "text": "one\u2028two\u2029three"}, ensure_ascii=False) + "\n")
+    kept = sessions.keep(Claude(), r, tmp_path / "project")
+    sid, lines = sessions.read(kept)
+    assert sid == "s1" and len(lines) == 1
+    placed_room = Room(tmp_path / "room-2", tmp_path / "work", inside_work="/work")
+    Claude().place_session(placed_room, sid, lines)
+    placed = placed_room.home / ".claude-config" / "projects" / "-work" / "s1.jsonl"
+    assert json.loads(placed.read_text())["text"] == "one\u2028two\u2029three"
 
 
 def test_each_agent_resumes_interactively_with_its_own_arguments():
@@ -152,6 +166,8 @@ def test_a_room_keeps_its_session_before_it_is_removed_also_when_the_agent_fails
 
 def test_continue_places_the_kept_session_and_resumes_it_before_the_users_arguments(started, tmp_path, capsys,
                                                                                     monkeypatch):
+    stamps = iter(["20261122-120000", "20261122-120100"])
+    monkeypatch.setattr(sessions.time, "strftime", lambda fmt: next(stamps))
     cli.main(["claude", "--project", str(tmp_path)])
     placed = []
     original = Claude.place_session
@@ -162,10 +178,13 @@ def test_continue_places_the_kept_session_and_resumes_it_before_the_users_argume
     assert placed == [(tmp_path / "room-1", "first-1")]
     assert "continuing claude's session first-1" in capsys.readouterr().err
     # the resumed room's session is kept again, under the same id
-    assert sessions.latest(Claude(), tmp_path).name.endswith("-first-1.jsonl")
+    assert [p.name for p in sessions.kept()] == ["20261122-120000-first-1.jsonl", "20261122-120100-first-1.jsonl"]
 
 
-def test_continue_without_a_usable_session_says_so_and_starts_nothing(started, tmp_path, capsys):
+def test_continue_without_a_usable_session_says_so_and_starts_nothing(started, tmp_path, capsys, monkeypatch):
+    def no_probe(*a):
+        raise AssertionError("the probe ran before the kept session was checked")
+    monkeypatch.setattr(cli, "probe", no_probe)
     assert cli.main(["claude", "--project", str(tmp_path), "--continue"]) == 2
     assert started == [] and "no kept claude session" in capsys.readouterr().err
     broken = sessions.store(Claude(), tmp_path)
@@ -222,13 +241,29 @@ def test_a_room_is_in_use_while_its_lock_is_held_and_left_over_once_it_is_free(r
         (r / "home").mkdir(parents=True)
         aged(r)
     lock = room._hold(held)  # a running tare, however old its room
-    Path(f"{free}.lock").write_text("")  # its tare crashed: the lock is free
+    room._hold(free).close()  # its tare crashed: the lock file is there, the lock is free
     (legacy_busy / "home" / "session.jsonl").write_text("written just now")  # a tare 0.5.0 room in use
     try:
         assert room.leftover_rooms() == [free, legacy_idle]
+        lock.close()  # the running tare crashes too
+        assert room.leftover_rooms() == [free, held, legacy_idle]
     finally:
-        room._release(lock, held)
-    assert held not in room.leftover_rooms() or not Path(f"{held}.lock").exists()
+        lock.close()
+
+
+def test_a_lock_tare_did_not_make_keeps_the_room(rooms_dir, tmp_path):
+    linked, piped, foreign_target = rooms_dir / "tare-room-linked", rooms_dir / "tare-room-piped", tmp_path / "x"
+    for r in (linked, piped):
+        (r / "home").mkdir(parents=True)
+        aged(r)
+    foreign_target.write_text("")
+    Path(f"{linked}.lock").symlink_to(foreign_target)  # planted by someone else in /tmp
+    os.mkfifo(f"{piped}.lock")  # would block an open()
+    assert room.leftover_rooms() == []
+    with pytest.raises(room.TareError, match="cannot lock the room"):
+        room._hold(linked)
+    room.remove_lock(linked)
+    assert Path(f"{linked}.lock").is_symlink() and foreign_target.exists()
 
 
 def test_a_bubblewrap_and_a_seatbelt_room_hold_their_lock_until_they_are_gone(rooms_dir, tmp_path, monkeypatch):
@@ -248,7 +283,6 @@ def test_a_bubblewrap_and_a_seatbelt_room_hold_their_lock_until_they_are_gone(ro
 
     for backend in (room.Bubblewrap(), room.Seatbelt()):
         monkeypatch.setattr(room, "_developer_bin", lambda: [])
-        monkeypatch.setattr(room, "_end_processes", lambda base, grace=3.0: 0, raising=False)
         work = tmp_path / "work"
         work.mkdir(exist_ok=True)
         with backend.open(Tool(), SimpleNamespace(), work) as r:
@@ -259,11 +293,12 @@ def test_a_bubblewrap_and_a_seatbelt_room_hold_their_lock_until_they_are_gone(ro
 
 
 def test_cleanup_removes_leftover_rooms_and_kept_sessions_and_nothing_else(home, rooms_dir, tmp_path, capsys):
-    old, held = rooms_dir / "tare-room-old", rooms_dir / "tare-room-held"
-    for r in (old, held):
+    old, held, crashed = rooms_dir / "tare-room-old", rooms_dir / "tare-room-held", rooms_dir / "tare-room-crashed"
+    for r in (old, held, crashed):
         (r / "home").mkdir(parents=True)
         aged(r)
     lock = room._hold(held)
+    room._hold(crashed).close()
     r = Room(tmp_path / "room-home", tmp_path / "work")
     claude_session(r.home, "s1", "x")
     sessions.keep(Claude(), r, tmp_path / "project")
@@ -274,12 +309,13 @@ def test_cleanup_removes_leftover_rooms_and_kept_sessions_and_nothing_else(home,
 
     try:
         assert cli.main(["cleanup", "--dry-run"]) == 0
-        assert old.exists() and len(sessions.kept()) == 1
-        assert "1 room and 1 session would be removed" in capsys.readouterr().out
+        assert old.exists() and crashed.exists() and len(sessions.kept()) == 1
+        assert "2 rooms and 1 session would be removed" in capsys.readouterr().out
 
         assert cli.main(["cleanup"]) == 0
-        assert not old.exists() and held.exists()
+        assert not old.exists() and not crashed.exists() and not Path(f"{crashed}.lock").exists()
+        assert held.exists() and Path(f"{held}.lock").exists()
         assert sessions.kept() == [] and (outside / "keep.jsonl").exists()
-        assert "1 room and 1 session removed" in capsys.readouterr().out
+        assert "2 rooms and 1 session removed" in capsys.readouterr().out
     finally:
         room._release(lock, held)
