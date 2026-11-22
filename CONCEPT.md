@@ -271,7 +271,8 @@ succeeds. Fresh starts are the restarts from the beginning. A step counts as goo
 restarts pass at least half as often as a fresh start. Cliff halves the range between the last
 good and the first bad step, then adds restarts to the two neighbours until their likely ranges
 separate or the budget is spent. It reports that the task is too hard for the model instead of a
-step only when the upper end of the fresh starts' likely range (a 95% interval) lies below 0.2.
+step only when the upper end of the fresh starts' likely range (a 95% interval) lies below
+`--too-hard-below` (default 0.2).
 
 **Measured:** against a scripted model whose wrong step is known, Cliff found step 4 with
 separated likely ranges in 18 restarts. Cliff stays experimental, because neither of two real test
