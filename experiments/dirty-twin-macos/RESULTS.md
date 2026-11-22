@@ -129,7 +129,13 @@ By the plan:
 
 ## Reproduce
 
+The Claude Code plant (C1) is one of your own plugins, which `markers` and `run claude t2` read from
+two variables (the docstring of `run.py`): the plugin's directory in Claude Code's plugin cache, and
+one of its skills.
+
 ```bash
+export TARE_PLANT_PLUGIN_DIR=~/.claude/plugins/cache/<marketplace>/<plugin>/<version>
+export TARE_PLANT_PLUGIN_SKILL=<plugin>:<skill>
 uv run experiments/dirty-twin-macos/run.py markers
 uv run experiments/dirty-twin-macos/run.py keychain
 for a in claude codex pi; do for c in t0 t1 t2; do uv run experiments/dirty-twin-macos/run.py run $a $c; done; done
