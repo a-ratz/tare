@@ -36,7 +36,8 @@ runs go on:
 ```
 
 A skill counts as loaded when the agent invoked it (Claude Code's `Skill` tool) or read its
-`SKILL.md`, which is how Codex, Pi and the Antigravity CLI load a skill. The name is the folder that
+`SKILL.md`, which is how Codex, Pi and the Antigravity CLI load a skill (the Copilot CLI has a skill
+tool, as Claude Code does). The name is the folder that
 holds the file. A shell command counts the folders it names, whatever it does with the file (also
 in a comment, a heredoc or a commit message), but not a glob, a variable or `./SKILL.md`, which name no folder; a
 folder name with a space or a letter outside ASCII comes through only from a read tool. A loaded skill is not necessarily a followed one: the

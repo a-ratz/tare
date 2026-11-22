@@ -13,7 +13,6 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 import time
 import tomllib
 import unicodedata
@@ -23,7 +22,7 @@ from pathlib import Path
 
 from . import trail as trails
 from .fake import FAKE_MODEL
-from .room import TareError
+from .room import TareError, twin_folder
 from .usage import Usage
 from .uses import Uses
 
@@ -644,8 +643,8 @@ class Pi:
     @contextmanager
     def twin(self, real: Real, fake_url: str):
         """The control run runs on a copy of the user's agent directory; the real one is never written."""
-        with tempfile.TemporaryDirectory(prefix="tare-pi-twin-") as copy:
-            agent_dir = Path(copy) / "agent"
+        with twin_folder("tare-pi-twin-") as copy:
+            agent_dir = copy / "agent"
             shutil.copytree(real.config, agent_dir, symlinks=True, ignore=shutil.ignore_patterns("sessions"))
             _absolute_links(real.config, agent_dir)
             self._provider(agent_dir / "models.json", fake_url)
@@ -816,11 +815,8 @@ class Antigravity:
         """The control run sees the real setup, but agy writes into ~/.gemini on every run (its
         conversations, caches, onboarding state). So it runs with an overlay over ~/.gemini
         whose writes go to a tmpfs that dies with the run; see twin_argv."""
-        mount = tempfile.mkdtemp(prefix="tare-agy-twin-")
-        try:
-            yield {"TARE_TWIN_MOUNT": mount}
-        finally:
-            shutil.rmtree(mount, ignore_errors=True)
+        with twin_folder("tare-agy-twin-") as mount:
+            yield {"TARE_TWIN_MOUNT": str(mount)}
 
     def twin_argv(self, argv: list[str], env: dict[str, str], plant: str = "") -> list[str]:
         """Wrap the twin's command: as mapped root in a user and mount namespace, put a tmpfs on
@@ -935,4 +931,410 @@ class Antigravity:
         return None
 
 
-AGENTS = {agent.name: agent for agent in (Claude(), Codex(), Pi(), Antigravity())}
+_BLOCK = re.compile(r"[>|](?:[1-9][+-]?|[+-][1-9]?)?(?:\s+#.*)?")  # a block scalar's header, comment and all
+
+
+_ESCAPES = {"n": "\n", "t": "\t", '"': '"', "\\": "\\", "/": "/", "0": "\0"}
+
+
+def _scalar(value: str) -> str:
+    """A one-line YAML value: a quoted one without its quotes and with its escapes ('' in single
+    quotes, a backslash in double quotes), a plain one without its comment."""
+    if value.startswith("'"):
+        out, i = [], 1
+        while i < len(value):
+            if value[i] == "'":
+                if value[i + 1:i + 2] != "'":
+                    break
+                i += 1
+            out.append(value[i])
+            i += 1
+        return "".join(out)
+    if value.startswith('"'):
+        out, i = [], 1
+        while i < len(value) and value[i] != '"':
+            if value[i] == "\\" and i + 1 < len(value):
+                i += 1
+                out.append(_ESCAPES.get(value[i], "\\" + value[i]))
+            else:
+                out.append(value[i])
+            i += 1
+        return "".join(out)
+    return "" if value.startswith("#") else re.sub(r"\s+#.*$", "", value)
+
+
+def _frontmatter(path: Path) -> dict[str, str]:
+    """The `key: value` lines between a Markdown file's leading `---` lines."""
+    try:
+        lines = path.read_text().splitlines()
+    except (OSError, UnicodeDecodeError):
+        return {}
+    if not lines or lines[0].strip() != "---":
+        return {}
+    found, block = {}, None
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        if block and (line.startswith((" ", "\t")) or not line.strip()):  # a `key: >` or `key: |` value goes on indented
+            found[block] = (found[block] + "\n" + line.strip()) if found[block] else line.strip()
+            continue
+        block = None
+        key, sep, value = line.partition(":")
+        if sep and key.strip() and not key.startswith((" ", "\t")):
+            value = value.strip()
+            if _BLOCK.fullmatch(value):
+                found[key.strip()], block = "", key.strip()
+            else:
+                found[key.strip()] = _scalar(value)
+    return {k: v.strip() for k, v in found.items()}
+
+
+def _copy_setup(source: Path, target: Path, top: tuple[str, ...] = ()):
+    """A copy of an agent's setup folder with what links point to, not the links: a write through
+    a link would reach the real setup. A link that points nowhere, or back to a folder the copy is
+    already in (or one above it), is left out; `top` names entries left out of the folder itself
+    only (glob patterns)."""
+    source = Path(source)
+
+    def leave_out(directory: str, names: list[str]) -> set[str]:
+        out = set(shutil.ignore_patterns(*top)(directory, names)) if Path(directory) == source else set()
+        # where the copy has been on its way down, links followed: a link to any of these, or to a
+        # folder above one, would copy them again and again
+        steps = Path(directory).relative_to(source).parts
+        been = [Path(os.path.realpath(source.joinpath(*steps[:i]))) for i in range(len(steps) + 1)]
+        for name in names:
+            path = os.path.join(directory, name)
+            if not os.path.islink(path):
+                continue
+            if not os.path.exists(path):  # resolved from the link's own folder
+                out.add(name)
+            elif os.path.isdir(path) and any(b.is_relative_to(os.path.realpath(path)) for b in been):
+                out.add(name)
+        return out
+    shutil.copytree(source, target, symlinks=False, ignore=leave_out)
+
+
+class Copilot:
+    """The GitHub Copilot CLI (experiments/dirty-twin-copilot). Its model calls reach the fake
+    through its "bring your own key" variables, as Anthropic Messages."""
+
+    name = "copilot"
+    credentials = "config.json"  # the room's login is a token in it (copilotTokens)
+    config_dir = ".copilot"
+    # The GitHub MCP server comes with the login and reaches into the user's GitHub account
+    # (T1 and T1f); an update would write the CLI the user runs.
+    room_flags = ["--disable-builtin-mcps", "--no-auto-update"]
+    yolo = ["--yolo"]
+    native_resume = False  # no capsules and no trail yet: not in Cliff and Swap
+    keychain_service = "copilot-cli"
+    token_variables = ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN")
+    # the user's sessions, logs and history: not setup, and a control run on a copy only adds to them
+    not_setup = ("session-state", "session-store.db*", "logs", "chats", "command-history-state.json", "ide")
+
+    def discover(self) -> Real:
+        home = Path.home()
+        custom = os.environ.get("COPILOT_HOME")
+        binary = _which("copilot")
+        with binary.open("rb") as f:
+            if f.read(2) == b"#!":
+                raise TareError(f"copilot at {binary} is a script (the npm package). tare runs the Copilot CLI's "
+                                "native executable: install it with the install script or Homebrew")
+        return Real(home, Path(custom) if custom else home / ".copilot", binary)
+
+    def _config(self, real: Real) -> dict:
+        """config.json, read for its field names and the login's account; it starts with // lines."""
+        try:
+            text = (real.config / "config.json").read_text()
+            data = json.loads("\n".join(line for line in text.splitlines() if not line.lstrip().startswith("//")))
+        except (OSError, ValueError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def _user(self, real: Real) -> dict | None:
+        """The account Copilot uses: its last login, as config.json lists it."""
+        data = self._config(real)
+        user = _dict(data.get("lastLoggedInUser"))
+        if not (isinstance(user.get("login"), str) and isinstance(user.get("host"), str)):
+            return None
+        listed = next((u for u in data.get("loggedInUsers") or [] if isinstance(u, dict)
+                       and u.get("login") == user["login"] and u.get("host") == user["host"]), {})
+        return {"host": user["host"], "login": user["login"], "kind": listed.get("kind", "githubDotCom")}
+
+    def _token(self, real: Real, user: dict) -> str | None:
+        """The login's token, in Copilot's order: a token variable (not a classic ghp_ one, which Copilot
+        refuses), a token config.json keeps as plain text, gh's token for the same account, and last
+        the Keychain item, which only the copilot binary reads without asking the user. Never printed."""
+        def usable(token) -> bool:
+            return isinstance(token, str) and bool(token) and not token.startswith("ghp_")
+        for variable in self.token_variables:
+            if usable(os.environ.get(variable)):
+                return os.environ[variable]
+        key = f"{user['host']}:{user['login']}"
+        plain = _dict(self._config(real).get("copilotTokens")).get(key)
+        if usable(plain):
+            return plain
+        gh = shutil.which("gh")
+        if gh:
+            host = re.sub(r"^https?://", "", user["host"]).rstrip("/")
+            found = subprocess.run([gh, "auth", "token", "--hostname", host, "--user", user["login"]],
+                                   capture_output=True, text=True)
+            if found.returncode == 0 and usable(found.stdout.strip()):
+                return found.stdout.strip()
+        keychain = _security(key, self.keychain_service) if sys.platform == "darwin" else None
+        return keychain if usable(keychain) else None
+
+    def _login(self, real: Real) -> tuple[dict, str]:
+        user = self._user(real)
+        if user is None:
+            raise TareError(f"no Copilot login in {real.config / 'config.json'}: log in with copilot first")
+        token = self._token(real, user)
+        if not token:
+            raise TareError(f"no token for the Copilot login {user['login']}: set COPILOT_GITHUB_TOKEN, log in to gh "
+                            f"as {user['login']}, or log in with copilot again")
+        return user, token
+
+    def token_lifetime(self, real: Real) -> float:
+        """A GitHub OAuth token does not expire, and the room renews nothing."""
+        self._login(real)
+        return float("inf")
+
+    def seed(self, real: Real, config: Path, room):
+        user, token = self._login(real)
+        login = {"lastLoggedInUser": {"host": user["host"], "login": user["login"]}, "loggedInUsers": [user],
+                 "copilotTokens": {f"{user['host']}:{user['login']}": token},
+                 # the user chose to run this project, so it is trusted as in their own setup
+                 "trustedFolders": [room.inside_work]}
+        # made private before the token is in it, never readable by others for a moment
+        fd = os.open(config / self.credentials, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(json.dumps(login))
+
+    def room_env(self, room) -> dict[str, str]:
+        # Copilot's shell takes its environment from a login shell (/etc/profile puts /usr/local/bin
+        # first, measured); the room's own environment is the one to keep
+        return {"COPILOT_HOME": room.inside_config(self), "COPILOT_DISABLE_LOGIN_SHELL_ENV": "1"}
+
+    def binds(self, real: Real) -> tuple[list[str], str]:
+        # one native executable; it unpacks the CLI into the cache folder of the room's home
+        return ["--ro-bind", str(real.binary), "/opt/agent/copilot"], "/opt/agent/copilot"
+
+    def probe(self, fake_url: str) -> tuple[list[str], dict[str, str]]:
+        args = ["--allow-all-tools", "--no-auto-update", "-p", PROMPT, "--output-format", "json"]
+        return args, {"COPILOT_PROVIDER_BASE_URL": fake_url, "COPILOT_PROVIDER_TYPE": "anthropic",
+                      "COPILOT_MODEL": FAKE_MODEL}
+
+    @contextmanager
+    def twin(self, real: Real, fake_url: str):
+        """The control run runs on a copy of the user's Copilot home and an empty cache folder; the real
+        ones are never written. HOME stays the user's, as their skills above the project need it. The
+        user's hooks run, as in every control run."""
+        with twin_folder("tare-copilot-twin-") as tmp:
+            copy, cache = tmp / "copilot", tmp / "cache"
+            _copy_setup(real.config, copy, self.not_setup)
+            cache.mkdir()
+            # the control run is online with the login, so the login's context shows (T0 vs T0off);
+            # the package cache comes before COPILOT_CACHE_HOME (its launcher), and logs the user
+            # sends elsewhere go to the copy too
+            places = {"COPILOT_PKG_CACHE_HOME": str(cache), "COPILOT_EVENTS_LOG_DIRECTORY": str(tmp / "events"),
+                      "COPILOT_PROCESS_LOG_FILE": str(tmp / "process.log")}
+            yield {"COPILOT_HOME": str(copy), "COPILOT_CACHE_HOME": str(cache), "COPILOT_OFFLINE": "false",
+                   **{k: v for k, v in places.items() if k == "COPILOT_PKG_CACHE_HOME" or k in os.environ}}
+
+    def prepare_probe(self, config: Path, fake_url: str):
+        pass
+
+    @staticmethod
+    def _servers(found: list[dict]) -> dict[str, dict]:
+        """Each MCP server the stream names, with its last status, its source and its tool count.
+        Copilot reports them in several events, in no fixed order with the model's request: a status
+        change each, the tools once loaded (which can come before connected), and a summary."""
+        servers: dict[str, dict] = {}
+        for e in found:
+            kind, data = e.get("type"), _dict(e.get("data"))
+            if kind == "session.mcp_servers_loaded":
+                for s in data.get("servers") if isinstance(data.get("servers"), list) else []:
+                    if isinstance(s, dict) and isinstance(s.get("name"), str):
+                        entry = servers.setdefault(s["name"], {"name": s["name"]})
+                        entry.update({k: s[k] for k in ("status", "source") if isinstance(s.get(k), str)})
+            elif kind in ("session.mcp_server_status_changed", "session.mcp_server_tools_loaded") \
+                    and isinstance(data.get("serverName"), str):
+                entry = servers.setdefault(data["serverName"], {"name": data["serverName"]})
+                if isinstance(data.get("status"), str):
+                    entry["status"] = data["status"]
+                if isinstance(data.get("configSource"), str) and data["configSource"] != "unknown":
+                    entry["source"] = data["configSource"]
+                if isinstance(data.get("toolCount"), int):
+                    entry["tools"] = data["toolCount"]
+            elif kind == "session.mcp_server_removed" and isinstance(data.get("serverName"), str):
+                servers.pop(data["serverName"], None)
+        return servers
+
+    def capture(self, stdout: str, requests: list[dict], known: tuple[str, ...] = ()) -> Capture | None:
+        """The first request with tools. Copilot names an MCP tool `<server>-<tool>`; the capture names
+        it `mcp__<server>__<tool>`, as the probe reads MCP tools. The servers come from the stream;
+        `known` (the user's configured ones and the login's) count when no server of the stream fits,
+        as when it ends before the servers are reported. Only a server that can offer tools counts: not
+        one the stream reports switched off, stopped, failed, or with no tools (the room lists the
+        GitHub server as disabled), and not by its name in `known` either. A tool whose name fits
+        several servers counts for each: the request does not say which one offers it."""
+        main = next((r for r in requests if r.get("tools")), None)
+        if main is None:
+            return None
+        found = list(_objects(stdout))
+        servers = self._servers(found)
+        start = next((_dict(e.get("data")) for e in found if e.get("type") == "session.start"), {})
+        offering = [n for n, s in servers.items() if s.get("tools") != 0 and s.get("status") in (None, "connected", "pending")]
+        unnamed = [n for n in known if n not in servers]
+        tools = set()
+        for tool in main["tools"]:
+            name = tool.get("name") if isinstance(tool, dict) else None
+            if not isinstance(name, str):
+                continue
+            fits = [s for s in offering if name.startswith(f"{s}-")] or [s for s in unnamed if name.startswith(f"{s}-")]
+            tools |= {f"mcp__{re.sub(r'[^A-Za-z0-9_-]', '_', s)}__{name[len(s) + 1:]}" for s in fits} or {name}
+        text = "\n".join(strings({k: main.get(k) for k in ("system", "messages", "tools")}))
+        return Capture(text, tools, {"version": start.get("copilotVersion"), "mcp_servers": list(servers.values())})
+
+    def mcp_names(self, real: Real) -> tuple[str, ...]:
+        """The MCP server names a capture may meet: the user's configured ones and the login's."""
+        return (*self._mcp_servers(real), *self.login_mcp)
+
+    def instructions(self, real: Real) -> Path:
+        return real.config / "copilot-instructions.md"
+
+    def _enabled_plugins(self, real: Real) -> list[Path]:
+        """Installed plugins not switched off (Copilot takes one without `enabled` as on), in their
+        `cache_path`, or where Copilot installs them: installed-plugins/<marketplace>/<name>."""
+        plugins = self._config(real).get("installedPlugins")
+        found = []
+        for p in plugins if isinstance(plugins, list) else []:
+            if not isinstance(p, dict) or p.get("enabled") is False:
+                continue
+            if isinstance(p.get("cache_path"), str) and p["cache_path"]:
+                found.append(Path(p["cache_path"]))
+            elif all(isinstance(p.get(k), str) and p[k] and "/" not in p[k] and p[k] not in (".", "..")
+                     for k in ("marketplace", "name")):
+                found.append(real.config / "installed-plugins" / p["marketplace"] / p["name"])
+        return found
+
+    def skill_dirs(self, real: Real) -> list[Path]:
+        return [real.config / "skills", *(plugin / "skills" for plugin in self._enabled_plugins(real))]
+
+    skill_subdirs = (".agents/skills", ".github/skills", ".claude/skills")  # in the project and above it
+
+    def parent_skill_dirs(self, project: Path) -> list[Path]:
+        """Skill folders above the project, which Copilot finds by walking up from it (T0, T0out):
+        up to the repository's root, or to the top outside a repository. In a repository's root
+        it looks no higher (measured in this repository)."""
+        found = []
+        for directory in [project, *project.parents]:
+            if directory != project:
+                found += [directory / sub for sub in self.skill_subdirs]
+            if (directory / ".git").exists():
+                break
+        return [d for d in found if d.is_dir()]
+
+    def extra_markers(self, real: Real) -> list[tuple[str, Path]]:
+        return []
+
+    def custom_agents(self, real: Real) -> tuple[Path, dict[str, str]]:
+        """The user's custom agents: a Markdown file each in agents/, by the name in its front matter
+        (or the file's), with the first line of its description."""
+        folder = real.config / "agents"
+        found = {}
+        for path in sorted(folder.glob("*.md")) if folder.is_dir() else []:
+            meta = _frontmatter(path)
+            found[meta.get("name") or path.name.split(".")[0]] = next(iter((meta.get("description") or "").splitlines()), "")
+        return folder, found
+
+    login_mcp = ("github-mcp-server",)  # comes with the login, not with a setting of the user's
+
+    def _mcp_servers(self, real: Real) -> list[str]:
+        servers = _dict(_json(real.config / "mcp-config.json")).get("mcpServers")
+        return sorted(name for name in _dict(servers) if isinstance(name, str))
+
+    def mcp_configured(self, real: Real) -> list[str]:
+        """The MCP servers the user configured and did not switch off (`disabledMcpServers` of the
+        settings): a control run that offers none of their tools cannot see them."""
+        off = set()
+        for data in (_dict(_json(real.config / "settings.json")), self._config(real)):
+            listed = data.get("disabledMcpServers")
+            off |= {n for n in listed if isinstance(n, str)} if isinstance(listed, list) else set()
+        return [name for name in self._mcp_servers(real) if name not in off]
+
+    # statuses of a server the control run should have offered tools of; disabled, stopped and
+    # not_configured ones offer none
+    mcp_expected = ("connected", "failed", "needs-auth", "pending")
+
+    def project_skill_dirs(self, project: Path) -> list[Path]:
+        """The project's own skill folders, which Copilot lists with location `project`."""
+        return [project / sub for sub in self.skill_subdirs if (project / sub).is_dir()]
+
+    def agent_entry(self, name: str, line: str) -> re.Pattern:
+        """How the request lists a custom agent: `- **name**: description`."""
+        return re.compile(rf"^- \*\*{re.escape(name)}\*\*: {re.escape(line)}", re.M)
+
+    def email(self, real: Real) -> str | None:
+        return None
+
+    def billing(self, real: Real) -> str | None:
+        return "subscription"  # a Copilot plan, counted in premium requests
+
+    # unattended runs (Calibrate)
+    def run_args(self, prompt: str, extra: list[str], hook: str | None = None, room=None) -> list[str]:
+        if hook:
+            raise TareError("the Copilot CLI does not run in Cliff and Swap yet")
+        return ["--yolo", "--no-auto-update", *extra, "-p", prompt, "--output-format", "json"]
+
+    def usage(self, stdout: str) -> Usage:
+        """From the last `session.usage_checkpoint` of the stream: the session's tokens so far. Its
+        input count leaves out the cache, so the cache is added (as the usage file Copilot can write
+        reports it, measured on real runs). The cost is in premium requests, not in dollars."""
+        u = Usage(cost_usd=None)
+        last = None
+        for e in _objects(stdout):
+            if e.get("type") == "session.usage_checkpoint":
+                last = _dict(e.get("data"))
+        if last is not None:
+            tokens = _dict(_dict(last.get("accountingSnapshot")).get("tokenDetails"))
+
+            def count(kind: str) -> int:
+                n = _dict(tokens.get(kind)).get("tokenCount")
+                return n if isinstance(n, int) and not isinstance(n, bool) and n >= 0 else 0
+            listed = last.get("modelCacheState")
+            states = [m for m in listed if isinstance(m, dict) and isinstance(m.get("modelId"), str)] if isinstance(listed, list) else []
+            u = Usage(count("input") + count("cache_read") + count("cache_write"), count("cache_read"),
+                      count("cache_write"), count("output"), count("reasoning"), None,
+                      states[0]["modelId"] if len(states) == 1 else None)
+        return _one_run(u)
+
+    def uses(self, stdout: str) -> Uses:
+        """From the `tool.execution_start` events, each once by its id. The skill tool names its skill;
+        view (Copilot's read tool) and bash may read a SKILL.md."""
+        u, seen = Uses(), set()
+        for e in _objects(stdout):
+            data = _dict(e.get("data"))
+            if e.get("type") != "tool.execution_start" or not _first(seen, data.get("toolCallId")):
+                continue
+            name, args = str(data.get("toolName") or "?"), _dict(data.get("arguments"))
+            u.call(name, path=str(args.get("path") or "") if name == "view" else "",
+                   command=str(args.get("command") or "") if name == "bash" else "",
+                   skill=str(args.get("skill") or "?") if name == "skill" else None)
+        return u
+
+    def activity(self, event: dict) -> str | None:
+        """What one line of the live stream (--output-format json) shows, for the dashboard."""
+        data = _dict(event.get("data"))
+        if event.get("type") == "result":
+            return "finished"
+        if event.get("type") == "tool.execution_start":
+            args = _dict(data.get("arguments"))
+            detail = args.get("command") or args.get("path") or args.get("pattern") or args.get("skill") or ""
+            return f"{data.get('toolName')}: {str(detail).splitlines()[0][:90] if detail else ''}"
+        if event.get("type") == "assistant.message" and str(data.get("content") or "").strip():
+            return "says: " + str(data["content"]).strip().splitlines()[0][:90]
+        return None
+
+
+AGENTS = {agent.name: agent for agent in (Claude(), Codex(), Pi(), Antigravity(), Copilot())}

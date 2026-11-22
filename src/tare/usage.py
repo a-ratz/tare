@@ -91,15 +91,14 @@ def describe(u: "Usage | None") -> str:
         return "no usage recorded"
     runs = f"{u.runs} run{'s' if u.runs != 1 else ''}, "
     tokens = f"{_count(u.input)} in ({_count(u.cached)} cached), {_count(u.output)} out"
+    priced = u.runs - u.unpriced
+    part = f" for {priced} run{'s' if priced != 1 else ''}, cost unknown for {u.unpriced}" if u.unpriced else ""
     if u.cost_usd is None:
         cost = "cost unknown"
     elif u.estimated:
-        cost = f"about {money(u.cost_usd)} (estimated from {u.estimated})"
-    elif u.unpriced:
-        priced = u.runs - u.unpriced
-        cost = f"{money(u.cost_usd)} for {priced} run{'s' if priced != 1 else ''}, cost unknown for {u.unpriced}"
+        cost = f"about {money(u.cost_usd)}{part} (estimated from {u.estimated})"
     else:
-        cost = money(u.cost_usd)
+        cost = f"{money(u.cost_usd)}{part}"
     return f"{runs}{tokens}, {cost}"
 
 
@@ -128,9 +127,10 @@ def of_run(events: list[dict]) -> dict:
     per_side = {}
     for k, v in sides.items():
         side = info.get(k) or {}
-        found = total(v)
-        per_side[k] = found and estimate(found, model_from_args(side.get("args") or []),
-                                         reasoning_extra=side.get("agent") == "agy")
+        model = model_from_args(side.get("args") or [])
+        # each run priced on its own: one without counts stays unknown instead of $0 inside a sum
+        runs = (Usage.from_dict(u) if isinstance(u, dict) else u for u in v)
+        per_side[k] = total(estimate(u, model, reasoning_extra=side.get("agent") == "agy") for u in runs if u is not None)
     checks = total(check)
     everything = total([*per_side.values(), checks])
     return {"sides": {k: {"label": labels.get(k, k), "usage": u.to_dict() if u else None,
@@ -215,6 +215,8 @@ def estimate(u: Usage, model: str | None, reasoning_extra: bool = False) -> Usag
     """Fill in the cost of a usage whose runs all lack one, from the price table. `reasoning_extra`
     is for agents whose output count leaves out the reasoning tokens that are billed as output."""
     if u.cost_usd is not None or u.unpriced != u.runs:
+        return u
+    if not (u.input or u.output or u.reasoning):  # no counts (a stream cut off before them): not free, unknown
         return u
     found = price_of(model or u.model)
     if not found:

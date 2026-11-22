@@ -61,7 +61,8 @@ marks the step where the run was lost. `after it` says whether a later step pass
 
 ## Agents
 
-Cliff works with all four agents (`tare cliff pi ...`). Claude Code, Codex and Pi continue their
+Cliff works with Claude Code, Codex, Pi and the Antigravity CLI (`tare cliff pi ...`); the
+Copilot CLI does not run in Cliff and Swap yet, because tare has no capsules and no trail for it. Claude Code, Codex and Pi continue their
 own saved session. The Antigravity CLI stores its sessions in a format that tare cannot cut, so
 Cliff continues it with a handover note, as [Swap](swap.md) does. Each restart is a real agent
 run, so a search costs as much as its restarts.

@@ -30,4 +30,5 @@ environment, and none of them checks it.
   [Codex](../experiments/dirty-twin-codex/RESULTS.md),
   [Pi](../experiments/dirty-twin-pi/RESULTS.md),
   [Antigravity CLI](../experiments/dirty-twin-agy/RESULTS.md),
+  [Copilot CLI](../experiments/dirty-twin-copilot/RESULTS.md),
   [the three agents on macOS](../experiments/dirty-twin-macos/RESULTS.md)

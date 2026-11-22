@@ -16,12 +16,13 @@ tare claude --yolo                 # skip the agent's permission prompts
 tare claude --allow-dirty          # start even though the reading is not tare: 0.00
 tare claude --project ../other     # another project directory (default: the current one)
 tare claude --continue             # a fresh room that resumes this project's last session
-tare cleanup                       # remove leftover rooms and the kept sessions (--dry-run lists them)
+tare cleanup                       # remove leftover rooms, setup copies and kept sessions (--dry-run lists them)
 
 tare probe codex                   # the same for Codex, Pi and the Antigravity CLI
 tare codex -- exec -m MODEL "..."  # one-shot Codex run: arguments after -- go to codex
 tare pi                            # Pi in a room
 tare agy                           # the Antigravity CLI in a room
+tare copilot                       # the GitHub Copilot CLI in a room
 tare prices update                 # fetch the price table for costs an agent does not report
 ```
 
@@ -75,7 +76,8 @@ home, and the install is gone after the run ([Tools in a room](tools.md)).
 
 A room's home, with the agent's session in it, is removed when the room closes. Before that, tare
 copies the agent's latest session out, whatever ended it: the agent exited or crashed, or the
-terminal closed. It says where:
+terminal closed. This works for Claude Code, Codex and Pi; Antigravity CLI and Copilot CLI cannot
+continue a session yet, so tare keeps none of theirs. It says where:
 
 ```text
 tare: session kept in ~/.local/state/tare/sessions/claude/<project>; `tare claude --continue` resumes it
@@ -85,8 +87,8 @@ tare: session kept in ~/.local/state/tare/sessions/claude/<project>; `tare claud
 session into it where the agent keeps its sessions, and starts the agent resuming it: Claude Code
 with `--resume`, Codex with `resume`, Pi with `--session`. Your arguments after `--` follow. The
 continued room holds the earlier conversation because you asked for it; the probe reads the room
-before it is placed. The Antigravity CLI cannot continue a session yet; tare says so and starts
-nothing.
+before it is placed. The Antigravity CLI and the Copilot CLI cannot continue a session yet; tare
+says so and starts nothing.
 
 Kept sessions stay until you remove them, in folders only you can read: a session holds the whole
 conversation. `tare cleanup` removes them, and the rooms that no running tare holds any more (a
@@ -96,7 +98,11 @@ whose lock is free and that no running process names or works in. A room of tare
 no lock; `tare cleanup` takes it only when it holds what a tare room holds and nothing in it changed
 for a day. Any other folder named `tare-room-*` is left alone, and so is every room while the
 lookup of running processes fails. Half-written copies of a session that a killed tare left go too,
-once they are an hour old. `tare cleanup --dry-run` lists what it would remove. When the latest kept
+once they are an hour old, and so do the copies of your setup a probe's control run works on
+(`tare-<agent>-twin-*` in the temporary folder, which can hold a copy of your login) when tare was
+killed during the probe. A probe holds a lock on its copy as a room's tare does on the room, and
+`tare cleanup` takes a copy only once its lock is free; a copy of tare 0.5.0 or older has no lock and
+goes only when it holds what such a copy holds and nothing in it changed for an hour. `tare cleanup --dry-run` lists what it would remove. When the latest kept
 session is damaged (a crash cut it), `--continue` says so and takes the one before.
 
 **Measured** on macOS 27.0.1 with Claude Code 2.1.330 and Haiku: a first room was told a code word

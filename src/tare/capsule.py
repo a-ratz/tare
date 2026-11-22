@@ -219,6 +219,7 @@ def _run_in(room: Room, agent, real, command: list[str], env, timeout: float, lo
         return f"agent stopped after {int(timeout)} s"
 
 
+
 def read_usage(agent, log_dir: Path) -> dict | None:
     """The tokens and cost of the run whose stream is in log_dir (None for an agent that cannot tell)."""
     stream = log_dir / "stdout.jsonl"

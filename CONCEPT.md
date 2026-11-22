@@ -212,6 +212,7 @@ to mise that picks the tool by the name it was called as, tare asks mise for the
 | Codex | `CODEX_HOME` and `HOME` in the room, a copy of `auth.json` only, `--disable remote_plugin` | `-c openai_base_url=<server>/v1` keeps the ChatGPT login | instructions, memories, home path, skills, plugins, custom agents, reach |
 | Pi | `PI_CODING_AGENT_DIR` and `HOME` in the room, copies of `auth.json` and `models.json`, a minimal `settings.json`, no flags | a provider of its own (`tare`, api `anthropic-messages`), because Pi has no base-URL variable | instruction files above the project, extensions, home path, reach |
 | Antigravity CLI | `HOME` in the room, a copy of `antigravity-oauth-token` and the chosen model, no flags | `CLOUD_CODE_URL` | home path, reach. Global rules (`~/.gemini/GEMINI.md`) and global skills (`~/.gemini/config/skills/`) showed after copies were placed in the setup for the test, because the measuring machine had none. |
+| Copilot CLI | `COPILOT_HOME` and `HOME` in the room, a `config.json` with the login's token only and the project trusted, `COPILOT_DISABLE_LOGIN_SHELL_ENV=1`, `--disable-builtin-mcps --no-auto-update` | its "bring your own key" variables: `COPILOT_PROVIDER_BASE_URL`, `COPILOT_PROVIDER_TYPE=anthropic`, `COPILOT_MODEL` | home path, MCP servers (the login's GitHub MCP server), reach, and skills where the project lies under a folder with `.agents/skills/`. Global instructions, skills, custom agents, an MCP server and an enabled plugin's skills showed after copies were placed |
 
 What each agent needed:
 
@@ -244,6 +245,24 @@ What each agent needed:
   sizes, modification times) through every control run. The CLI writes each skill's path into
   its skill list, so the probe compares skill lines without the path. Without that, a skill that
   leaked into the room would not match yours, because its path differs.
+- **Copilot CLI:** its model calls reach the fake as Anthropic Messages through its "bring your
+  own key" variables, online with the login, so the context that comes with the login shows too.
+  Its control run runs on a copy of `~/.copilot` and an empty cache folder; **measured:**
+  `~/.copilot` and `~/.agents` kept their fingerprints. The login lives in a Keychain item only
+  the `copilot` binary reads without asking, so the room gets a token in its `config.json`, taken
+  from a token variable, from a token the user's `config.json` keeps as plain text, from gh for the
+  same account (no question), or last from that item. The
+  login brings the built-in GitHub MCP server, which reaches into the user's GitHub account, so the
+  room turns it off. Copilot's shell takes its environment from a login shell, which put
+  `/usr/local/bin` before the room's `PATH`; the room keeps its own. It lists MCP tools as
+  `<server>-<tool>` and custom agents as `- **name**: description`; the probe reads both. It finds
+  skills by walking up from the working directory, so `~/.agents/skills/` reached a work directory
+  under the home outside any repository and none outside the home (the experiment); in this
+  repository's root the walk went no higher (`tare probe copilot`, which was blind for skills until
+  the probe stopped at the root too). The probe checks those folders. Its tokens come from the
+  stream's last `session.usage_checkpoint`, which matched the usage file Copilot can write on three
+  real runs. It runs on Node.js, so it needs its output through
+  pipes in a room (#172). Not in Cliff and Swap yet.
 - **Instruction files above the project:** Claude Code's one-shot mode, which the probe uses, did
   not load `~/AGENTS.md`. Pi loaded it. So for Claude Code the probe does not show whether an
   interactive session in your real setup loads these files. A room has no parent directories, so these files
@@ -393,8 +412,8 @@ names what has changed since.
 ## Measurements
 
 All measurements ran on WSL2 on 2026-10-04 and 2026-10-05. The rows that name macOS ran on
-macOS 27.0 (arm64) on 2026-10-05 and 2026-10-06, except the rows on tools in a room and on Node.js
-agents' output, which ran on macOS 27.0.1 on 2026-11-22. The row that names Omarchy ran on native Linux on
+macOS 27.0 (arm64) on 2026-10-05 and 2026-10-06, except the rows on the Copilot CLI, tools in a
+room and Node.js agents' output, which ran on macOS 27.0.1 on 2026-11-22. The row that names Omarchy ran on native Linux on
 2026-11-16.
 
 | What | Agent and version | Result | Source |
@@ -403,6 +422,7 @@ agents' output, which ran on macOS 27.0.1 on 2026-11-22. The row that names Omar
 | Control run and room | Codex CLI 0.160.0 | the room read `tare: 0.00` | [results](experiments/dirty-twin-codex/RESULTS.md) |
 | Control run and room | Pi 1.0.2 | the room read `tare: 0.00` without flags | [results](experiments/dirty-twin-pi/RESULTS.md) |
 | Control run and room | Antigravity CLI 1.2.16 | the room read `tare: 0.00` without flags, and `~/.gemini` stayed unchanged | [results](experiments/dirty-twin-agy/RESULTS.md) |
+| Control run and room, macOS 27.0.1 | Copilot CLI 1.0.114 | ten of eleven predictions held (P4 failed: the user's plugins are all disabled, and `~/.agents/skills/` came through the walk up from the work directory); `~/.copilot` stayed unchanged; with `--disable-builtin-mcps` the room showed none of the tested markers but the project's `AGENTS.md`, and offered 21 tools, none of an MCP server; the room answered the real model with gh's token as its login. Afterwards `tare probe copilot` read `tare: 0.00` in this repository and in a folder under the home | [results](experiments/dirty-twin-copilot/RESULTS.md) |
 | Rooms given copies of real settings on purpose | all four | Claude Code 4 leaks, Codex 6, Pi 5, Antigravity CLI 3, each named with its source | the results above |
 | Scripted Cliff and Swap | Claude Code against scripted models | Cliff found step 4. Swap passed the start check and found the blame passing from the agent to the workspace between the handovers at 0 and 0.5 | `experiments/cliff-scripted`, `experiments/swap-scripted` |
 | Real task 1: a data migration | Claude Code with Sonnet and Haiku, Codex | Deleting the source file after a wrong-encoding import was planned as the point of no return. Swap showed that the workspace could still be repaired. Haiku passed about 1 in 14 runs, Codex with gpt-6.1-sol 4 of 4 | [results](experiments/migration/RESULTS.md) |
@@ -434,8 +454,9 @@ agents' output, which ran on macOS 27.0.1 on 2026-11-22. The row that names Omar
   junk to the real setup, and file tripwires that report which secret files a run opened.
 - **Docker:** could contain files where bubblewrap is missing, but does nothing against context
   that comes with the login.
-- **Copilot CLI:** checked once but not supported. Its `--available-tools` ignores an empty list
-  without a warning, so only a list that names no real tool turns its tools off.
+- **Copilot CLI:** supported since epic #189, measured on macOS only, not yet in Cliff and Swap.
+  Its `--available-tools` ignores an empty list without a warning, so only a list that names no
+  real tool turns its tools off; tare does not use it.
 
 ## Prior art
 
