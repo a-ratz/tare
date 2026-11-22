@@ -207,6 +207,10 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("prices", help="the price tables for costs that an agent does not report (tare prices update)")
     sub.add_parser("cleanup", help="remove the rooms nothing uses any more and the sessions kept for --continue")
     args = ap.parse_args(argv)
+    if args.command in ("cliff", "swap"):
+        for name in [args.agent] if args.command == "cliff" else [args.a, args.b]:
+            if not hasattr(AGENTS[name], "trail"):
+                ap.error(f"{name} does not run in Cliff and Swap yet: tare has no capsules and no trail for it")
     if args.command == "swap":
         names = [args.a, args.b]
     elif args.command == "calibrate":

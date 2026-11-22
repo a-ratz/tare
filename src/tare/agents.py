@@ -935,4 +935,270 @@ class Antigravity:
         return None
 
 
-AGENTS = {agent.name: agent for agent in (Claude(), Codex(), Pi(), Antigravity())}
+def _frontmatter(path: Path) -> dict[str, str]:
+    """The `key: value` lines between a Markdown file's leading `---` lines."""
+    try:
+        lines = path.read_text().splitlines()
+    except (OSError, UnicodeDecodeError):
+        return {}
+    if not lines or lines[0].strip() != "---":
+        return {}
+    found = {}
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        key, sep, value = line.partition(":")
+        if sep and key.strip() and not key.startswith((" ", "\t")):
+            found[key.strip()] = value.strip().strip("\"'")
+    return found
+
+
+class Copilot:
+    """The GitHub Copilot CLI (experiments/dirty-twin-copilot). Its model calls reach the fake
+    through its "bring your own key" variables, as Anthropic Messages."""
+
+    name = "copilot"
+    credentials = "config.json"  # the room's login is a token in it (copilotTokens)
+    config_dir = ".copilot"
+    # The GitHub MCP server comes with the login and reaches into the user's GitHub account
+    # (T1 and T1f); an update would write the CLI the user runs.
+    room_flags = ["--disable-builtin-mcps", "--no-auto-update"]
+    yolo = ["--yolo"]
+    native_resume = False  # no capsules and no trail yet: not in Cliff and Swap
+    keychain_service = "copilot-cli"
+    token_variables = ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN")
+    # the user's sessions, logs and history: not setup, and a control run on a copy only adds to them
+    not_setup = ("session-state", "session-store.db*", "logs", "chats", "command-history-state.json", "ide")
+    usage_file = "tare-usage.json"
+
+    def discover(self) -> Real:
+        home = Path.home()
+        custom = os.environ.get("COPILOT_HOME")
+        binary = _which("copilot")
+        with binary.open("rb") as f:
+            if f.read(2) == b"#!":
+                raise TareError(f"copilot at {binary} is a script (the npm package). tare runs the Copilot CLI's "
+                                "native executable: install it with the install script or Homebrew")
+        return Real(home, Path(custom) if custom else home / ".copilot", binary)
+
+    def _config(self, real: Real) -> dict:
+        """config.json, read for its field names and the login's account; it starts with // lines."""
+        try:
+            text = (real.config / "config.json").read_text()
+            data = json.loads("\n".join(line for line in text.splitlines() if not line.lstrip().startswith("//")))
+        except (OSError, ValueError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def _user(self, real: Real) -> dict | None:
+        """The account Copilot uses: its last login, as config.json lists it."""
+        data = self._config(real)
+        user = _dict(data.get("lastLoggedInUser"))
+        if not (isinstance(user.get("login"), str) and isinstance(user.get("host"), str)):
+            return None
+        listed = next((u for u in data.get("loggedInUsers") or [] if isinstance(u, dict)
+                       and u.get("login") == user["login"] and u.get("host") == user["host"]), {})
+        return {"host": user["host"], "login": user["login"], "kind": listed.get("kind", "githubDotCom")}
+
+    def _token(self, real: Real, user: dict) -> str | None:
+        """The login's token, in Copilot's order: a token variable (not a classic ghp_ one, which Copilot
+        refuses), a token config.json keeps as plain text, gh's token for the same account, and last
+        the Keychain item, which only the copilot binary reads without asking the user. Never printed."""
+        for variable in self.token_variables:
+            value = os.environ.get(variable, "")
+            if value and not value.startswith("ghp_"):
+                return value
+        key = f"{user['host']}:{user['login']}"
+        plain = _dict(self._config(real).get("copilotTokens")).get(key)
+        if isinstance(plain, str) and plain:
+            return plain
+        gh = shutil.which("gh")
+        if gh:
+            host = re.sub(r"^https?://", "", user["host"]).rstrip("/")
+            found = subprocess.run([gh, "auth", "token", "--hostname", host, "--user", user["login"]],
+                                   capture_output=True, text=True)
+            if found.returncode == 0 and found.stdout.strip():
+                return found.stdout.strip()
+        return _security(key, self.keychain_service) if sys.platform == "darwin" else None
+
+    def _login(self, real: Real) -> tuple[dict, str]:
+        user = self._user(real)
+        if user is None:
+            raise TareError(f"no Copilot login in {real.config / 'config.json'}: log in with copilot first")
+        token = self._token(real, user)
+        if not token:
+            raise TareError(f"no token for the Copilot login {user['login']}: set COPILOT_GITHUB_TOKEN, log in to gh "
+                            f"as {user['login']}, or log in with copilot again")
+        return user, token
+
+    def token_lifetime(self, real: Real) -> float:
+        """A GitHub OAuth token does not expire, and the room renews nothing."""
+        self._login(real)
+        return float("inf")
+
+    def seed(self, real: Real, config: Path, room):
+        user, token = self._login(real)
+        login = {"lastLoggedInUser": {"host": user["host"], "login": user["login"]}, "loggedInUsers": [user],
+                 "copilotTokens": {f"{user['host']}:{user['login']}": token},
+                 # the user chose to run this project, so it is trusted as in their own setup
+                 "trustedFolders": [room.inside_work]}
+        (config / self.credentials).write_text(json.dumps(login))
+        (config / self.credentials).chmod(0o600)
+
+    def room_env(self, room) -> dict[str, str]:
+        # Copilot's shell takes its environment from a login shell (/etc/profile puts /usr/local/bin
+        # first, measured); the room's own environment is the one to keep
+        return {"COPILOT_HOME": room.inside_config(self), "COPILOT_DISABLE_LOGIN_SHELL_ENV": "1"}
+
+    def binds(self, real: Real) -> tuple[list[str], str]:
+        # one native executable; it unpacks the CLI into the cache folder of the room's home
+        return ["--ro-bind", str(real.binary), "/opt/agent/copilot"], "/opt/agent/copilot"
+
+    def probe(self, fake_url: str) -> tuple[list[str], dict[str, str]]:
+        args = ["--allow-all-tools", "--no-auto-update", "-p", PROMPT, "--output-format", "json"]
+        return args, {"COPILOT_PROVIDER_BASE_URL": fake_url, "COPILOT_PROVIDER_TYPE": "anthropic",
+                      "COPILOT_MODEL": FAKE_MODEL}
+
+    @contextmanager
+    def twin(self, real: Real, fake_url: str):
+        """The control run runs on a copy of the user's Copilot home and an empty cache folder; the real
+        ones are never written. HOME stays the user's, as their skills above the project need it."""
+        with tempfile.TemporaryDirectory(prefix="tare-copilot-twin-") as tmp:
+            copy, cache = Path(tmp) / "copilot", Path(tmp) / "cache"
+            shutil.copytree(real.config, copy, symlinks=True, ignore=shutil.ignore_patterns(*self.not_setup))
+            _absolute_links(real.config, copy)
+            cache.mkdir()
+            yield {"COPILOT_HOME": str(copy), "COPILOT_CACHE_HOME": str(cache)}
+
+    def prepare_probe(self, config: Path, fake_url: str):
+        pass
+
+    def capture(self, stdout: str, requests: list[dict]) -> Capture | None:
+        """The first request with tools. Copilot names an MCP tool `<server>-<tool>`; the capture names
+        it `mcp__<server>__<tool>`, as the probe reads MCP tools."""
+        main = next((r for r in requests if r.get("tools")), None)
+        if main is None:
+            return None
+        found = list(_objects(stdout))
+        servers = next((_dict(e.get("data")).get("servers") for e in found if e.get("type") == "session.mcp_servers_loaded"), None)
+        servers = [s for s in servers or [] if isinstance(s, dict) and isinstance(s.get("name"), str)]
+        start = next((_dict(e.get("data")) for e in found if e.get("type") == "session.start"), {})
+        connected = sorted((s["name"] for s in servers if s.get("status") == "connected"), key=len, reverse=True)
+        tools = set()
+        for tool in main["tools"]:
+            name = tool.get("name") if isinstance(tool, dict) else None
+            if not isinstance(name, str):
+                continue
+            server = next((s for s in connected if name.startswith(f"{s}-")), None)
+            tools.add(f"mcp__{re.sub(r'[^A-Za-z0-9_-]', '_', server)}__{name[len(server) + 1:]}" if server else name)
+        text = "\n".join(strings({k: main.get(k) for k in ("system", "messages", "tools")}))
+        init = {"version": start.get("copilotVersion"),
+                "mcp_servers": [{"name": s["name"], "status": s.get("status")} for s in servers]}
+        return Capture(text, tools, init)
+
+    def instructions(self, real: Real) -> Path:
+        return real.config / "copilot-instructions.md"
+
+    def _enabled_plugins(self, real: Real) -> list[Path]:
+        plugins = self._config(real).get("installedPlugins") or []
+        return [Path(p["cache_path"]) for p in plugins if isinstance(p, dict) and p.get("enabled") is True
+                and isinstance(p.get("cache_path"), str)]
+
+    def skill_dirs(self, real: Real) -> list[Path]:
+        return [real.config / "skills", *(plugin / "skills" for plugin in self._enabled_plugins(real))]
+
+    def parent_skill_dirs(self, project: Path) -> list[Path]:
+        """Skill folders above the project, which Copilot finds by walking up from it (T0, T0out):
+        up to the repository's root, or to the top outside a repository. In a repository's root
+        it looks no higher (measured in this repository)."""
+        found = []
+        for directory in [project, *project.parents]:
+            if directory != project:
+                found += [directory / sub for sub in (".agents/skills", ".github/skills", ".claude/skills")]
+            if (directory / ".git").exists():
+                break
+        return [d for d in found if d.is_dir()]
+
+    def extra_markers(self, real: Real) -> list[tuple[str, Path]]:
+        return []
+
+    def custom_agents(self, real: Real) -> tuple[Path, dict[str, str]]:
+        """The user's custom agents: a Markdown file each in agents/, by the name in its front matter
+        (or the file's), with the first line of its description."""
+        folder = real.config / "agents"
+        found = {}
+        for path in sorted(folder.glob("*.md")) if folder.is_dir() else []:
+            meta = _frontmatter(path)
+            found[meta.get("name") or path.name.split(".")[0]] = next(iter((meta.get("description") or "").splitlines()), "")
+        return folder, found
+
+    def agent_entry(self, name: str, line: str) -> re.Pattern:
+        """How the request lists a custom agent: `- **name**: description`."""
+        return re.compile(rf"^- \*\*{re.escape(name)}\*\*: {re.escape(line)}", re.M)
+
+    def email(self, real: Real) -> str | None:
+        return None
+
+    def billing(self, real: Real) -> str | None:
+        return "subscription"  # a Copilot plan, counted in premium requests
+
+    # unattended runs (Calibrate): the usage file holds the tokens, which the stream leaves out
+    def run_args(self, prompt: str, extra: list[str], hook: str | None = None, room=None) -> list[str]:
+        if hook:
+            raise TareError("the Copilot CLI does not run in Cliff and Swap yet")
+        usage = ["--usage-output-file", f"{room.inside_config(self)}/{self.usage_file}"] if room else []
+        return ["--yolo", "--no-auto-update", *usage, *extra, "-p", prompt, "--output-format", "json"]
+
+    def collect(self, room, log_dir: Path):
+        """After a run: the usage file, appended to the run's stream as one `tare.usage` line."""
+        path = room.config(self) / self.usage_file
+        try:
+            data = json.loads(path.read_text())
+        except (OSError, ValueError):
+            return
+        with (log_dir / "stdout.jsonl").open("a") as out:
+            out.write(json.dumps({"type": "tare.usage", "data": data}) + "\n")
+
+    def usage(self, stdout: str) -> Usage:
+        """From the `tare.usage` line: tokens per model. inputTokens holds the cached ones too (measured
+        on a real run). The cost is in premium requests, not in dollars."""
+        u = Usage(cost_usd=None)
+        for e in _objects(stdout):
+            if e.get("type") != "tare.usage":
+                continue
+            for model, metrics in _dict(_dict(e.get("data")).get("modelMetrics")).items():
+                n = _dict(_dict(metrics).get("usage"))
+                u = u + Usage(int(n.get("inputTokens") or 0), int(n.get("cacheReadTokens") or 0),
+                              int(n.get("cacheWriteTokens") or 0), int(n.get("outputTokens") or 0),
+                              int(n.get("reasoningTokens") or 0), None, str(model))
+        return _one_run(u)
+
+    def uses(self, stdout: str) -> Uses:
+        """From the `tool.execution_start` events, each once by its id. The skill tool names its skill;
+        view (Copilot's read tool) and bash may read a SKILL.md."""
+        u, seen = Uses(), set()
+        for e in _objects(stdout):
+            data = _dict(e.get("data"))
+            if e.get("type") != "tool.execution_start" or not _first(seen, data.get("toolCallId")):
+                continue
+            name, args = str(data.get("toolName") or "?"), _dict(data.get("arguments"))
+            u.call(name, path=str(args.get("path") or "") if name == "view" else "",
+                   command=str(args.get("command") or "") if name == "bash" else "",
+                   skill=str(args.get("skill") or "?") if name == "skill" else None)
+        return u
+
+    def activity(self, event: dict) -> str | None:
+        """What one line of the live stream (--output-format json) shows, for the dashboard."""
+        data = _dict(event.get("data"))
+        if event.get("type") == "result":
+            return "finished"
+        if event.get("type") == "tool.execution_start":
+            args = _dict(data.get("arguments"))
+            detail = args.get("command") or args.get("path") or args.get("pattern") or args.get("skill") or ""
+            return f"{data.get('toolName')}: {str(detail).splitlines()[0][:90] if detail else ''}"
+        if event.get("type") == "assistant.message" and str(data.get("content") or "").strip():
+            return "says: " + str(data["content"]).strip().splitlines()[0][:90]
+        return None
+
+
+AGENTS = {agent.name: agent for agent in (Claude(), Codex(), Pi(), Antigravity(), Copilot())}

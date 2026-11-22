@@ -116,7 +116,7 @@ def parent_instructions(project: Path) -> list[Path]:
 def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_out: str,
           bare: Capture | None = None, project: Path | None = None, built: Room | None = None) -> Reading:
     """`built` is the Room the room's capture ran in; its backend adds variables of its own."""
-    r = Reading(agent=agent.name, version=room.init.get("claude_code_version", "?"))
+    r = Reading(agent=agent.name, version=room.init.get("version") or room.init.get("claude_code_version") or "?")
 
     # instruction files above the project; an agent that does not read them cannot leak them
     for path in parent_instructions(project) if project else []:
@@ -165,7 +165,9 @@ def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_
     builtin = {p["name"] for p in plugins if p.get("path") == "builtin"}
     user_plugins = {p["name"] for p in plugins if p.get("path") != "builtin"}
     own: dict[str, Path] = {}
-    for skill_dir in agent.skill_dirs(real):
+    # skill folders above the project, where the agent walks up to find them (Copilot)
+    above = agent.parent_skill_dirs(project) if project and hasattr(agent, "parent_skill_dirs") else []
+    for skill_dir in [*agent.skill_dirs(real), *above]:
         if skill_dir.is_dir():
             own |= {d.name: skill_dir for d in skill_dir.iterdir() if d.is_dir() and not d.name.startswith(".")}
     names = {s for s in twin.init.get("skills", []) if ":" in s and s.split(":")[0] not in builtin} | set(own)
@@ -189,11 +191,13 @@ def score(agent, real: Real, twin: Capture, room: Capture, reach_in: str, reach_
     r.leaks += [Finding("plugin", p["name"], p.get("path", "?"))
                 for p in room.init.get("plugins", []) if p.get("path") != "builtin"]
 
-    # custom agents, where the agent lists them (Codex): "<name>: {" and the description's first
-    # line, so that a built-in agent of the same name is not taken for the user's
+    # custom agents, where the agent lists them (Codex: "<name>: {" and the description's first line;
+    # Copilot: "- **<name>**: <line>"), so that a built-in agent of the same name is not taken for the user's
     if hasattr(agent, "custom_agents"):
         folder, descriptions = agent.custom_agents(real)
-        roles = [re.compile(rf"^{re.escape(name)}: \{{\n{re.escape(line)}", re.M) for name, line in descriptions.items()]
+        entry = getattr(agent, "agent_entry", lambda name, line: re.compile(
+            rf"^{re.escape(name)}: \{{\n{re.escape(line)}", re.M))
+        roles = [entry(name, line) for name, line in descriptions.items()]
         if roles:
             (r.seen if any(role.search(twin.text) for role in roles) else r.blind).append("agents")
         n = sum(1 for role in roles if role.search(room.text))
