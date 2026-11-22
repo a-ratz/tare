@@ -314,11 +314,12 @@ Pi and the Antigravity CLI read it with their read tools, and Claude Code may re
 skill's name is the folder that holds the `SKILL.md`. From a read tool's path the folder counts
 whatever it is called, unless the name holds a character of a pattern, an expansion or shell syntax
 (`*?[]{}$`, a backtick, `~()!`). tare does not parse a shell command; it looks for a `SKILL.md`
-whose folder is named the way skills are named (ASCII letters, digits, `_ . -`) and starts after a
-separator. So `$DIR/SKILL.md`, `$(pwd)/SKILL.md`, `skills/*/SKILL.md`, `~/SKILL.md` and
+whose folder is named the way skills are named (ASCII letters, digits, `_ . -`, not starting with a
+dot) and starts after a separator. So `$DIR/SKILL.md`, `$(pwd)/SKILL.md`, `skills/*/SKILL.md`, `~/SKILL.md` and
 `./SKILL.md` name no skill, `if=x/SKILL.md` or `HEAD:x/SKILL.md` name `x`, and a command names each
 skill once. A command counts whatever it does with the file (a `cat`, but also an `rm`), and a
-`SKILL.md` named in a comment or a heredoc counts too. A folder name with a space or a letter
+`SKILL.md` named in a comment, a heredoc, a quoted message (`git commit -m "Update x/SKILL.md"`) or
+an excluded path (`rg -g '!x/SKILL.md'`) counts too. A folder name with a space or a letter
 outside ASCII comes through only from a read tool: a shell command gives the last word of the one
 and nothing for the other. Two rounds of a shell parser built on shlex showed why: comments,
 heredocs and long quoted words each broke it in a new way, while skill names keep to the narrow

@@ -190,3 +190,10 @@ def test_skills_are_listed_by_how_many_runs_loaded_them_and_null_counts_are_read
               {"event": "tail", "id": "a-2", "status": "passed", "uses": {"tools": None, "skills": {"common": 1}}}]
     side = used.of_run(events)["sides"]["a"]
     assert list(side["skills"]) == ["common", "loud"] and side["runs"] == 3
+
+
+def test_a_command_that_names_many_skills_is_read_in_linear_time():
+    many = " ".join(f"s{i}/SKILL.md" for i in range(60000))
+    start = time.monotonic()
+    assert len(used.skill_reads(many + " s0/SKILL.md")) == 60000
+    assert time.monotonic() - start < 1

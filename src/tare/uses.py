@@ -41,13 +41,10 @@ def skill_read(path: str) -> str | None:
 
 def skill_reads(command: str) -> list[str]:
     """The skills whose SKILL.md a shell command names, by folder, each once per command. tare does
-    not parse the shell: a SKILL.md named in a comment or a heredoc counts too, and a folder name
-    with a space or a letter outside ASCII comes through only from a read tool."""
-    found = []
-    for name in SKILL_FILE.findall(command) if "SKILL.md" in command else []:
-        if name not in found:
-            found.append(name)
-    return found
+    not parse the shell: a SKILL.md named in a comment, a heredoc, a quoted message or an excluded
+    path counts too, and a folder name with a space or a letter outside ASCII comes through only
+    from a read tool."""
+    return list(dict.fromkeys(SKILL_FILE.findall(command))) if "SKILL.md" in command else []
 
 
 @dataclass
