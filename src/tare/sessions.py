@@ -18,6 +18,8 @@ from pathlib import Path
 
 # a session id as the agents write them (UUIDs and the like); anything else could name a path
 SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")  # whole, with fullmatch
+# a half-written copy older than this is left over; a younger one may be a save in progress
+PART_AGE = 3600
 
 
 def root() -> Path:
@@ -46,7 +48,8 @@ def session_id(lines: list[str]) -> str | None:
         sid = entry.get("sessionId") or (entry["payload"].get("id") if meta else None) \
             or (entry.get("id") if entry.get("type") == "session" else None)
         if isinstance(sid, str) and sid:
-            return sid if SAFE_ID.fullmatch(sid) else None
+            # not a file name either: Pi reads an id ending in .jsonl as a path
+            return sid if SAFE_ID.fullmatch(sid) and not sid.endswith(".jsonl") else None
     return None
 
 
@@ -69,11 +72,13 @@ def _private(folder: Path):
 def _read_in_room(found: Path, room) -> bytes | None:
     """A session file's bytes, only if it is a regular file inside the room's home, reached without a
     link: the room controls its home, and a link there could point at a file of the host's."""
-    home = Path(room.home).resolve()
+    home = Path(room.home)
     try:
-        if found.is_symlink() or not found.resolve().is_relative_to(home):
+        if home.is_symlink() or any(p.is_symlink() for p in [found, *found.parents] if p.is_relative_to(home)):
             return None
-        fd = os.open(found, os.O_RDONLY | os.O_NOFOLLOW)
+        if not found.resolve().is_relative_to(home.resolve()):
+            return None
+        fd = os.open(found, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)  # a pipe in its place must not hang the close
     except OSError:
         return None
     with os.fdopen(fd, "rb") as f:
@@ -93,14 +98,17 @@ def keep(agent, room, project: Path, unless: list[str] | None = None) -> Path | 
     data = _read_in_room(found, room) if found is not None else None
     if data is None:
         return None
-    lines = lines_of(data.decode(errors="replace"))
+    lines = complete(lines_of(data.decode(errors="replace")))
     sid = session_id(lines)
     if sid is None or (unless is not None and lines == unless):
         return None
+    data = ("\n".join(lines) + "\n").encode()
     folder = store(agent, project)
     _private(folder)
-    # the time to the nanosecond: two rooms closing in one second keep two sessions, in order
-    stamp = f"{time.strftime('%Y%m%d-%H%M%S')}-{time.time_ns() % 10**9:09d}"
+    # one clock read, in UTC, to the nanosecond: names sort as the saves happened, across a second's
+    # end and the change to winter time, and two rooms closing in one second keep two sessions
+    now = time.time_ns()
+    stamp = f"{time.strftime('%Y%m%d-%H%M%S', time.gmtime(now // 10**9))}-{now % 10**9:09d}"
     target = folder / f"{stamp}-{sid}.jsonl"
     part = folder / f".{target.name}.{os.getpid()}.part"  # not a *.jsonl: a copy that fails half-way is never the latest
     fd = os.open(part, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)  # the user's alone from the start
@@ -115,9 +123,20 @@ def keep(agent, room, project: Path, unless: list[str] | None = None) -> Path | 
 
 
 def parts() -> list[Path]:
-    """Copies a killed tare left half-written."""
-    return sorted(p for p in root().glob("*/*/.*.part") if stat.S_ISREG(p.lstat().st_mode)) \
-        if root().is_dir() and not root().is_symlink() else []
+    """Copies a killed tare left half-written: older than PART_AGE, links not followed."""
+    if not root().is_dir() or root().is_symlink():
+        return []
+    found, old = [], time.time() - PART_AGE
+    for directory, dirs, files in os.walk(root()):  # os.walk does not follow links to folders
+        for name in files:
+            path = Path(directory, name)
+            try:
+                st = path.lstat()
+            except OSError:
+                continue
+            if name.startswith(".") and name.endswith(".part") and stat.S_ISREG(st.st_mode) and st.st_mtime < old:
+                found.append(path)
+    return sorted(found)
 
 
 def kept() -> list[Path]:
@@ -143,6 +162,24 @@ def remove_empty_folders():
         path = Path(directory)
         if path != root() and not path.is_symlink() and not any(path.iterdir()):
             path.rmdir()
+
+
+def complete(lines: list[str]) -> list[str]:
+    """A session's lines without a last record that a crash cut off."""
+    if lines:
+        try:
+            json.loads(lines[-1])
+        except ValueError:
+            return lines[:-1]
+    return lines
+
+
+def newest_first(agent, project: Path) -> list[Path]:
+    """An agent's kept sessions of a project, the latest first."""
+    folder = store(agent, project)
+    if not folder.is_dir() or folder.is_symlink() or folder.parent.is_symlink() or root().is_symlink():
+        return []
+    return sorted((p for p in folder.glob("*.jsonl") if stat.S_ISREG(p.lstat().st_mode)), reverse=True)
 
 
 def latest(agent, project: Path) -> Path | None:

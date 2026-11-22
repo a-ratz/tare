@@ -310,6 +310,7 @@ class Claude:
         target = room.config(self) / "projects" / re.sub(r"[^A-Za-z0-9]", "-", room.inside_work)
         target.mkdir(parents=True, exist_ok=True)
         (target / f"{session}.jsonl").write_text("\n".join(lines) + "\n")
+        return lines
 
     def trail(self, lines: list[str]) -> trails.Trail:
         return trails.claude(lines)
@@ -499,6 +500,7 @@ class Codex:
         target.mkdir(parents=True, exist_ok=True)
         lines = _in_this_room(lines, room, lambda e: _dict(e.get("payload")) if e.get("type") == "session_meta" else None)
         (target / f"rollout-2026-01-01T00-00-00-{session}.jsonl").write_text("\n".join(lines) + "\n")
+        return lines
 
     def trail(self, lines: list[str]) -> trails.Trail:
         return trails.codex(lines)
@@ -711,6 +713,7 @@ export default function (pi: any) {{
         target.mkdir(parents=True, exist_ok=True)
         lines = _in_this_room(lines, room, lambda e: e if e.get("type") == "session" else None)
         (target / f"2026-01-01T00-00-00-000Z_{session}.jsonl").write_text("\n".join(lines) + "\n")
+        return lines
 
     def trail(self, lines: list[str]) -> trails.Trail:
         return trails.pi(lines)

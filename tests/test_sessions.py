@@ -79,7 +79,7 @@ def test_kept_sessions_stay_until_cleanup(home, tmp_path, monkeypatch):
     r = Room(tmp_path / "room-home", tmp_path / "work")
     for i in range(25):
         claude_session(r.home, f"s{i:02d}", "x")
-        monkeypatch.setattr(sessions.time, "strftime", lambda fmt, i=i: f"20261122-1200{i:02d}")
+        monkeypatch.setattr(sessions.time, "strftime", lambda fmt, t=None, i=i: f"20261122-1200{i:02d}")
         sessions.keep(Claude(), r, tmp_path / "project")
     assert len(sessions.kept()) == 25
 
@@ -171,7 +171,7 @@ def test_a_room_keeps_its_session_before_it_is_removed_also_when_the_agent_fails
 def test_continue_places_the_kept_session_and_resumes_it_before_the_users_arguments(started, tmp_path, capsys,
                                                                                     monkeypatch):
     stamps = iter(["20261122-120000", "20261122-120100"])
-    monkeypatch.setattr(sessions.time, "strftime", lambda fmt: next(stamps))
+    monkeypatch.setattr(sessions.time, "strftime", lambda fmt, t=None: next(stamps))
     cli.main(["claude", "--project", str(tmp_path)])
     placed = []
     original = Claude.place_session
@@ -340,7 +340,7 @@ def test_a_copy_that_fails_half_way_leaves_no_session_to_continue_from(home, tmp
     def full(source, target):
         raise OSError(28, "No space left on device")
     monkeypatch.setattr(sessions.os, "replace", full)
-    monkeypatch.setattr(sessions.time, "strftime", lambda fmt: "29991231-235959")
+    monkeypatch.setattr(sessions.time, "strftime", lambda fmt, t=None: "29991231-235959")
     with pytest.raises(OSError):
         sessions.keep(Claude(), r, tmp_path / "project")
     assert sessions.latest(Claude(), tmp_path / "project") == first
@@ -441,5 +441,60 @@ def test_a_room_whose_agent_still_runs_is_in_use_without_its_lock(rooms_dir, mon
     (r / "opt" / "agent").mkdir(parents=True)
     aged(r)
     room._hold(r).close()  # its tare was killed: the lock is free
-    monkeypatch.setattr(room, "_room_processes", lambda base: [4242] if base == r else [])
+    monkeypatch.setattr(room, "_room_processes", lambda base, sure=False: [4242] if base == r else [])
     assert room.leftover_rooms() == []
+
+
+def test_a_pipe_in_place_of_the_session_does_not_hang_the_close(home, tmp_path):
+    r = Room(tmp_path / "room-home", tmp_path / "work")
+    path = r.home / ".claude-config" / "projects" / "-work" / "s1.jsonl"
+    path.parent.mkdir(parents=True)
+    os.mkfifo(path)
+    assert sessions.keep(Claude(), r, tmp_path / "project") is None
+
+
+def test_a_record_a_crash_cut_off_is_left_out_and_a_damaged_latest_is_passed_over(started, tmp_path, capsys):
+    r = Room(tmp_path / "room-x", tmp_path / "work")
+    path = claude_session(r.home, "s1", "whole")
+    with path.open("a") as f:
+        f.write('{"sessionId": "s1", "message": "cut o')
+    kept = sessions.keep(Claude(), r, tmp_path)
+    assert sessions.read(kept)[1] == [json.dumps({"sessionId": "s1", "message": {"content": "whole"}})]
+    damaged = kept.parent / "99991231-235959-000000000-s2.jsonl"  # the latest, but not JSON
+    damaged.write_text("not json\n")
+    cli.main(["claude", "--project", str(tmp_path), "--continue"])
+    err = capsys.readouterr().err
+    assert f"cannot continue from {damaged}" in err and "continuing claude's session s1" in err
+
+
+def test_a_pi_session_that_did_not_start_is_not_kept_again(home, tmp_path):
+    header = json.dumps({"type": "session", "id": "p1", "cwd": "/old/work"})
+    r = Room(tmp_path / "room-home", tmp_path / "work", inside_work="/new/work")
+    placed = Pi().place_session(r, "p1", [header])
+    assert json.loads(placed[0])["cwd"] == "/new/work"
+    assert sessions.keep(Pi(), r, tmp_path / "project", unless=placed) is None
+
+
+def test_an_id_that_pi_would_read_as_a_path_is_refused():
+    assert sessions.session_id([json.dumps({"type": "session", "id": "review.jsonl"})]) is None
+
+
+def test_kept_names_sort_by_time_in_utc_from_one_clock_read(home, tmp_path, monkeypatch):
+    r = Room(tmp_path / "room-home", tmp_path / "work")
+    claude_session(r.home, "s1", "x")
+    clock = iter([1_799_999_999_999_999_999, 1_800_000_000_000_000_001])  # across a second's end
+    monkeypatch.setattr(sessions.time, "time_ns", lambda: next(clock))
+    first = sessions.keep(Claude(), r, tmp_path / "project")
+    second = sessions.keep(Claude(), r, tmp_path / "project")
+    assert sorted([second.name, first.name]) == [first.name, second.name]
+    assert first.name.startswith(time.strftime("%Y%m%d-%H%M%S", time.gmtime(1_799_999_999)))
+
+
+def test_cleanup_removes_only_old_half_written_copies(home, tmp_path):
+    folder = sessions.store(Claude(), tmp_path / "project")
+    folder.mkdir(parents=True)
+    old, fresh = folder / ".a.jsonl.1.part", folder / ".b.jsonl.2.part"
+    for p in (old, fresh):
+        p.write_text("{")
+    os.utime(old, (time.time() - 7200, time.time() - 7200))
+    assert sessions.parts() == [old]

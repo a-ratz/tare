@@ -289,14 +289,19 @@ def _rmtree(path: Path):
     root = str(path)
 
     def writable(function, failed, *_):
-        if function not in (os.rmdir, os.unlink, os.remove) or not str(failed).startswith(root):
+        failed = str(failed)
+        if not failed.startswith(root):
             return
         try:
-            parent = os.path.dirname(failed)
-            if parent.startswith(root):
-                os.chmod(parent, 0o700)
-            function(failed)
-        except OSError:
+            if function in (os.rmdir, os.unlink, os.remove):
+                parent = os.path.dirname(failed)
+                if parent.startswith(root):
+                    os.chmod(parent, 0o700)
+                function(failed)
+            elif os.path.isdir(failed) and not os.path.islink(failed):  # a folder it could not open or list
+                os.chmod(failed, 0o700)
+                _rmtree(Path(failed))
+        except (OSError, TypeError):
             pass
     if sys.version_info >= (3, 12):
         shutil.rmtree(path, onexc=writable)
@@ -319,28 +324,33 @@ def _number(text: str) -> bool:
     return text.isascii() and text.isdigit()  # isdigit alone takes digits int() does not
 
 
-def _listing(argv: list[str]) -> str:
-    """A listing from ps or lsof; empty when the program is missing, fails or stalls."""
+def _listing(argv: list[str]) -> str | None:
+    """A listing from ps or lsof; None when the program is missing, fails or stalls."""
     try:
-        return subprocess.run(argv, capture_output=True, timeout=5).stdout.decode(errors="replace")
+        done = subprocess.run(argv, capture_output=True, timeout=5)
     except (OSError, subprocess.SubprocessError):
-        return ""
+        return None
+    return done.stdout.decode(errors="replace") if done.returncode in (0, 1) else None  # lsof: 1 = nothing found
 
 
-def _room_processes(base: Path) -> list[int]:
+def _room_processes(base: Path, sure: bool = False) -> list[int] | None:
     """The user's processes that run from the room or in it: their command line names a path in the
     room (a program the agent put there, the sandbox itself), or their working directory is in it.
     A process that does neither, such as a daemon that moved to / and runs a program from outside
-    the room, is not found."""
+    the room, is not found. With `sure`, None when a lookup failed, since then nothing is known."""
     roots = {str(base), str(base.resolve()), f"/tmp/{base.name}"}  # /tmp is a link to /private/tmp
     pids = set()
-    for line in _listing(["/bin/ps", "-xww", "-o", "pid=,command="]).splitlines():
+    named = _listing(["/bin/ps", "-xww", "-o", "pid=,command="])
+    cwds = _listing(["/usr/sbin/lsof", "-b", "-w", "-a", "-u", str(os.getuid()), "-d", "cwd", "-Fpn"])
+    if sure and (named is None or (cwds is None and sys.platform == "darwin")):
+        return None
+    for line in (named or "").splitlines():
         pid, _, command = line.strip().partition(" ")
         if _number(pid) and any(re.search(rf"(?:(?<![^\s\"'=:<>(;&|])|(?<=file://)){re.escape(root)}(?=[/\s\"';:)<>&|]|$)",
                                           command) for root in roots):
             pids.add(int(pid))
     pid = None
-    for line in _listing(["/usr/sbin/lsof", "-b", "-w", "-a", "-u", str(os.getuid()), "-d", "cwd", "-Fpn"]).splitlines():
+    for line in (cwds or "").splitlines():
         if line.startswith("p"):
             pid = int(line[1:]) if _number(line[1:]) else None
         elif line.startswith("n") and pid and any(line[1:] == root or line[1:].startswith(root + "/") for root in roots):
@@ -369,7 +379,7 @@ def _alive(pids: list[int]) -> list[int]:
         existing.append(pid)
     if not existing:
         return []
-    states = _listing(["/bin/ps", "-o", "pid=,stat=", "-p", ",".join(map(str, existing))])
+    states = _listing(["/bin/ps", "-o", "pid=,stat=", "-p", ",".join(map(str, existing))]) or ""
     zombies = {int(f[0]) for f in (line.split() for line in states.splitlines()) if len(f) == 2 and _number(f[0])
                and f[1].startswith("Z")}
     return [pid for pid in existing if pid not in zombies]
@@ -483,7 +493,7 @@ def _hold(base: Path):
     (out of the agent's reach). `tare cleanup` removes only a room whose lock is free."""
     # locked before it has the lock's name, so cleanup never finds it unlocked: a new file of the
     # user's alone, locked, then linked to the name, which must not be there yet
-    part = Path(f"{base}.lock-{os.getpid()}")
+    part, fd = Path(f"{base}.lock-{os.getpid()}"), None
     try:
         fd = os.open(part, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         fcntl.flock(fd, fcntl.LOCK_EX)
@@ -492,6 +502,8 @@ def _hold(base: Path):
         finally:
             part.unlink(missing_ok=True)
     except OSError as e:
+        if fd is not None:
+            os.close(fd)
         shutil.rmtree(base, ignore_errors=True)
         raise TareError(f"cannot lock the room {base}: {e}") from None
     return os.fdopen(fd, "w")
@@ -552,7 +564,7 @@ def in_use(room_dir: Path) -> bool:
     process names it or works in it (the agent of a tare that was killed). A folder without a lock
     counts as a room of tare 0.5.0 or older only when it looks like one, and as left over only when
     nothing in it changed within LEGACY_IDLE; anything else is never taken."""
-    if _room_processes(room_dir):
+    if _room_processes(room_dir, sure=True) != []:  # some, or the lookup failed: leave it
         return True
     lock = Path(f"{room_dir}.lock")
     try:

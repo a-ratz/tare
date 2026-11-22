@@ -231,13 +231,17 @@ def main(argv: list[str] | None = None) -> int:
         if getattr(args, "resume", False):  # before the probe, which would otherwise run for nothing
             if not hasattr(AGENTS[names[0]], "continue_args"):
                 raise TareError(f"{names[0]} cannot continue a session yet; start it without --continue")
-            kept = sessions.latest(AGENTS[names[0]], project)
-            if kept is None:
+            found = sessions.newest_first(AGENTS[names[0]], project)
+            if not found:
                 raise TareError(f"no kept {names[0]} session for {project}; start it without --continue")
-            try:
-                resumed = (kept, *sessions.read(kept))
-            except (OSError, ValueError) as e:
-                raise TareError(f"cannot continue from {kept}: {e}") from None
+            for kept in found:  # the latest that is whole; a damaged one is said and passed over
+                try:
+                    resumed = (kept, *sessions.read(kept))
+                    break
+                except (OSError, ValueError) as e:
+                    _note(f"tare: cannot continue from {kept}: {e}")
+            if resumed is None:
+                raise TareError(f"no kept {names[0]} session for {project} is whole; start it without --continue")
         reals = {name: AGENTS[name].discover() for name in dict.fromkeys(names)}
         journal = Journal(None)
         if args.command in ("cliff", "swap", "calibrate"):
@@ -299,14 +303,14 @@ def main(argv: list[str] | None = None) -> int:
             resume = []
             if resumed is not None:
                 path, sid, lines = resumed
-                agent.place_session(room, sid, lines)
+                placed = agent.place_session(room, sid, lines) or lines
                 resume = agent.continue_args(sid)
                 print(f"tare: continuing {agent.name}'s session {sid} ({path.name[:15]})", file=sys.stderr)
             argv = rooms.argv(room, agent, real, [agent.name, *flags, *resume, *passthrough])
             try:
                 return _run_attached(argv)
             finally:  # whatever ended the agent, before the room and its session are removed
-                _keep(agent, room, project, unless=resumed[2] if resumed else None)
+                _keep(agent, room, project, unless=placed if resumed else None)
     except TareError as err:
         print(f"tare: {err}", file=sys.stderr)
         return 2
@@ -317,12 +321,19 @@ def _keep(agent, room, project: Path, unless: list[str] | None = None):
     try:
         kept = sessions.keep(agent, room, project, unless)
         if kept:
-            print(f"tare: session kept in {kept.parent}; `tare {agent.name} --continue` resumes it", file=sys.stderr)
+            _note(f"tare: session kept in {kept.parent}; `tare {agent.name} --continue` resumes it")
     except Exception as e:
-        try:
-            print(f"tare: could not keep the session: {type(e).__name__}: {e}", file=sys.stderr)
-        except OSError:  # the terminal is gone (SIGHUP)
-            pass
+        _note(f"tare: could not keep the session: {type(e).__name__}: {e}")
+
+
+def _note(message: str):
+    """A line on stderr, which may be closed or gone (SIGHUP closed the terminal)."""
+    if sys.stderr is None:
+        return
+    try:
+        print(message, file=sys.stderr)
+    except (OSError, ValueError):
+        pass
 
 
 def _size(path: Path) -> int:
@@ -360,7 +371,10 @@ def _cleanup(argv: list[str]) -> int:
     for path in kept:
         size = _size(path)
         if not args.dry_run:
-            path.unlink(missing_ok=True)
+            try:
+                path.unlink()
+            except FileNotFoundError:  # renamed or removed meanwhile
+                pass
         print(f"{verb}  session  {path}  {size // 1024} KB")
     if not args.dry_run:
         sessions.remove_empty_folders()

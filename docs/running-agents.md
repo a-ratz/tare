@@ -94,8 +94,10 @@ room tare could not remove, for example after a crash, holds a copy of your logi
 a lock on its room from the room's making until it is gone, and `tare cleanup` takes only rooms
 whose lock is free and that no running process names or works in. A room of tare 0.5.0 or older has
 no lock; `tare cleanup` takes it only when it holds what a tare room holds and nothing in it changed
-for a day. Any other folder named `tare-room-*` is left alone. Half-written copies of a session that
-a killed tare left go too. `tare cleanup --dry-run` lists what it would remove.
+for a day. Any other folder named `tare-room-*` is left alone, and so is every room while the
+lookup of running processes fails. Half-written copies of a session that a killed tare left go too,
+once they are an hour old. `tare cleanup --dry-run` lists what it would remove. When the latest kept
+session is damaged (a crash cut it), `--continue` says so and takes the one before.
 
 **Measured** on macOS 27.0.1 with Claude Code 2.1.330 and Haiku: a first room was told a code word
 and closed; `tare claude --continue -- -p "What was the code word I gave you?"` in a second room
