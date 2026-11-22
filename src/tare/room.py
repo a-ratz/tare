@@ -7,6 +7,7 @@ allowlist. On macOS it is Seatbelt, which cannot mount: the room is one director
 home and clones of the project and the CLI, at host paths. So every path the agent sees comes
 from the `Room` its backend built, never from a constant.
 """
+import fcntl
 import functools
 import json
 import os
@@ -106,6 +107,7 @@ class Bubblewrap:
         `work` is mounted, so the agent's changes land there directly."""
         _check_login(agent, real)
         home = Path(tempfile.mkdtemp(prefix="tare-room-"))
+        lock = _hold(home)
         try:
             room = Room(home, work, run)
             room.config(agent).mkdir(parents=True)
@@ -113,6 +115,7 @@ class Bubblewrap:
             yield room
         finally:
             _rmtree(home)
+            _release(lock, home)
 
     def argv(self, room: Room, agent, real, command: list[str], extra_env: dict[str, str] | None = None,
              extra_binds: list[str] | None = None) -> list[str]:
@@ -148,6 +151,7 @@ class Seatbelt:
     def open(self, agent, real, work: Path, run: Path | None = None):
         _check_login(agent, real)
         base = Path(tempfile.mkdtemp(prefix="tare-room-", dir=SEATBELT_ROOMS))
+        lock = _hold(base)
         clone, before = base / "work", None
         try:
             for source, inside in _mounts(agent.binds(real)[0]):
@@ -181,11 +185,13 @@ class Seatbelt:
             finally:
                 if copied:
                     _rmtree(base)
+                    _release(lock, base)
                 else:  # the run's changes are only in the clone: keep it, remove the rest, the login copy too (#187)
                     for part in base.iterdir() if base.is_dir() else []:
                         if part != clone:
                             _rmtree(part)
                     _say(f"tare: could not copy the run's changes back to {work}; they are in {clone}")
+                    _release(lock, base, kept=True)
             if interrupted is not None:
                 raise interrupted
 
@@ -466,24 +472,75 @@ def _copy_back(before: dict[str, tuple], clone: Path, work: Path):
             # gone from the clone since the state was taken
 
 
-# a room younger than this may still be in the making (the probe runs before the agent starts)
-FRESH_ROOM = 600  # seconds
+# a room of tare 0.5.0 or older has no lock: in use while anything in it changed within this time
+LEGACY_IDLE = 3600  # seconds
+
+
+def _hold(base: Path):
+    """A lock that the room's tare holds from the room's making until it is gone, beside the room
+    (out of the agent's reach). `tare cleanup` removes only a room whose lock is free."""
+    lock = open(f"{base}.lock", "w")
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    return lock
+
+
+def _release(lock, base: Path, kept: bool = False):
+    """Let go of a room. Its lock file goes with the room; if the room could not be removed, the lock
+    file stays, free, so that `tare cleanup` finds it. A room kept on purpose (the clone of a failed
+    copy-back) loses its lock file, so cleanup never takes it."""
+    if kept or not os.path.lexists(base):
+        Path(f"{base}.lock").unlink(missing_ok=True)
+    lock.close()
 
 
 def rooms_on_disk() -> list[Path]:
-    """Every room directory on this machine: bubblewrap's in the temporary directory, Seatbelt's
-    in /private/tmp."""
-    places = {Path(tempfile.gettempdir()), Path(SEATBELT_ROOMS)}
-    return sorted({p.resolve() for place in places if place.is_dir() for p in place.glob("tare-room-*") if p.is_dir()})
+    """The user's own room directories: bubblewrap's in the temporary directory, Seatbelt's in
+    /private/tmp. Never a link, so nothing a room's name points to elsewhere."""
+    places = {Path(tempfile.gettempdir()).resolve(), Path(SEATBELT_ROOMS).resolve()}
+    found = set()
+    for place in places:
+        for p in place.glob("tare-room-*") if place.is_dir() else []:
+            try:
+                st = p.lstat()
+            except OSError:
+                continue
+            if stat.S_ISDIR(st.st_mode) and st.st_uid == os.getuid():
+                found.add(p)
+    return sorted(found)
+
+
+def _newest_change(root: Path) -> float:
+    newest = 0.0
+    for directory, dirs, files in os.walk(root):
+        for name in [*dirs, *files]:
+            try:
+                newest = max(newest, os.lstat(os.path.join(directory, name)).st_mtime)
+            except OSError:
+                pass
+    try:
+        return max(newest, root.lstat().st_mtime)
+    except OSError:
+        return newest
+
+
+def in_use(room_dir: Path) -> bool:
+    """Whether a tare still holds the room. A room of tare 0.5.0 or older has no lock: it counts as
+    in use while anything in it changed within LEGACY_IDLE."""
+    lock = Path(f"{room_dir}.lock")
+    if not lock.exists():
+        return time.time() - _newest_change(room_dir) < LEGACY_IDLE
+    try:
+        with open(lock) as f:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(f, fcntl.LOCK_UN)
+        return False
+    except OSError:  # held by the room's tare (BlockingIOError), or unreadable: leave it
+        return True
 
 
 def leftover_rooms() -> list[Path]:
-    """Rooms nothing uses any more: no running process names them (the agent's and the sandbox's
-    command lines do), and they are older than FRESH_ROOM. A crash or a failed copy-back leaves
-    them, with their login copy (#187)."""
-    running = subprocess.run(["ps", "-axww", "-o", "command="], capture_output=True, text=True).stdout
-    now = time.time()
-    return [p for p in rooms_on_disk() if str(p) not in running and now - p.stat().st_mtime > FRESH_ROOM]
+    """Rooms no tare holds any more: a crash or a failed copy-back leaves them, with their login copy (#187)."""
+    return [p for p in rooms_on_disk() if not in_use(p)]
 
 
 def backend():

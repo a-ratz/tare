@@ -155,9 +155,13 @@ removed, whatever ended the agent, tare copies the agent's latest session into
 `~/.local/state/tare/sessions/<agent>/<project>/`, where it stays until `tare cleanup`. `tare
 claude --continue` (also for Codex and Pi) places it into a fresh room the way the agent keeps its
 sessions and resumes it; the probe reads the room before. The login copy is still removed with the
-room: a session that outlives its login copy (#193) goes on in a new room with a fresh one.
-**Measured** on macOS 27.0.1 with Claude Code 2.1.330: a session continued in a second room
-answered a question about the first (epic #194).
+room: a session that outlives its login copy (#193) goes on in a new room with a fresh one. The
+store is the user's alone (folders 700, files 600), and a session id that is not a plain name is
+not kept, so a placed session cannot name a path outside the room. Each tare holds a lock beside
+its room from the room's making until it is gone; `tare cleanup` removes only rooms whose lock is
+free, never through a link. **Measured** on macOS 27.0.1 with Claude Code 2.1.330: a session
+continued in a second room answered a question about the first (epic #194). Codex and Pi are
+covered by tests only.
 
 Claude Code may replace its login token when it renews it, which could log out your real
 session. This has not been tested, so tare refuses to start when the copy would need renewal

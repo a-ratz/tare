@@ -463,6 +463,11 @@ class Codex:
         rollouts = sorted((home / ".codex" / "sessions").rglob("rollout-*.jsonl"))
         return rollouts[-1] if rollouts else None
 
+    def latest_session(self, home: Path) -> Path | None:
+        """The rollout written last: a session resumed in the room keeps its old date in the file name."""
+        rollouts = sorted((home / ".codex" / "sessions").rglob("rollout-*.jsonl"), key=lambda p: p.stat().st_mtime)
+        return rollouts[-1] if rollouts else None
+
     def continue_args(self, session: str) -> list[str]:
         return ["resume", session]
 

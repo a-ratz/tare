@@ -13,6 +13,7 @@
 """
 import argparse
 import json
+import os
 import shlex
 import os
 import threading
@@ -230,9 +231,13 @@ def main(argv: list[str] | None = None) -> int:
         if getattr(args, "resume", False):  # before the probe, which would otherwise run for nothing
             if not hasattr(AGENTS[names[0]], "continue_args"):
                 raise TareError(f"{names[0]} cannot continue a session yet; start it without --continue")
-            resumed = sessions.latest(AGENTS[names[0]], project)
-            if resumed is None:
+            kept = sessions.latest(AGENTS[names[0]], project)
+            if kept is None:
                 raise TareError(f"no kept {names[0]} session for {project}; start it without --continue")
+            try:
+                resumed = (kept, *sessions.read(kept))
+            except (OSError, ValueError) as e:
+                raise TareError(f"cannot continue from {kept}: {e}") from None
         reals = {name: AGENTS[name].discover() for name in dict.fromkeys(names)}
         journal = Journal(None)
         if args.command in ("cliff", "swap", "calibrate"):
@@ -293,29 +298,44 @@ def main(argv: list[str] | None = None) -> int:
         with rooms.open(agent, real, project) as room:
             resume = []
             if resumed is not None:
-                lines = resumed.read_text(errors="replace").splitlines()
-                sid = sessions.session_id(lines)
-                if sid is None:
-                    raise TareError(f"no session id in {resumed}")
+                path, sid, lines = resumed
                 agent.place_session(room, sid, lines)
                 resume = agent.continue_args(sid)
-                print(f"tare: continuing {agent.name}'s session {sid} ({resumed.name[:15]})", file=sys.stderr)
+                print(f"tare: continuing {agent.name}'s session {sid} ({path.name[:15]})", file=sys.stderr)
+            argv = rooms.argv(room, agent, real, [agent.name, *flags, *resume, *passthrough])
             try:
-                return _run_attached(rooms.argv(room, agent, real, [agent.name, *flags, *resume, *passthrough]))
+                return _run_attached(argv)
             finally:  # whatever ended the agent, before the room and its session are removed
-                kept = sessions.keep(agent, room, project)
-                if kept:
-                    print(f"tare: session kept in {kept.parent}; `tare {agent.name} --continue` resumes it",
-                          file=sys.stderr)
+                _keep(agent, room, project)
     except TareError as err:
         print(f"tare: {err}", file=sys.stderr)
         return 2
 
 
+def _keep(agent, room, project: Path):
+    """Keep the room's session; a failure to keep it is said, and never replaces the agent's own exit."""
+    try:
+        kept = sessions.keep(agent, room, project)
+        if kept:
+            print(f"tare: session kept in {kept.parent}; `tare {agent.name} --continue` resumes it", file=sys.stderr)
+    except Exception as e:
+        try:
+            print(f"tare: could not keep the session: {type(e).__name__}: {e}", file=sys.stderr)
+        except OSError:  # the terminal is gone (SIGHUP)
+            pass
+
+
 def _size(path: Path) -> int:
-    if path.is_file():
-        return path.stat().st_size
-    return sum(f.stat().st_size for f in path.rglob("*") if f.is_file() and not f.is_symlink())
+    """Bytes under a path, links not followed; what vanished meanwhile counts nothing."""
+    total = 0
+    for directory, dirs, files in os.walk(path) if path.is_dir() else [(str(path.parent), [], [path.name])]:
+        for name in files:
+            try:
+                st = os.lstat(os.path.join(directory, name))
+            except OSError:
+                continue
+            total += st.st_size if stat.S_ISREG(st.st_mode) else 0
+    return total
 
 
 def _cleanup(argv: list[str]) -> int:
@@ -330,6 +350,7 @@ def _cleanup(argv: list[str]) -> int:
         size = _size(path)
         if not args.dry_run:
             shutil.rmtree(path, ignore_errors=True)
+            Path(f"{path}.lock").unlink(missing_ok=True)
         print(f"{verb}  room     {path}  {size // 1024} KB")
     for path in kept:
         size = _size(path)
@@ -337,9 +358,7 @@ def _cleanup(argv: list[str]) -> int:
             path.unlink(missing_ok=True)
         print(f"{verb}  session  {path}  {size // 1024} KB")
     if not args.dry_run:
-        for folder in sorted(sessions.root().glob("*/*"), reverse=True) if sessions.root().is_dir() else []:
-            if folder.is_dir() and not any(folder.iterdir()):
-                folder.rmdir()
+        sessions.remove_empty_folders()
     print(f"tare cleanup: {len(rooms)} room{'s' if len(rooms) != 1 else ''} and {len(kept)} "
           f"session{'s' if len(kept) != 1 else ''} " + ("would be removed (dry run)" if args.dry_run else "removed"))
     return 0

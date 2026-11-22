@@ -85,17 +85,20 @@ tare: session kept in ~/.local/state/tare/sessions/claude/<project>; `tare claud
 session into it where the agent keeps its sessions, and starts the agent resuming it: Claude Code
 with `--resume`, Codex with `resume`, Pi with `--session`. Your arguments after `--` follow. The
 continued room holds the earlier conversation because you asked for it; the probe reads the room
-before it is placed. The Antigravity CLI and the Copilot CLI cannot continue a session yet; tare
-says so and starts nothing.
+before it is placed. The Antigravity CLI cannot continue a session yet; tare says so and starts
+nothing.
 
-Kept sessions stay until you remove them. `tare cleanup` removes them, and the rooms that no
-running tare uses any more (a room tare could not remove, for example after a crash, holds a copy of
-your login). `tare cleanup --dry-run` lists what it would remove. A room in use, or made in the last
-ten minutes, is never removed.
+Kept sessions stay until you remove them, in folders only you can read: a session holds the whole
+conversation. `tare cleanup` removes them, and the rooms that no running tare holds any more (a
+room tare could not remove, for example after a crash, holds a copy of your login). Each tare holds
+a lock on its room from the room's making until it is gone, and `tare cleanup` takes only rooms
+whose lock is free. A room of tare 0.5.0 or older has no lock; `tare cleanup` takes it only when
+nothing in it changed for an hour. `tare cleanup --dry-run` lists what it would remove.
 
 **Measured** on macOS 27.0.1 with Claude Code 2.1.330 and Haiku: a first room was told a code word
 and closed; `tare claude --continue -- -p "What was the code word I gave you?"` in a second room
-answered with it.
+answered with it. Codex and Pi are covered by tests only: where tare puts their session and which
+arguments resume it, not a real resumed run.
 
 ## When a room's login stops working
 
