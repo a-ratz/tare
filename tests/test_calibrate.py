@@ -204,9 +204,28 @@ def test_an_attached_run_with_a_closed_descriptor_and_a_file_runs(tmp_path):
     import subprocess
     import sys
     (tmp_path / "in").write_text("x\n")
-    code = subprocess.run([sys.executable, "-c", ATTACHED, "/bin/sh", "-c", "cat > /dev/null; exit 5"],
-                          stdin=(tmp_path / "in").open(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                          close_fds=True, pass_fds=()).returncode
+    with (tmp_path / "in").open() as stdin:
+        code = subprocess.run([sys.executable, "-c", ATTACHED, "/bin/sh", "-c", "cat > /dev/null; exit 5"],
+                              stdin=stdin, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
     assert code == 5
-    script = f"import os, subprocess, sys; os.close(1); sys.exit(subprocess.run([sys.executable, '-c', {ATTACHED!r}, '/usr/bin/true'], stdin=open({str(tmp_path / 'in')!r})).returncode)"
+    script = (f"import os, subprocess, sys; os.close(1)\nwith open({str(tmp_path / 'in')!r}) as stdin: "
+              f"sys.exit(subprocess.run([sys.executable, '-c', {ATTACHED!r}, '/usr/bin/true'], stdin=stdin).returncode)")
     assert subprocess.run([sys.executable, "-c", script], stderr=subprocess.PIPE).returncode == 0
+
+
+def test_a_process_left_writing_does_not_crash_tare_at_exit(tmp_path):
+    """A pump still busy at tare's exit must not hold sys.stdout's lock (Python aborts then)."""
+    import os
+    import signal
+    import subprocess
+    import sys
+    for _ in range(5):
+        with (tmp_path / "out").open("w") as out:
+            proc = subprocess.run([sys.executable, "-c", ATTACHED.replace("import signal, sys", "import signal, sys\nimport tare.capsule; tare.capsule.PUMP_GRACE = 0.05"),
+                                   "/bin/sh", "-c", f"echo hi; /usr/bin/yes > /dev/stdout & echo $! > {tmp_path}/yes.pid"],
+                                  stdout=out, stderr=subprocess.PIPE, timeout=30)
+        try:
+            os.kill(int((tmp_path / "yes.pid").read_text()), signal.SIGKILL)
+        except ProcessLookupError:
+            pass  # it ended on the closed pipe when tare exited
+        assert proc.returncode == 0, proc.stderr.decode(errors="replace")[-300:]

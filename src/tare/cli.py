@@ -56,20 +56,28 @@ def _run_attached(argv: list[str]) -> int:
         pipe = {fd: subprocess.PIPE if to_file[fd] else None for fd in (0, 1, 2)}
         # no `with`: the threads own the pipes and close them; the main thread never waits on them
         proc = subprocess.Popen(argv, stdin=pipe[0], stdout=pipe[1], stderr=pipe[2])
+        # the pumps write to copies of tare's descriptors, closed below: a pump that a process left
+        # behind keeps busy then stops, instead of holding sys.stdout's lock at interpreter shutdown
+        targets = {fd: os.fdopen(os.dup(fd), "wb") for fd in (1, 2) if to_file[fd]}
+        pumps = []
         try:
-            pumps = [threading.Thread(target=_pump, args=(source, target), daemon=True)
-                     for source, target in ((proc.stdout, to_file[1] and sys.stdout.buffer),
-                                            (proc.stderr, to_file[2] and sys.stderr.buffer)) if source]
+            pumps = [threading.Thread(target=_pump, args=(source, targets[fd]), daemon=True)
+                     for fd, source in ((1, proc.stdout), (2, proc.stderr)) if source]
             feed = [threading.Thread(target=_feed, args=(sys.stdin.buffer, proc.stdin), daemon=True)] if proc.stdin else []
             for thread in pumps + feed:
                 thread.start()
-            code = proc.wait()
+            return proc.wait()
         except BaseException:  # SIGTERM or SIGHUP (SystemExit): the agent ends before its room does
             proc.kill()
             proc.wait()
             raise
-        _join(pumps)  # the rest of the output
-        return code
+        finally:
+            _join(pumps)  # the rest of the output
+            for target in targets.values():
+                try:
+                    target.close()
+                except (OSError, ValueError):
+                    pass
     finally:
         signal.signal(signal.SIGINT, previous)
 

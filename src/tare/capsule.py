@@ -160,11 +160,12 @@ def _stream(argv: list[str], log_dir: Path, timeout: float | None) -> int:
     stdout is a file in a place the room denies (#172), and the run directory, under the home, is one."""
     with (log_dir / "stdout.jsonl").open("wb") as out, (log_dir / "stderr.log").open("wb") as err:
         proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL)
-        pumps = [threading.Thread(target=_pump, args=(pipe, file), daemon=True)
-                 for pipe, file in ((proc.stdout, out), (proc.stderr, err))]
-        for pump in pumps:
-            pump.start()
+        pumps = []
         try:
+            pumps = [threading.Thread(target=_pump, args=(pipe, file), daemon=True)
+                     for pipe, file in ((proc.stdout, out), (proc.stderr, err))]
+            for pump in pumps:
+                pump.start()
             return proc.wait(timeout=timeout)
         except BaseException:  # a timeout, or a signal (SystemExit) or Ctrl-C: the agent ends before its room
             proc.kill()
