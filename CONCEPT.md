@@ -319,7 +319,7 @@ dot) and starts after a separator. So `$DIR/SKILL.md`, `$(pwd)/SKILL.md`, `skill
 `./SKILL.md` name no skill, `if=x/SKILL.md` or `HEAD:x/SKILL.md` name `x`, and a command names each
 skill once. A command counts whatever it does with the file (a `cat`, but also an `rm`), and a
 `SKILL.md` named in a comment, a heredoc, a quoted message (`git commit -m "Update x/SKILL.md"`) or
-an excluded path (`rg -g '!x/SKILL.md'`) counts too. A folder name with a space or a letter
+an excluded path (`grep --exclude=x/SKILL.md`) counts too. A folder name with a space or a letter
 outside ASCII comes through only from a read tool: a shell command gives the last word of the one
 and nothing for the other. Two rounds of a shell parser built on shlex showed why: comments,
 heredocs and long quoted words each broke it in a new way, while skill names keep to the narrow
