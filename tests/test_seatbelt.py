@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -278,6 +279,25 @@ def test_a_real_seatbelt_room_cannot_write_outside_the_room(tmp_path, monkeypatc
         argv = Seatbelt().argv(r, Tool(script), real, ["tool"], {"OUTSIDE": outside})
         out = subprocess.run(argv, capture_output=True, text=True, timeout=60, cwd=Path.home()).stdout
     assert "outside: denied" in out
+
+
+@pytest.mark.skipif(HOST != "darwin", reason="runs sandbox-exec")
+def test_a_real_seatbelt_room_ends_what_the_agent_left_running(tmp_path, monkeypatch, capsys):
+    script = tmp_path / "tool.sh"
+    script.write_text('#!/bin/sh\nw=$(pwd)\n'
+                      '(cd "$TMPDIR" && nohup sleep 300 >/dev/null 2>&1 & echo $! > "$w/in-room.pid")\n'  # cwd in the room
+                      'mkfifo "$TMPDIR/fifo"\n'
+                      '(cd / && nohup /bin/sh -c "read x < $TMPDIR/fifo" >/dev/null 2>&1 & echo $! > "$w/from-room.pid")\n')  # names the room
+    script.chmod(0o755)
+    real, work = Real(tmp_path, tmp_path, script), project(tmp_path)
+    monkeypatch.setattr(sys, "platform", HOST)
+    with Seatbelt().open(Tool(script), real, work) as r:
+        subprocess.run(Seatbelt().argv(r, Tool(script), real, ["tool"]), timeout=60, cwd=Path.home())
+        time.sleep(0.5)
+        pids = [int((Path(r.inside_work) / name).read_text()) for name in ("in-room.pid", "from-room.pid")]
+        assert all(room._running(pid) for pid in pids)
+    assert not any(room._running(pid) for pid in pids)
+    assert re.search(r"tare: ended [2-9] processes the agent left running in the room", capsys.readouterr().err)
 
 
 def test_the_probe_looks_for_the_places_macos_keeps_and_for_the_pasteboard(tmp_path, monkeypatch, mac):

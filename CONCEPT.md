@@ -112,7 +112,10 @@ directory under `/var/folders` (other programs' temporary files and caches), the
 `/private/tmp` (where Claude Code keeps its temporary files), `/private/var/tmp`,
 `/Users/Shared` and the pasteboard. It denies every write outside the room, so an install the
 agent makes (a `brew install`, an app in `/Applications`) cannot change the machine, as a Linux
-room's read-only mounts ensure. Then it allows the room. When the room closes, the run's
+room's read-only mounts ensure. Then it allows the room. When the room closes, tare first ends
+every process that runs from the room or in it (by command line or working directory): a browser,
+a daemon or a server the agent left running, which Seatbelt, unlike bubblewrap's own PID namespace,
+would let live on. Then the run's
 changes to the clone are copied back to the project. A file the run did not touch stays as it
 is. Sockets and pipes the run left (git's fsmonitor keeps one in `.git`) cannot be copied and are
 left out. Up to tare 0.5.0 the first one stopped the copy: the changes after it never reached the

@@ -11,6 +11,7 @@ import functools
 import json
 import os
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -160,6 +161,10 @@ class Seatbelt:
             agent.seed(real, room.config(agent), room)
             yield room
         finally:
+            ended = _end_processes(base)
+            if ended:
+                print(f"tare: ended {ended} process{'es' if ended != 1 else ''} the agent left running in the room",
+                      file=sys.stderr)
             if before is not None:
                 _copy_back(before, clone, work)
             shutil.rmtree(base, ignore_errors=True)
@@ -250,6 +255,61 @@ def profile(room: Room) -> str:
     if room.run:  # Seatbelt matches resolved paths: /var/folders is /private/var/folders
         rules.append(f"(allow file-read* file-write* (subpath {q(room.run.resolve())}))")
     return "\n".join(rules) + "\n"
+
+
+def _room_processes(base: Path) -> list[int]:
+    """Processes that run from the room or in it: their command line names the room (a program the
+    agent installed there, the sandbox itself) or their working directory is in it."""
+    def listing(argv: list[str]) -> str:
+        try:
+            return subprocess.run(argv, capture_output=True, text=True, timeout=30).stdout
+        except (OSError, subprocess.SubprocessError):
+            return ""
+    named = listing(["ps", "-axww", "-o", "pid=,command="])
+    pids = {int(line.split(None, 1)[0]) for line in named.splitlines() if base.name in line}
+    cwds = listing(["lsof", "-a", "-d", "cwd", "-Fpn"])
+    pid = None
+    for line in cwds.splitlines():
+        if line.startswith("p"):
+            pid = int(line[1:])
+        elif line.startswith("n") and pid and base.name in line:
+            pids.add(pid)
+    return sorted(pids - {os.getpid()})
+
+
+def _end_processes(base: Path, grace: float = 3.0) -> int:
+    """End what the agent left running in a Seatbelt room (a browser, a daemon, a server): Seatbelt,
+    unlike bubblewrap's own PID namespace, ends nothing with the room. SIGTERM, then SIGKILL for
+    whatever still runs after the grace period. Returns how many it ended."""
+    pids = _room_processes(base)
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+    deadline = time.time() + grace
+    alive = list(pids)
+    while alive and time.time() < deadline:
+        time.sleep(0.1)
+        alive = [pid for pid in alive if _running(pid)]
+    for pid in alive:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+    return len(pids)
+
+
+def _running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    # a child of ours that ended stays a zombie until it is reaped
+    try:
+        return os.waitpid(pid, os.WNOHANG) == (0, 0)
+    except ChildProcessError:
+        return True
 
 
 def _mounts(binds: list[str]) -> list[tuple[str, str]]:
