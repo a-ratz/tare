@@ -8,19 +8,40 @@ A skill counts as loaded when the agent invoked it (Claude Code's Skill tool) or
 SKILL.md: with a read tool, or with a shell command that names the file (Codex has no other way).
 The skill's name is the folder that holds the SKILL.md. A load says nothing about whether the
 agent then followed the skill: loaded, not followed.
+
+The counts are a by-product of a run: a stream they cannot read leaves a run without counts, it
+never fails the run.
 """
 import json
 import re
 from collections import Counter
 from dataclasses import dataclass, field
+from pathlib import PurePosixPath
 
-# a SKILL.md named in a path or a command, and the folder that holds it
-SKILL_FILE = re.compile(r"([A-Za-z0-9_.:-]+)/SKILL\.md\b")
+# a SKILL.md named in a shell command, and the folder that holds it: the last path segment before
+# it, not a SKILL.md.bak or SKILL.md-old, and not a glob or a variable (skills/*/SKILL.md, $DIR/SKILL.md)
+SKILL_FILE = re.compile(r"""(?:^|(?<=[\s/'"=:(]))([^\s/'"\\*?\[\]{}$]+)/SKILL\.md(?![\w.\-/])""")
 
 
-def skill_reads(text: str) -> list[str]:
-    """The skills whose SKILL.md a path or a shell command names, by folder."""
-    return SKILL_FILE.findall(text)
+def _name(folder: str) -> str | None:
+    folder = folder.rsplit(":", 1)[-1]  # git show HEAD:greet/SKILL.md
+    return None if folder in ("", ".", "..") else folder
+
+
+def skill_read(path: str) -> str | None:
+    """The skill whose SKILL.md a read tool read: its folder, whatever characters the name has."""
+    path = PurePosixPath(path)
+    return _name(path.parent.name) if path.name == "SKILL.md" else None
+
+
+def skill_reads(command: str) -> list[str]:
+    """The skills whose SKILL.md a shell command names, by folder, each once per command. A name
+    with a space comes through only from a read tool's path."""
+    found = []
+    for folder in SKILL_FILE.findall(command):
+        if (name := _name(folder)) and name not in found:
+            found.append(name)
+    return found
 
 
 @dataclass
@@ -28,13 +49,19 @@ class Uses:
     tools: Counter = field(default_factory=Counter)
     skills: Counter = field(default_factory=Counter)
 
-    def call(self, tool: str, reads: str = "", skill: str | None = None):
-        """One tool call. `reads` is the path or command of a call that reads files, `skill` the
-        skill a skill tool invoked."""
+    def call(self, tool: str, path: str = "", command: str = "", skill: str | None = None):
+        """One tool call: `path` for a read tool, `command` for a shell tool, `skill` for a skill tool."""
         self.tools[tool] += 1
-        if skill:
-            self.skills[skill] += 1
-        self.skills.update(skill_reads(reads))
+        self.load(path, command, skill)
+
+    def load(self, path: str = "", command: str = "", skill: str | None = None) -> bool:
+        """The skills a call loaded; True if it loaded any."""
+        found = [skill] if skill else []
+        if path and (name := skill_read(path)):
+            found.append(name)
+        found += skill_reads(command) if command else []
+        self.skills.update(found)
+        return bool(found)
 
     def to_dict(self) -> dict:
         return {"tools": dict(self.tools.most_common()), "skills": dict(self.skills.most_common())}

@@ -56,6 +56,54 @@ def test_a_run_whose_stream_is_missing_counts_nothing(tmp_path):
     assert caps.read_uses(object(), tmp_path) is None
 
 
+def test_a_skill_name_is_the_folder_that_holds_the_file_and_never_a_dot_a_glob_or_a_backup():
+    reads = {"./SKILL.md": [], "../SKILL.md": [], "cat skills/greet/SKILL.md.bak": [], "cat x/SKILL.md-old": [],
+             "ls skills/*/SKILL.md": [], "cat $DIR/SKILL.md": [], "git show HEAD:greet/SKILL.md": ["greet"],
+             "test -f x/SKILL.md && cat x/SKILL.md": ["x"], "cat .agents/skills/grüße/SKILL.md": ["grüße"],
+             "/bin/zsh -lc 'cat .agents/skills/greet/SKILL.md'": ["greet"]}
+    assert {command: used.skill_reads(command) for command in reads} == reads
+    assert used.skill_read("/work/.agents/skills/my skill/SKILL.md") == "my skill"
+    assert used.skill_read("/work/skills/greet/./SKILL.md") == "greet"
+    assert used.skill_read("/work/skills/greet/SKILL.md.bak") is None
+
+
+def test_calls_without_ids_or_names_and_lines_of_another_shape_neither_vanish_nor_break_the_count(tmp_path):
+    stream = (jl({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Read",
+                                                                "input": {"file_path": "/w/a/SKILL.md"}}]}},
+                 {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": None, "name": None, "input": "x"}]}},
+                 {"type": "assistant", "message": {"content": "just text"}},
+                 {"type": "assistant", "message": {"content": [None, "x"]}},
+                 {"type": "assistant", "message": None}, [1, 2])
+              + "null\n")
+    assert AGENTS["claude"].uses(stream).to_dict() == {"tools": {"Read": 1, "?": 1}, "skills": {"a": 1}}
+    assert AGENTS["pi"].uses(jl({"type": "tool_execution_start", "toolName": "read", "args": {"path": "/w/a/SKILL.md"}},
+                                {"type": "tool_execution_start", "toolName": None, "args": None})).to_dict() == {
+        "tools": {"read": 1, "?": 1}, "skills": {"a": 1}}
+    assert AGENTS["codex"].uses(jl({"type": "item.completed", "item": "x"},
+                                   {"type": "item.completed", "item": {"type": "mcp_tool_call", "server": None}},
+                                   {"type": "item.completed", "item": {"type": "file_change"}})).to_dict() == {
+        "tools": {"?.?": 1, "file_change": 1}, "skills": {}}
+    (tmp_path / "stdout.jsonl").write_text(stream)
+
+    class Broken:
+        def uses(self, stdout):
+            raise KeyError("a shape nobody expected")
+    assert caps.read_uses(Broken(), tmp_path) is None  # the run goes on without counts
+
+
+def test_agy_counts_a_subagent_step_with_the_same_index_and_takes_the_skill_from_the_report_that_names_it():
+    def step(conversation, index, state, tool, **parameters):
+        return {"event": "step_update", "step_update": {"conversation_id": conversation, "step_index": index, "state": state,
+                                                        "step_type": "tool", "tool_name": tool,
+                                                        "tool_info": {"parameters": parameters}}}
+    stream = jl(step("main", 2, "ACTIVE", "invoke_subagent"), step("main", 2, "DONE", "invoke_subagent"),
+                step("sub", 2, "ACTIVE", "read_file"), step("sub", 2, "DONE", "read_file", Path="/w/greet/SKILL.md"),
+                step("sub", 3, "ACTIVE", "run_command", CommandLine="cat /w/review/SKILL.md"),
+                step("sub", 3, "DONE", "run_command", CommandLine="cat /w/review/SKILL.md"))
+    assert AGENTS["agy"].uses(stream).to_dict() == {"tools": {"invoke_subagent": 1, "read_file": 1, "run_command": 1},
+                                                    "skills": {"greet": 1, "review": 1}}
+
+
 class Named:
     def __init__(self, name):
         self.name = name

@@ -170,7 +170,10 @@ def read_uses(agent, log_dir: Path) -> dict | None:
     stream = log_dir / "stdout.jsonl"
     if not hasattr(agent, "uses"):
         return None
-    return agent.uses(stream.read_text(errors="replace") if stream.exists() else "").to_dict()
+    try:
+        return agent.uses(stream.read_text(errors="replace") if stream.exists() else "").to_dict()
+    except Exception:  # the counts are a by-product: a stream they cannot read must not fail the run
+        return None
 
 
 def read_check_usage(path: Path) -> dict | None:

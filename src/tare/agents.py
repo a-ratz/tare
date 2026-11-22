@@ -109,6 +109,25 @@ def _json(path: Path) -> dict | None:
         return None
 
 
+def _objects(stdout: str):
+    """The stream's JSON objects; other lines are skipped."""
+    return (e for e in events(stdout) if isinstance(e, dict))
+
+
+def _first(seen: set, key) -> bool:
+    """True the first time a call's id is seen. A call without an id counts every time."""
+    if key is None:
+        return True
+    if key in seen:
+        return False
+    seen.add(key)
+    return True
+
+
+def _dict(value) -> dict:
+    return value if isinstance(value, dict) else {}
+
+
 def _one_run(u: Usage) -> Usage:
     """A run's usage is summed from several events, but it is one run."""
     u.runs, u.unpriced = 1, 1 if u.cost_usd is None else 0
@@ -280,16 +299,17 @@ class Claude:
         """From the tool_use blocks of the assistant events, each once by its id. A Skill call names
         its skill in `skill`; a Read or Bash call may read a SKILL.md."""
         u, seen = Uses(), set()
-        for e in events(stdout):
-            if e.get("type") != "assistant":
+        for e in _objects(stdout):
+            content = _dict(e.get("message")).get("content")
+            if e.get("type") != "assistant" or not isinstance(content, list):
                 continue
-            for block in (e.get("message") or {}).get("content") or []:
-                if block.get("type") != "tool_use" or block.get("id") in seen:
+            for block in content:
+                if not isinstance(block, dict) or block.get("type") != "tool_use" or not _first(seen, block.get("id")):
                     continue
-                seen.add(block.get("id"))
-                name, args = block.get("name", "?"), block.get("input") or {}
-                reads = str(args.get("file_path") or "") if name == "Read" else str(args.get("command") or "") if name == "Bash" else ""
-                u.call(name, reads, str(args.get("skill") or "?") if name == "Skill" else None)
+                name, args = block.get("name") or "?", _dict(block.get("input"))
+                u.call(name, path=str(args.get("file_path") or "") if name == "Read" else "",
+                       command=str(args.get("command") or "") if name == "Bash" else "",
+                       skill=str(args.get("skill") or "?") if name == "Skill" else None)
         return u
 
     def activity(self, event: dict) -> str | None:
@@ -455,17 +475,16 @@ class Codex:
         the tool behind it (`command_execution` for a shell command, `file_change` for a patch), and
         an MCP call as server and tool. Codex reads a SKILL.md with a shell command."""
         u, seen = Uses(), set()
-        for e in events(stdout):
-            item = e.get("item") or {}
-            if e.get("type") not in ("item.started", "item.completed") or item.get("id") in seen:
+        for e in _objects(stdout):
+            item = _dict(e.get("item"))
+            kind = item.get("type")
+            if e.get("type") not in ("item.started", "item.completed") or kind in (None, "agent_message", "reasoning", "error"):
                 continue
-            if item.get("type") in (None, "agent_message", "reasoning", "error"):
+            if not _first(seen, item.get("id")):
                 continue
-            seen.add(item.get("id"))
-            kind = item["type"]
             if kind == "mcp_tool_call":
-                kind = f"{item.get('server', '?')}.{item.get('tool', '?')}"
-            u.call(kind, str(item.get("command") or "") if kind == "command_execution" else "")
+                kind = f"{item.get('server') or '?'}.{item.get('tool') or '?'}"
+            u.call(str(kind), command=str(item.get("command") or "") if kind == "command_execution" else "")
         return u
 
     def activity(self, event: dict) -> str | None:
@@ -665,12 +684,12 @@ export default function (pi: any) {{
         """From the tool_execution_start events, each once by its call id. Pi reads a SKILL.md with
         its read tool (or a shell command)."""
         u, seen = Uses(), set()
-        for e in events(stdout):
-            if e.get("type") != "tool_execution_start" or e.get("toolCallId") in seen:
+        for e in _objects(stdout):
+            if e.get("type") != "tool_execution_start" or not _first(seen, e.get("toolCallId")):
                 continue
-            seen.add(e.get("toolCallId"))
-            name, args = e.get("toolName", "?"), e.get("args") or {}
-            u.call(name, str(args.get("path") or "") if name == "read" else str(args.get("command") or "") if name == "bash" else "")
+            name, args = e.get("toolName") or "?", _dict(e.get("args"))
+            u.call(name, path=str(args.get("path") or "") if name == "read" else "",
+                   command=str(args.get("command") or "") if name == "bash" else "")
         return u
 
     def activity(self, event: dict) -> str | None:
@@ -822,21 +841,30 @@ class Antigravity:
                               n.get("thinking_tokens", 0))
         return _one_run(u)
 
-    # the tools that read files, and the parameter that names what they read
-    READS = {"read_file": "Path", "view_file": "AbsolutePath", "run_command": "CommandLine"}
+    # the tools that read files and the parameter that names what they read, and the shell tool
+    READS = {"read_file": "Path", "view_file": "AbsolutePath"}
+    SHELL = ("run_command", "CommandLine")
 
     def uses(self, stdout: str) -> Uses:
-        """From the tool steps of the stream, each once by its step index (a step is reported when
-        it starts and again when it is done). agy reads a SKILL.md with its read tool."""
-        u, seen = Uses(), set()
-        for e in events(stdout):
-            update = e.get("step_update") or {}
-            if update.get("step_type") != "tool" or update.get("step_index") in seen:
+        """From the tool steps of the stream. A step is reported when it starts and again when it is
+        done, so it counts once by its conversation and index (a subagent's steps have their own
+        conversation and count from 0). Its skill load comes from the first report that names a
+        file. agy reads a SKILL.md with its read tool."""
+        u, seen, loaded = Uses(), set(), set()
+        for e in _objects(stdout):
+            update = _dict(e.get("step_update"))
+            if update.get("step_type") != "tool":
                 continue
-            seen.add(update.get("step_index"))
+            index = update.get("step_index")
+            key = None if index is None else (update.get("conversation_id"), index)
             name = update.get("tool_name") or "?"
-            parameters = (update.get("tool_info") or {}).get("parameters") or {}
-            u.call(name, str(parameters.get(self.READS.get(name, ""), "")) if name in self.READS else "")
+            if _first(seen, key):
+                u.tools[name] += 1
+            parameters = _dict(_dict(update.get("tool_info")).get("parameters"))
+            path = str(parameters.get(self.READS[name]) or "") if name in self.READS else ""
+            command = str(parameters.get(self.SHELL[1]) or "") if name == self.SHELL[0] else ""
+            if key not in loaded and u.load(path, command) and key is not None:
+                loaded.add(key)
         return u
 
     def activity(self, event: dict) -> str | None:

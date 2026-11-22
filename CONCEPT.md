@@ -301,15 +301,21 @@ For an evaluation with several skills, tare counts per run which skills the agen
 tools it called. The counts come from the run's stream, not from its trail: every run keeps its
 stream (`stdout.jsonl`), and Calibrate keeps no session file. The stream shows each tool call with
 its arguments, and each call is counted once by its id, although some agents report a call when it
-starts and again when it is done. A tool's name is the name the stream gives it. Codex's stream
-names the kind of item instead of the tool (`command_execution` for a shell command, `file_change`
-for a patch), and an MCP call as server and tool.
+starts and again when it is done (the Antigravity CLI's id is the step index within its
+conversation, since a subagent's steps count from 0 again). A call without an id counts each time
+it is reported. A tool's name is the name the stream gives it, `?` when there is none. Codex's
+stream names the kind of item instead of the tool (`command_execution` for a shell command,
+`file_change` for a patch), and an MCP call as server and tool. The counts are a by-product: a
+stream tare cannot read leaves the run without counts and never fails it.
 
 A skill counts as loaded when the agent invoked it (Claude Code's `Skill` tool, whose input names
 the skill) or read its `SKILL.md`. Codex has no skill tool and reads the file with a shell command,
-Pi and the Antigravity CLI read it with their read tools, and Claude Code may read one too. A read
-is a read tool's path or a shell command that names the file. The skill's name is the folder that
-holds the `SKILL.md`. A write to a `SKILL.md` through a write or edit tool is not a load. The count
+Pi and the Antigravity CLI read it with their read tools, and Claude Code may read one too. The
+skill's name is the folder that holds the `SKILL.md`. A read tool's path counts whatever the folder
+is called. A shell command that names a `SKILL.md` counts each skill once, whatever the command does
+with the file (a `cat`, but also an `rm`), and only where the folder is named plainly: a name with
+a space, a glob (`skills/*/SKILL.md`), a variable or a relative `./SKILL.md` gives no name. A write
+to a `SKILL.md` through a write or edit tool is not a load, nor is a `SKILL.md.bak`. The count
 says nothing about whether the agent then followed the skill: it says loaded, not followed. The
 Calibrate report gives per side how many runs loaded each skill and how often per run, and the
 tools called per run; the dashboard shows the same while the runs go on, and the run directory
