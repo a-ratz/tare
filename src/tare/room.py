@@ -217,8 +217,8 @@ def _developer_bin() -> list[str]:
     tools = Path(found.stdout.strip(), "usr", "bin")
     if found.returncode or not tools.is_absolute() or not tools.is_dir():
         return []
-    resolved = tools.resolve()
-    return [] if any(resolved.is_relative_to(Path(d).resolve()) for d in _denied()) else [str(tools)]
+    resolved = tools.resolve()  # what Seatbelt matches, and no detour through a denied place on PATH
+    return [] if any(resolved.is_relative_to(Path(d).resolve()) for d in _denied()) else [str(resolved)]
 
 
 def _denied() -> tuple:

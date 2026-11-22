@@ -175,7 +175,7 @@ def test_the_developer_tools_are_on_the_path_only_where_xcode_select_names_them(
     calls = []
     answer = lambda out, code=0: lambda *a, **k: calls.append(k.get("env")) or subprocess.CompletedProcess(a, code, out, "")
     monkeypatch.setattr(room.subprocess, "run", answer(f"{tmp_path / 'Developer'}\n"))
-    assert room._developer_bin() == [str(tools)]
+    assert room._developer_bin() == [str(tools.resolve())]
     assert calls == [{}]  # the system's choice, not the caller's DEVELOPER_DIR
     monkeypatch.setattr(room.subprocess, "run", answer(f"{tmp_path / 'gone'}\n"))
     assert room._developer_bin() == []
@@ -189,6 +189,9 @@ def test_the_developer_tools_are_on_the_path_only_where_xcode_select_names_them(
     (tmp_path / "home" / "Xcode" / "usr" / "bin").mkdir(parents=True)  # in a place the room denies
     monkeypatch.setattr(room.subprocess, "run", answer(f"{tmp_path / 'home' / 'Xcode'}\n"))
     assert room._developer_bin() == []
+    (tmp_path / "home" / "link").symlink_to(tmp_path / "Developer")  # through a denied place to an allowed one
+    monkeypatch.setattr(room.subprocess, "run", answer(f"{tmp_path / 'home' / 'link'}\n"))
+    assert room._developer_bin() == [str(tools.resolve())]
 
     def missing(*a, **k):
         raise FileNotFoundError("xcode-select")
@@ -240,29 +243,41 @@ class Tool:
 @pytest.mark.skipif(HOST != "darwin", reason="runs sandbox-exec")
 def test_a_real_seatbelt_room_hides_the_home_and_keeps_the_runs_work(tmp_path, monkeypatch):
     script = tmp_path / "tool.sh"
-    outside = next((p for p in ("/opt/homebrew", "/Applications", "/Library/Caches", "/usr/local")
-                    if os.access(p, os.W_OK)), None)  # a place the user may write, outside the room
-    if outside is None:
-        pytest.skip("no place outside the room that this user may write, so a denied write would prove nothing")
     script.write_text('#!/bin/sh\nls "$REAL_HOME" >/dev/null 2>&1 && echo "home: listed" || echo "home: denied"\n'
-                      'echo "cwd: $(pwd)"\necho made > made.txt\nrm gone.txt\necho tmp > "$TMPDIR/t" && echo "tmp: written"\n'
-                      'f=$(mktemp "$OUTSIDE/.tare-test.XXXXXX" 2>/dev/null) && { rm -f "$f"; echo "outside: written"; }'
-                      ' || echo "outside: denied"\n')
+                      'echo "cwd: $(pwd)"\necho made > made.txt\nrm gone.txt\necho tmp > "$TMPDIR/t" && echo "tmp: written"\n')
     script.chmod(0o755)
     work = project(tmp_path)
     real = Real(tmp_path, tmp_path, script)
     monkeypatch.setattr(sys, "platform", HOST)  # the fixture pinned linux; this test needs the real one
     with Seatbelt().open(Tool(script), real, work) as r:
-        argv = Seatbelt().argv(r, Tool(script), real, ["tool"], {"REAL_HOME": str(Path.home()), "OUTSIDE": outside})
+        argv = Seatbelt().argv(r, Tool(script), real, ["tool"], {"REAL_HOME": str(Path.home())})
         proc = subprocess.run(argv, capture_output=True, text=True, timeout=60, cwd=Path.home())
         out = proc.stdout
         config = r.config(Tool(script))
         assert (config / "login").exists()
-    assert "home: denied" in out and "outside: denied" in out and "tmp: written" in out
+    assert "home: denied" in out and "tmp: written" in out
     assert f"cwd: {r.inside_work}" in out
     assert "getcwd" not in proc.stderr  # started from a directory the room cannot read
     assert (work / "made.txt").read_text() == "made\n" and not (work / "gone.txt").exists()
     assert not config.exists()
+
+
+@pytest.mark.skipif(HOST != "darwin", reason="runs sandbox-exec")
+def test_a_real_seatbelt_room_cannot_write_outside_the_room(tmp_path, monkeypatch):
+    outside = next((p for p in ("/opt/homebrew", "/Applications", "/Library/Caches", "/usr/local")
+                    if os.access(p, os.W_OK)), None)  # a place the user may write, outside the room
+    if outside is None:
+        pytest.skip("no place outside the room that this user may write, so a denied write would prove nothing")
+    script = tmp_path / "tool.sh"
+    script.write_text('#!/bin/sh\nf=$(mktemp "$OUTSIDE/.tare-test.XXXXXX" 2>/dev/null) && { rm -f "$f"; echo "outside: written"; }'
+                      ' || echo "outside: denied"\n')
+    script.chmod(0o755)
+    real = Real(tmp_path, tmp_path, script)
+    monkeypatch.setattr(sys, "platform", HOST)
+    with Seatbelt().open(Tool(script), real, project(tmp_path)) as r:
+        argv = Seatbelt().argv(r, Tool(script), real, ["tool"], {"OUTSIDE": outside})
+        out = subprocess.run(argv, capture_output=True, text=True, timeout=60, cwd=Path.home()).stdout
+    assert "outside: denied" in out
 
 
 def test_the_probe_looks_for_the_places_macos_keeps_and_for_the_pasteboard(tmp_path, monkeypatch, mac):
