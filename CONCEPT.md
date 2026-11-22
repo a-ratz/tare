@@ -311,11 +311,12 @@ stream tare cannot read leaves the run without counts and never fails it.
 A skill counts as loaded when the agent invoked it (Claude Code's `Skill` tool, whose input names
 the skill) or read its `SKILL.md`. Codex has no skill tool and reads the file with a shell command,
 Pi and the Antigravity CLI read it with their read tools, and Claude Code may read one too. The
-skill's name is the folder that holds the `SKILL.md`. A read tool's path counts whatever the folder
-is called. A shell command that names a `SKILL.md` counts each skill once, whatever the command does
-with the file (a `cat`, but also an `rm`), and only where the folder is named plainly: a name with
-a space, a glob (`skills/*/SKILL.md`), a variable or a relative `./SKILL.md` gives no name. A write
-to a `SKILL.md` through a write or edit tool is not a load, nor is a `SKILL.md.bak`. The count
+skill's name is the folder that holds the `SKILL.md`, whatever it is called. tare reads a shell
+command as the shell reads it, with quotes and escapes resolved and the argument of `sh -c` read as
+a command again. Each word that names a `SKILL.md` counts its folder, each skill once per command,
+whatever the command does with the file (a `cat`, but also an `rm`). A glob (`skills/*/SKILL.md`),
+a variable, a command substitution, `~` or a relative `./SKILL.md` gives no name. A write to a
+`SKILL.md` through a write or edit tool is not a load, nor is a `SKILL.md.bak`. The count
 says nothing about whether the agent then followed the skill: it says loaded, not followed. The
 Calibrate report gives per side how many runs loaded each skill and how often per run, and the
 tools called per run; the dashboard shows the same while the runs go on, and the run directory

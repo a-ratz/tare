@@ -14,32 +14,54 @@ never fails the run.
 """
 import json
 import re
+import shlex
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 
-# a SKILL.md named in a shell command, and the folder that holds it: the last path segment before
-# it, not a SKILL.md.bak or SKILL.md-old, and not a glob or a variable (skills/*/SKILL.md, $DIR/SKILL.md)
-SKILL_FILE = re.compile(r"""(?:^|(?<=[\s/'"=:(]))([^\s/'"\\*?\[\]{}$]+)/SKILL\.md(?![\w.\-/])""")
+# characters that make a folder name a pattern or an expansion rather than a name
+NOT_PLAIN = set("*?[]{}$`~")
 
 
 def _name(folder: str) -> str | None:
-    folder = folder.rsplit(":", 1)[-1]  # git show HEAD:greet/SKILL.md
-    return None if folder in ("", ".", "..") else folder
+    return None if folder in ("", ".", "..") or NOT_PLAIN & set(folder) else folder
 
 
 def skill_read(path: str) -> str | None:
-    """The skill whose SKILL.md a read tool read: its folder, whatever characters the name has."""
+    """The skill whose SKILL.md a read tool read: its folder, whatever characters the name has,
+    unless the name is a pattern or an expansion."""
     path = PurePosixPath(path)
     return _name(path.parent.name) if path.name == "SKILL.md" else None
 
 
+def _words(command: str, depth: int = 0) -> list[str]:
+    """A shell command's words as the shell reads them: quotes and escapes resolved, and `;`, `|`,
+    `&`, `<`, `>` and parentheses as words of their own. The argument of `sh -c` (`zsh -lc` and the
+    like) is a command again. A command shlex cannot read (an open quote in a heredoc) falls back to
+    its whitespace-separated parts."""
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        words = list(lexer)
+    except ValueError:
+        return command.split()
+    out = []
+    for i, word in enumerate(words):
+        if depth < 2 and i > 0 and re.fullmatch(r"-[a-z]*c", words[i - 1]):
+            out += _words(word, depth + 1)
+        else:
+            out.append(word)
+    return out
+
+
 def skill_reads(command: str) -> list[str]:
-    """The skills whose SKILL.md a shell command names, by folder, each once per command. A name
-    with a space comes through only from a read tool's path."""
+    """The skills whose SKILL.md a shell command names, by folder, each once per command. A word
+    `KEY=path` or `--flag=path` names its path, and `git show REV:path` its path."""
     found = []
-    for folder in SKILL_FILE.findall(command):
-        if (name := _name(folder)) and name not in found:
+    for word in _words(command):
+        word = re.sub(r"^[^/=]*=", "", word)  # FILE=..., --path=..., if=...
+        word = re.sub(r"^[^/:]*:", "", word)  # HEAD:greet/SKILL.md
+        if (name := skill_read(word)) and name not in found:
             found.append(name)
     return found
 

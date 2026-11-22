@@ -115,12 +115,16 @@ def _objects(stdout: str):
 
 
 def _first(seen: set, key) -> bool:
-    """True the first time a call's id is seen. A call without an id counts every time."""
-    if key is None:
+    """True the first time a call's id is seen. A call without an id (none, empty, or not a plain
+    value) counts every time."""
+    if key is None or key == "":
         return True
-    if key in seen:
-        return False
-    seen.add(key)
+    try:
+        if key in seen:
+            return False
+        seen.add(key)
+    except TypeError:
+        pass
     return True
 
 
@@ -306,7 +310,7 @@ class Claude:
             for block in content:
                 if not isinstance(block, dict) or block.get("type") != "tool_use" or not _first(seen, block.get("id")):
                     continue
-                name, args = block.get("name") or "?", _dict(block.get("input"))
+                name, args = str(block.get("name") or "?"), _dict(block.get("input"))
                 u.call(name, path=str(args.get("file_path") or "") if name == "Read" else "",
                        command=str(args.get("command") or "") if name == "Bash" else "",
                        skill=str(args.get("skill") or "?") if name == "Skill" else None)
@@ -478,7 +482,7 @@ class Codex:
         for e in _objects(stdout):
             item = _dict(e.get("item"))
             kind = item.get("type")
-            if e.get("type") not in ("item.started", "item.completed") or kind in (None, "agent_message", "reasoning", "error"):
+            if e.get("type") not in ("item.started", "item.completed") or kind in (None, "", "agent_message", "reasoning", "error"):
                 continue
             if not _first(seen, item.get("id")):
                 continue
@@ -687,7 +691,7 @@ export default function (pi: any) {{
         for e in _objects(stdout):
             if e.get("type") != "tool_execution_start" or not _first(seen, e.get("toolCallId")):
                 continue
-            name, args = e.get("toolName") or "?", _dict(e.get("args"))
+            name, args = str(e.get("toolName") or "?"), _dict(e.get("args"))
             u.call(name, path=str(args.get("path") or "") if name == "read" else "",
                    command=str(args.get("command") or "") if name == "bash" else "")
         return u
@@ -857,7 +861,7 @@ class Antigravity:
                 continue
             index = update.get("step_index")
             key = None if index is None else (update.get("conversation_id"), index)
-            name = update.get("tool_name") or "?"
+            name = str(update.get("tool_name") or "?")
             if _first(seen, key):
                 u.tools[name] += 1
             parameters = _dict(_dict(update.get("tool_info")).get("parameters"))

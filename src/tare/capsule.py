@@ -165,14 +165,15 @@ def read_usage(agent, log_dir: Path) -> dict | None:
 
 
 def read_uses(agent, log_dir: Path) -> dict | None:
-    """The skills loaded and tools called in the run whose stream is in log_dir (None for an agent
-    that cannot tell)."""
+    """The skills loaded and tools called in the run whose stream is in log_dir. None for an agent
+    that cannot tell, and for a stream that could not be read, which is said on stderr."""
     stream = log_dir / "stdout.jsonl"
     if not hasattr(agent, "uses"):
         return None
     try:
         return agent.uses(stream.read_text(errors="replace") if stream.exists() else "").to_dict()
-    except Exception:  # the counts are a by-product: a stream they cannot read must not fail the run
+    except Exception as e:  # the counts are a by-product: a stream they cannot read must not fail the run
+        print(f"tare: no skill and tool counts for {log_dir}: {type(e).__name__}: {e}", file=sys.stderr)
         return None
 
 

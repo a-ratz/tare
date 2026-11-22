@@ -58,13 +58,23 @@ def test_a_run_whose_stream_is_missing_counts_nothing(tmp_path):
 
 def test_a_skill_name_is_the_folder_that_holds_the_file_and_never_a_dot_a_glob_or_a_backup():
     reads = {"./SKILL.md": [], "../SKILL.md": [], "cat skills/greet/SKILL.md.bak": [], "cat x/SKILL.md-old": [],
-             "ls skills/*/SKILL.md": [], "cat $DIR/SKILL.md": [], "git show HEAD:greet/SKILL.md": ["greet"],
+             "ls skills/*/SKILL.md": [], "cat $DIR/SKILL.md": [], "cat ~/SKILL.md": [], "git show HEAD:greet/SKILL.md": ["greet"],
              "test -f x/SKILL.md && cat x/SKILL.md": ["x"], "cat .agents/skills/grüße/SKILL.md": ["grüße"],
              "/bin/zsh -lc 'cat .agents/skills/greet/SKILL.md'": ["greet"]}
     assert {command: used.skill_reads(command) for command in reads} == reads
     assert used.skill_read("/work/.agents/skills/my skill/SKILL.md") == "my skill"
+    assert used.skill_read("/work/skills/ns:greet/SKILL.md") == "ns:greet"
     assert used.skill_read("/work/skills/greet/./SKILL.md") == "greet"
     assert used.skill_read("/work/skills/greet/SKILL.md.bak") is None
+
+
+def test_a_shell_command_is_read_as_the_shell_reads_it():
+    reads = {'cat "skills/my skill/SKILL.md"': ["my skill"], "cat skills/my\\ skill/SKILL.md": ["my skill"],
+             "cat $(pwd)/SKILL.md": [], 'cat $(dirname "$0")/SKILL.md': [], "FILE=greet/SKILL.md cat $FILE": ["greet"],
+             "dd if=greet/SKILL.md": ["greet"], "tool --path=greet/SKILL.md": ["greet"], "cat <greet/SKILL.md": ["greet"],
+             "echo hi;cat greet/SKILL.md": ["greet"], 'bash -c "cat a/SKILL.md b/SKILL.md"': ["a", "b"],
+             "cat <<EOF\ndon't\nEOF\ncat x/SKILL.md": ["x"]}  # an open quote: the words split at whitespace
+    assert {command: used.skill_reads(command) for command in reads} == reads
 
 
 def test_calls_without_ids_or_names_and_lines_of_another_shape_neither_vanish_nor_break_the_count(tmp_path):
@@ -83,6 +93,10 @@ def test_calls_without_ids_or_names_and_lines_of_another_shape_neither_vanish_no
                                    {"type": "item.completed", "item": {"type": "mcp_tool_call", "server": None}},
                                    {"type": "item.completed", "item": {"type": "file_change"}})).to_dict() == {
         "tools": {"?.?": 1, "file_change": 1}, "skills": {}}
+    pi = jl({"type": "tool_execution_start", "toolCallId": "", "toolName": "read", "args": {"path": "/w/a/SKILL.md"}},
+            {"type": "tool_execution_start", "toolCallId": "", "toolName": "bash", "args": {}},
+            {"type": "tool_execution_start", "toolCallId": ["x"], "toolName": ["read"], "args": {}})
+    assert AGENTS["pi"].uses(pi).to_dict() == {"tools": {"read": 1, "bash": 1, "['read']": 1}, "skills": {"a": 1}}
     (tmp_path / "stdout.jsonl").write_text(stream)
 
     class Broken:
