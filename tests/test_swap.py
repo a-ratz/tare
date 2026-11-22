@@ -159,3 +159,16 @@ def test_report_calls_a_tie_a_tie():
             cut(1.0, {("a", "a"): 0, ("a", "b"): 3, ("b", "a"): 3, ("b", "b"): 3}, n=3)]
     text = "\n".join(report(sides, plan, "t", "c", Path("/p"), 36, False))
     assert "until the handover at 0.50. From the handover at 1.00 on, workspace and agent explain about the same." in text
+
+
+def test_report_says_from_and_passes_only_when_every_later_point_agrees():
+    # the same rule as the answer at the top of the run page (#160, #170)
+    sides = {"a": Side("a", Named("claude"), None, [], Path("/a")), "b": Side("b", Named("codex"), None, [], Path("/b"))}
+    agent = {("a", "a"): 4, ("a", "b"): 1, ("b", "a"): 4, ("b", "b"): 1}
+    alike = {("a", "a"): 4, ("a", "b"): 2, ("b", "a"): 2, ("b", "b"): 0}
+    workspace = {("a", "a"): 4, ("a", "b"): 4, ("b", "a"): 0, ("b", "b"): 0}
+    for middle, word in ((alike, "both alike"), (workspace, "workspace")):
+        plan = [cut(0.0, agent), cut(0.5, middle), cut(1.0, agent)]
+        text = "\n".join(report(sides, plan, "t", "c", Path("/p"), 48, False))
+        assert f"No single pattern. What explains more, per handover point: 0.00 agent, 0.50 {word}, 1.00 agent." in text
+        assert "From the handover" not in text and "Blame passes" not in text
