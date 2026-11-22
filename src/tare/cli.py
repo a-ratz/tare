@@ -306,16 +306,16 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 return _run_attached(argv)
             finally:  # whatever ended the agent, before the room and its session are removed
-                _keep(agent, room, project)
+                _keep(agent, room, project, unless=resumed[2] if resumed else None)
     except TareError as err:
         print(f"tare: {err}", file=sys.stderr)
         return 2
 
 
-def _keep(agent, room, project: Path):
+def _keep(agent, room, project: Path, unless: list[str] | None = None):
     """Keep the room's session; a failure to keep it is said, and never replaces the agent's own exit."""
     try:
-        kept = sessions.keep(agent, room, project)
+        kept = sessions.keep(agent, room, project, unless)
         if kept:
             print(f"tare: session kept in {kept.parent}; `tare {agent.name} --continue` resumes it", file=sys.stderr)
     except Exception as e:
@@ -344,7 +344,7 @@ def _cleanup(argv: list[str]) -> int:
                                  "the sessions kept for --continue.")
     ap.add_argument("--dry-run", action="store_true", help="list what would be removed, remove nothing")
     args = ap.parse_args(argv)
-    rooms, kept = leftover_rooms(), sessions.kept()
+    rooms, kept = leftover_rooms(), sessions.kept() + sessions.parts()
     verb = "would remove" if args.dry_run else "removed"
     left = []
     for path in rooms:

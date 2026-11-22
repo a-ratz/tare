@@ -473,7 +473,9 @@ def _copy_back(before: dict[str, tuple], clone: Path, work: Path):
 
 
 # a room of tare 0.5.0 or older has no lock: in use while anything in it changed within this time
-LEGACY_IDLE = 3600  # seconds
+LEGACY_IDLE = 86400  # seconds
+# what only a tare room holds: Seatbelt's home and agent clone, or bubblewrap's home with an agent's config
+ROOM_MARKS = (("home", "opt/agent"), (".claude-config",), (".codex",), (".pi",), (".gemini",), (".copilot",))
 
 
 def _hold(base: Path):
@@ -505,19 +507,8 @@ def _release(lock, base: Path, kept: bool = False):
 
 
 def remove_room(room_dir: Path) -> bool:
-    """Remove a room, also where the agent left folders read-only (Go's module cache); True when it is gone."""
-    def writable(function, path, *_):
-        try:
-            os.chmod(os.path.dirname(path), 0o700)
-            if os.path.isdir(path) and not os.path.islink(path):
-                os.chmod(path, 0o700)
-            function(path)
-        except OSError:
-            pass
-    if sys.version_info >= (3, 12):
-        shutil.rmtree(room_dir, onexc=writable)
-    else:
-        shutil.rmtree(room_dir, onerror=writable)
+    """Remove a left-over room, read-only folders too; True when it is gone."""
+    _rmtree(room_dir)
     return not os.path.lexists(room_dir)
 
 
@@ -551,14 +542,23 @@ def _newest_change(root: Path) -> float:
         return newest
 
 
+def _looks_like_a_room(room_dir: Path) -> bool:
+    return any(all((room_dir / part).is_dir() and not (room_dir / part).is_symlink() for part in mark)
+               for mark in ROOM_MARKS)
+
+
 def in_use(room_dir: Path) -> bool:
-    """Whether a tare still holds the room. A room of tare 0.5.0 or older has no lock: it counts as
-    in use while anything in it changed within LEGACY_IDLE."""
+    """Whether a tare, or anything else, may still use the room. In use: its lock is held, or a
+    process names it or works in it (the agent of a tare that was killed). A folder without a lock
+    counts as a room of tare 0.5.0 or older only when it looks like one, and as left over only when
+    nothing in it changed within LEGACY_IDLE; anything else is never taken."""
+    if _room_processes(room_dir):
+        return True
     lock = Path(f"{room_dir}.lock")
     try:
         st = lock.lstat()
     except FileNotFoundError:
-        return time.time() - _newest_change(room_dir) < LEGACY_IDLE
+        return not _looks_like_a_room(room_dir) or time.time() - _newest_change(room_dir) < LEGACY_IDLE
     except OSError:
         return True
     if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid():  # not a lock tare made: leave the room

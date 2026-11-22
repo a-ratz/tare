@@ -92,13 +92,17 @@ Kept sessions stay until you remove them, in folders only you can read: a sessio
 conversation. `tare cleanup` removes them, and the rooms that no running tare holds any more (a
 room tare could not remove, for example after a crash, holds a copy of your login). Each tare holds
 a lock on its room from the room's making until it is gone, and `tare cleanup` takes only rooms
-whose lock is free. A room of tare 0.5.0 or older has no lock; `tare cleanup` takes it only when
-nothing in it changed for an hour. `tare cleanup --dry-run` lists what it would remove.
+whose lock is free and that no running process names or works in. A room of tare 0.5.0 or older has
+no lock; `tare cleanup` takes it only when it holds what a tare room holds and nothing in it changed
+for a day. Any other folder named `tare-room-*` is left alone. Half-written copies of a session that
+a killed tare left go too. `tare cleanup --dry-run` lists what it would remove.
 
 **Measured** on macOS 27.0.1 with Claude Code 2.1.330 and Haiku: a first room was told a code word
 and closed; `tare claude --continue -- -p "What was the code word I gave you?"` in a second room
-answered with it. Codex and Pi are covered by tests only: where tare puts their session and which
-arguments resume it, not a real resumed run.
+answered with it. Codex and Pi are covered by tests only: where tare puts their session (with its
+working directory set to the new room, which they work in) and which arguments resume it, not a real
+resumed run. For Codex tare keeps the rollout written last, which after a session with subagents
+can be a subagent's.
 
 ## When a room's login stops working
 

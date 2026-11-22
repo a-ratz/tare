@@ -57,39 +57,67 @@ def lines_of(text: str) -> list[str]:
 
 
 def _private(folder: Path):
-    """The store's folders, made for the user only."""
+    """The store's folders, made for the user only; a link among them is refused, not followed."""
     levels = [p for p in reversed(folder.parents) if p.is_relative_to(root()) and p != root()]
     for d in [root(), *levels, folder]:
+        if d.is_symlink():
+            raise OSError(f"{d} is a link; tare keeps sessions only in folders of its own")
         d.mkdir(mode=0o700, parents=True, exist_ok=True)
         d.chmod(0o700)
 
 
-def keep(agent, room, project: Path) -> Path | None:
+def _read_in_room(found: Path, room) -> bytes | None:
+    """A session file's bytes, only if it is a regular file inside the room's home, reached without a
+    link: the room controls its home, and a link there could point at a file of the host's."""
+    home = Path(room.home).resolve()
+    try:
+        if found.is_symlink() or not found.resolve().is_relative_to(home):
+            return None
+        fd = os.open(found, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError:
+        return None
+    with os.fdopen(fd, "rb") as f:
+        if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
+            return None
+        return f.read()
+
+
+def keep(agent, room, project: Path, unless: list[str] | None = None) -> Path | None:
     """Copy the room's latest session into the store before the room is removed; None when the
-    agent cannot continue a session, keeps none, or wrote none. Nothing in the store is removed
-    but by `tare cleanup`."""
+    agent cannot continue a session, keeps none, wrote none, or left only the session it was given
+    (`unless`: an agent that never started). Nothing in the store is removed but by `tare cleanup`."""
     if not hasattr(agent, "continue_args"):
         return None
     find = getattr(agent, "latest_session", None) or getattr(agent, "session_file", None)
     found = find(room.home) if find else None
-    if found is None or not found.is_file():
+    data = _read_in_room(found, room) if found is not None else None
+    if data is None:
         return None
-    sid = session_id(lines_of(found.read_text(errors="replace")))
-    if sid is None:
+    lines = lines_of(data.decode(errors="replace"))
+    sid = session_id(lines)
+    if sid is None or (unless is not None and lines == unless):
         return None
     folder = store(agent, project)
     _private(folder)
-    target = folder / f"{time.strftime('%Y%m%d-%H%M%S')}-{sid}.jsonl"
-    part = folder / f".{target.name}.part"  # not a *.jsonl: a copy that fails half-way is never the latest
-    fd = os.open(part, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)  # the user's alone from the start
+    # the time to the nanosecond: two rooms closing in one second keep two sessions, in order
+    stamp = f"{time.strftime('%Y%m%d-%H%M%S')}-{time.time_ns() % 10**9:09d}"
+    target = folder / f"{stamp}-{sid}.jsonl"
+    part = folder / f".{target.name}.{os.getpid()}.part"  # not a *.jsonl: a copy that fails half-way is never the latest
+    fd = os.open(part, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)  # the user's alone from the start
     try:
-        with os.fdopen(fd, "wb") as out, found.open("rb") as source:
-            shutil.copyfileobj(source, out)
+        with os.fdopen(fd, "wb") as out:
+            out.write(data)
         os.replace(part, target)
     except BaseException:
         part.unlink(missing_ok=True)
         raise
     return target
+
+
+def parts() -> list[Path]:
+    """Copies a killed tare left half-written."""
+    return sorted(p for p in root().glob("*/*/.*.part") if stat.S_ISREG(p.lstat().st_mode)) \
+        if root().is_dir() and not root().is_symlink() else []
 
 
 def kept() -> list[Path]:
@@ -120,15 +148,18 @@ def remove_empty_folders():
 def latest(agent, project: Path) -> Path | None:
     """The latest kept session of an agent in a project."""
     folder = store(agent, project)
-    if not folder.is_dir() or folder.is_symlink():
+    if not folder.is_dir() or folder.is_symlink() or folder.parent.is_symlink() or root().is_symlink():
         return None
     found = sorted(p for p in folder.glob("*.jsonl") if stat.S_ISREG(p.lstat().st_mode))
     return found[-1] if found else None
 
 
 def read(path: Path) -> tuple[str, list[str]]:
-    """A kept session's id and lines, for --continue; ValueError when it holds no safe id."""
-    lines = lines_of(path.read_text(errors="replace"))
+    """A kept session's id and lines, for --continue; ValueError when it holds no safe id, or a line
+    that is not JSON or not UTF-8 (a damaged copy is not handed to an agent)."""
+    lines = lines_of(path.read_bytes().decode("utf-8"))
+    for n, line in enumerate(lines, 1):
+        json.loads(line)  # ValueError names the line's trouble
     sid = session_id(lines)
     if sid is None:
         raise ValueError(f"no session id in {path}")

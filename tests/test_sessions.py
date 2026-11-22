@@ -150,6 +150,10 @@ def started(monkeypatch, home, tmp_path):
             runs.append(command)
             if "--resume" not in command:
                 claude_session(r.home, f"first-{len(runs)}", "written in the first room")
+            else:  # the resumed agent goes on in the placed session
+                placed = next((r.home / ".claude-config" / "projects").glob("*/*.jsonl"))
+                with placed.open("a") as f:
+                    f.write(json.dumps({"sessionId": placed.stem, "message": {"content": "said in the second room"}}) + "\n")
             return ["true"]
 
     monkeypatch.setattr(cli, "backend", lambda: Rooms())
@@ -177,8 +181,11 @@ def test_continue_places_the_kept_session_and_resumes_it_before_the_users_argume
     assert started[1] == ["claude", *AGENTS["claude"].room_flags, "--resume", "first-1", "--model", "haiku"]
     assert placed == [(tmp_path / "room-1", "first-1")]
     assert "continuing claude's session first-1" in capsys.readouterr().err
-    # the resumed room's session is kept again, under the same id
-    assert [p.name for p in sessions.kept()] == ["20261122-120000-first-1.jsonl", "20261122-120100-first-1.jsonl"]
+    # the resumed room's session is kept again, under the same id, with what the second room added
+    first, second = sessions.kept()
+    assert first.name.startswith("20261122-120000-") and second.name.startswith("20261122-120100-")
+    assert first.name.endswith("-first-1.jsonl") and second.name.endswith("-first-1.jsonl")
+    assert "said in the second room" in second.read_text() and "said in the second room" not in first.read_text()
 
 
 def test_continue_without_a_usable_session_says_so_and_starts_nothing(started, tmp_path, capsys, monkeypatch):
@@ -217,7 +224,7 @@ def rooms_dir(monkeypatch, tmp_path):
     return place.resolve()
 
 
-def aged(path: Path, seconds: float = 7200):
+def aged(path: Path, seconds: float = 2 * 86400):
     when = time.time() - seconds
     for directory, dirs, files in os.walk(path):
         for name in [*dirs, *files]:
@@ -239,6 +246,7 @@ def test_a_room_is_in_use_while_its_lock_is_held_and_left_over_once_it_is_free(r
     held, free, legacy_busy, legacy_idle = (rooms_dir / f"tare-room-{n}" for n in ("held", "free", "busy", "idle"))
     for r in (held, free, legacy_busy, legacy_idle):
         (r / "home").mkdir(parents=True)
+        (r / "opt" / "agent").mkdir(parents=True)  # what a Seatbelt room holds
         aged(r)
     lock = room._hold(held)  # a running tare, however old its room
     room._hold(free).close()  # its tare crashed: the lock file is there, the lock is free
@@ -294,8 +302,11 @@ def test_a_bubblewrap_and_a_seatbelt_room_hold_their_lock_until_they_are_gone(ro
 
 def test_cleanup_removes_leftover_rooms_and_kept_sessions_and_nothing_else(home, rooms_dir, tmp_path, capsys):
     old, held, crashed = rooms_dir / "tare-room-old", rooms_dir / "tare-room-held", rooms_dir / "tare-room-crashed"
+    backup = rooms_dir / "tare-room-backup"  # a folder of the user's that only looks like a room by name
+    (backup / "photos").mkdir(parents=True)
+    aged(backup)
     for r in (old, held, crashed):
-        (r / "home").mkdir(parents=True)
+        (r / ".claude-config").mkdir(parents=True)  # a bubblewrap room is the home itself
         aged(r)
     lock = room._hold(held)
     room._hold(crashed).close()
@@ -313,7 +324,7 @@ def test_cleanup_removes_leftover_rooms_and_kept_sessions_and_nothing_else(home,
         assert "2 rooms and 1 session would be removed" in capsys.readouterr().out
 
         assert cli.main(["cleanup"]) == 0
-        assert not old.exists() and not crashed.exists() and not Path(f"{crashed}.lock").exists()
+        assert not old.exists() and not crashed.exists() and not Path(f"{crashed}.lock").exists() and backup.exists()
         assert held.exists() and Path(f"{held}.lock").exists()
         assert sessions.kept() == [] and (outside / "keep.jsonl").exists()
         assert "2 rooms and 1 session removed" in capsys.readouterr().out
@@ -326,10 +337,9 @@ def test_a_copy_that_fails_half_way_leaves_no_session_to_continue_from(home, tmp
     claude_session(r.home, "s1", "x")
     first = sessions.keep(Claude(), r, tmp_path / "project")
 
-    def full(source, out):
-        out.write(b"{\"sessionId\": \"s1\", \"half")
+    def full(source, target):
         raise OSError(28, "No space left on device")
-    monkeypatch.setattr(sessions.shutil, "copyfileobj", full)
+    monkeypatch.setattr(sessions.os, "replace", full)
     monkeypatch.setattr(sessions.time, "strftime", lambda fmt: "29991231-235959")
     with pytest.raises(OSError):
         sessions.keep(Claude(), r, tmp_path / "project")
@@ -365,3 +375,71 @@ def test_cleanup_removes_read_only_folders_and_says_what_it_could_not_remove(hom
     assert stuck.exists() and Path(f"{stuck}.lock").exists()  # found again next time
     captured = capsys.readouterr()
     assert f"could not remove  room  {stuck}" in captured.err and "1 room and 0 sessions removed" in captured.out
+
+
+def test_a_link_in_the_room_never_brings_a_host_file_into_the_store(home, tmp_path):
+    host = tmp_path / "host-transcript.jsonl"
+    host.write_text(json.dumps({"sessionId": "host", "message": "the user's other conversation"}) + "\n")
+    r = Room(tmp_path / "room-home", tmp_path / "work")
+    link = r.home / ".claude-config" / "projects" / "-work" / "host.jsonl"
+    link.parent.mkdir(parents=True)
+    link.symlink_to(host)
+    assert sessions.keep(Claude(), r, tmp_path / "project") is None
+    linked_dir = r.home / ".claude-config" / "projects" / "-other"
+    linked_dir.symlink_to(tmp_path)  # a linked folder, and the newest file through it
+    assert sessions.keep(Claude(), r, tmp_path / "project") is None and sessions.kept() == []
+
+
+def test_a_session_the_agent_never_extended_is_not_kept_again(home, tmp_path):
+    r = Room(tmp_path / "room-home", tmp_path / "work")
+    path = claude_session(r.home, "s1", "placed")
+    placed = path.read_text().splitlines()
+    assert sessions.keep(Claude(), r, tmp_path / "project", unless=placed) is None
+    assert sessions.keep(Claude(), r, tmp_path / "project") is not None
+
+
+def test_a_damaged_kept_session_is_refused(tmp_path):
+    good = json.dumps({"sessionId": "s1"})
+    (tmp_path / "half.jsonl").write_text(good + "\n" + '{"sessionId": "s1", "message": "cut off' + "\n")
+    with pytest.raises(ValueError):
+        sessions.read(tmp_path / "half.jsonl")
+    (tmp_path / "bytes.jsonl").write_bytes(good.encode() + b"\n\xff\n")
+    with pytest.raises(ValueError):
+        sessions.read(tmp_path / "bytes.jsonl")
+
+
+def test_a_link_in_the_store_is_refused_not_followed(home, tmp_path):
+    outside = tmp_path / "outside"
+    (outside / "x").mkdir(parents=True)
+    (outside / "x" / "old.jsonl").write_text("not tare's")
+    sessions.root().mkdir(parents=True)
+    (sessions.root() / "claude").symlink_to(outside)
+    r = Room(tmp_path / "room-home", tmp_path / "work")
+    claude_session(r.home, "s1", "x")
+    with pytest.raises(OSError, match="is a link"):
+        sessions.keep(Claude(), r, tmp_path / "project")
+    assert sessions.kept() == [] and sessions.latest(Claude(), tmp_path / "project") is None
+    assert (outside / "x" / "old.jsonl").exists()
+
+
+def test_pi_and_codex_resume_in_the_new_room_not_the_old_one(tmp_path):
+    new = Room(tmp_path / "room-home", tmp_path / "work", inside_work="/private/tmp/tare-room-new/work")
+    pi = [json.dumps({"type": "session", "id": "p1", "cwd": "/private/tmp/tare-room-old/work"}),
+          json.dumps({"type": "message", "cwd": "/private/tmp/tare-room-old/work", "text": "kept as it was"})]
+    Pi().place_session(new, "p1", pi)
+    placed = next((new.config(Pi()) / "sessions").rglob("*.jsonl")).read_text().splitlines()
+    assert json.loads(placed[0])["cwd"] == "/private/tmp/tare-room-new/work" and placed[1] == pi[1]
+    codex = [json.dumps({"type": "session_meta", "payload": {"id": "x1", "cwd": "/private/tmp/tare-room-old/work"}})]
+    Codex().place_session(new, "x1", codex)
+    placed = next((new.config(Codex()) / "sessions").rglob("*-x1.jsonl")).read_text().splitlines()
+    assert json.loads(placed[0])["payload"]["cwd"] == "/private/tmp/tare-room-new/work"
+
+
+def test_a_room_whose_agent_still_runs_is_in_use_without_its_lock(rooms_dir, monkeypatch):
+    r = rooms_dir / "tare-room-orphan"
+    (r / "home").mkdir(parents=True)
+    (r / "opt" / "agent").mkdir(parents=True)
+    aged(r)
+    room._hold(r).close()  # its tare was killed: the lock is free
+    monkeypatch.setattr(room, "_room_processes", lambda base: [4242] if base == r else [])
+    assert room.leftover_rooms() == []

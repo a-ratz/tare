@@ -138,6 +138,28 @@ def _one_run(u: Usage) -> Usage:
     return u
 
 
+def _in_this_room(lines: list[str], room, header) -> list[str]:
+    """A session's lines with its recorded working directory set to this room's: a session from an
+    earlier room names that room's path, which is gone (a macOS room's path differs every time), and
+    Pi and Codex work in the directory their session names. `header(entry)` gives the dict holding
+    `cwd`, or None."""
+    out = []
+    for i, line in enumerate(lines):
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            out.append(line)
+            continue
+        found = header(entry) if isinstance(entry, dict) else None
+        if isinstance(found, dict) and "cwd" in found:
+            found["cwd"] = room.inside_work
+            out.append(json.dumps(entry, ensure_ascii=False))
+            out.extend(lines[i + 1:])
+            return out
+        out.append(line)
+    return out
+
+
 def _security(account: str, service: str) -> str | None:
     """A password from the user's Keychain, read the way Claude Code reads its own. Never printed."""
     found = subprocess.run(["security", "find-generic-password", "-a", account, "-w", "-s", service],
@@ -475,6 +497,7 @@ class Codex:
         # Codex finds a session by the id at the end of its rollout's file name
         target = room.config(self) / "sessions" / "2026" / "01" / "01"
         target.mkdir(parents=True, exist_ok=True)
+        lines = _in_this_room(lines, room, lambda e: _dict(e.get("payload")) if e.get("type") == "session_meta" else None)
         (target / f"rollout-2026-01-01T00-00-00-{session}.jsonl").write_text("\n".join(lines) + "\n")
 
     def trail(self, lines: list[str]) -> trails.Trail:
@@ -686,6 +709,7 @@ export default function (pi: any) {{
         # Pi keeps a working directory's sessions in --<path with dashes>--
         target = room.config(self) / "sessions" / f"--{room.inside_work.strip('/').replace('/', '-')}--"
         target.mkdir(parents=True, exist_ok=True)
+        lines = _in_this_room(lines, room, lambda e: e if e.get("type") == "session" else None)
         (target / f"2026-01-01T00-00-00-000Z_{session}.jsonl").write_text("\n".join(lines) + "\n")
 
     def trail(self, lines: list[str]) -> trails.Trail:
