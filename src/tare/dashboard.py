@@ -16,6 +16,7 @@ from pathlib import Path
 from . import answer as answers
 from . import journal as journals
 from . import usage as usages
+from . import uses as used
 from .agents import AGENTS
 from .cliff import wilson
 from .swap import Cut
@@ -94,6 +95,7 @@ def state(out: Path) -> dict:
     elif s["kind"] == "calibrate":
         s["rates"] = _rates(tails.values(), s["sides"])
     s["usage"] = usages.of_run(events)
+    s["uses"] = used.of_run(events)
     s["names"] = answers.names(s["sides"] or {})
     s["answer"] = answers.answer(s)
     return s

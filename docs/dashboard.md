@@ -8,8 +8,9 @@ The live dashboard of `tare calibrate`, `tare swap` and `tare cliff` runs at
 `http://localhost:8777/` unless that port is taken. Every run page opens with the answer: one
 sentence that says what the run found, the figures behind it, and a line on how far to trust them
 (was the room clean, how many runs, do the likely ranges overlap). Below come the questions a
-newcomer would ask, each as a section: how each agent did, how tare tested it, whether the room
-was clean, what ran, what it cost, and the full report, folded away. While a run goes on, the
+newcomer would ask, each as a section: how each agent did, which skills and tools it used (for
+Calibrate), how tare tested it, whether the room was clean, what ran, what it cost, and the full
+report, folded away. While a run goes on, the
 answer starts with "So far" and every running restart pulses.
 
 <picture>

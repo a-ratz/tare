@@ -201,7 +201,20 @@ function calibrate(s) {
     <td><span class="clamp muted">${esc(t.status === "running" ? (t.activity || "starting…") : (t.reason || (t.detail || "").replace(/^agent exit 0; /, "")))}</span></td></tr>`).join("");
   const runs = runRows ? section("Every run", running.length ? "Running ones first, then newest first." : `Newest first.${judged ? " What the judge said is shortened; the full text is in the report below." : ""}`,
     `<div class="table-wrap"><table class="table body"><thead class="label"><tr><th></th><th>Agent</th><th class="num">Time</th>${judged ? `<th class="num">Score</th><th>What the ${JUDGE} said</th>` : "<th>Result</th>"}</tr></thead><tbody>${runRows}</tbody></table></div>`) : "";
-  return result + rooms(s) + facts(s, [["Runs", `${(s.params || {}).tails} per agent, each from a fresh copy of the project`]]) + runs + cost(s) + report(s);
+  return result + uses(s) + rooms(s) + facts(s, [["Runs", `${(s.params || {}).tails} per agent, each from a fresh copy of the project`]]) + runs + cost(s) + report(s);
+}
+function uses(s) {
+  const u = (s.uses || {}).sides || {};
+  const keys = Object.keys(s.sides).filter((k) => u[k] && u[k].runs);
+  if (!keys.length) return "";
+  const per = (calls, runs) => (calls / runs).toFixed(1);
+  const list = (entries, none, text) => entries.length ? entries.map(([name, x]) => `<div><span class="data">${esc(name)}</span> <span class="muted">${text(x)}</span></div>`).join("") : `<span class="muted">${none}</span>`;
+  const rows = keys.map((k) => { const v = u[k];
+    return `<tr><td><b>${esc(sideName(s, k))}</b><div class="data muted">${plural(v.runs, "run")} counted</div></td>
+      <td>${list(Object.entries(v.skills), "none loaded", (x) => `in ${x.runs} of ${v.runs} · ${per(x.calls, v.runs)} per run`)}</td>
+      <td>${list(Object.entries(v.tools), "none called", (x) => `${per(x.calls, v.runs)} per run`)}</td></tr>`; }).join("");
+  return section("Which skills and tools did each agent use?", "Counted from each finished run's own output. A skill counts as loaded when the agent invoked it or read its SKILL.md. Whether it then followed the skill is not counted.",
+    `<div class="table-wrap"><table class="table body"><thead class="label"><tr><th>Agent</th><th>Skills loaded</th><th>Tools called</th></tr></thead><tbody>${rows}</tbody></table></div>`);
 }
 
 // ---- swap --------------------------------------------------------------------------------------

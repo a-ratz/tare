@@ -22,6 +22,26 @@ Calibrate also tells you whether a task suits Swap or Cliff. [Swap](swap.md) nee
 one side mostly fails and the other mostly passes. [Cliff](cliff.md) needs a task where a fresh
 start passes at least sometimes.
 
+## Which skills and tools each side used
+
+For each finished run, tare counts the skills the agent loaded and the tools it called, from the
+agent's own output. The report adds two lines per side, and the dashboard shows the same while the
+runs go on:
+
+```
+  skills    a  greet in 7 of 10 runs, 0.9 per run · review in 2 of 10 runs, 0.2 per run
+            b  none loaded
+  tools     a  Bash 6.2 · Read 3.1 · Skill 1.1 · Write 0.8 per run
+            b  command_execution 9.4 · file_change 1.0 per run
+```
+
+A skill counts as loaded when the agent invoked it (Claude Code's `Skill` tool) or read its
+`SKILL.md`, which is how Codex, Pi and the Antigravity CLI load a skill. The name is the folder that
+holds the file. A loaded skill is not necessarily a followed one: the count says only that the
+agent read it. Tool names are the ones the agent's output uses; Codex names the kind of call
+(`command_execution`, `file_change`) rather than the tool. The run directory keeps the counts in
+`uses.json` and in each run's `result.json`, so `tare watch` shows them for a finished run too.
+
 ## Different prompts per side
 
 Some skills start with their own command, for example a slash command, so the sides need

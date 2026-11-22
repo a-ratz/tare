@@ -1,8 +1,12 @@
 import json
 from pathlib import Path
 
+from tare import calibrate as cal
 from tare import capsule as caps
+from tare import dashboard
+from tare import uses as used
 from tare.agents import AGENTS
+from tare.journal import Journal
 
 STREAMS = Path(__file__).parent / "streams"
 
@@ -51,3 +55,47 @@ def test_a_run_whose_stream_is_missing_counts_nothing(tmp_path):
     assert caps.read_uses(AGENTS["pi"], tmp_path) == {"tools": {}, "skills": {}}
     assert caps.read_uses(object(), tmp_path) is None
 
+
+class Named:
+    def __init__(self, name):
+        self.name = name
+
+
+def test_the_report_dashboard_and_run_directory_hold_the_counts_per_side(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "README.md").write_text("x")
+    out = tmp_path / "run"
+    out.mkdir()
+    runs = {"claude": iter([{"tools": {"Skill": 1, "Write": 1}, "skills": {"greet": 1}},
+                            {"tools": {"Skill": 2, "Bash": 3}, "skills": {"greet": 1, "review": 1}},
+                            {"tools": {"Write": 1}, "skills": {}}]),
+            "codex": iter([{"tools": {"command_execution": 2}, "skills": {}}] * 3)}
+
+    def fake_tail(agent, real, out_, capsule, prompt, args, check, i, env=None, timeout=1800, tail_dir=None, keep=False):
+        return caps.Tail(0, True, "d", uses=next(runs[agent.name]))
+
+    monkeypatch.setattr(caps, "run_tail", fake_tail)
+    sides = [cal.Side("a", Named("claude"), None, []), cal.Side("b", Named("codex"), None, [])]
+    text = cal.calibrate(sides, project, "task", "check", out, runs=3, jobs=1, journal=Journal(out))
+    assert "  skills    a  greet in 2 of 3 runs, 0.7 per run · review in 1 of 3 runs, 0.3 per run" in text
+    assert "            b  none loaded" in text
+    assert "  tools     a  Bash 1.0 · Skill 1.0 · Write 0.7 per run" in text
+    assert "            b  command_execution 2.0 per run" in text
+    stored = json.loads((out / "uses.json").read_text())
+    assert stored["sides"]["a"]["skills"]["greet"] == {"runs": 2, "calls": 2}
+    assert stored["sides"]["b"]["runs"] == 3
+    assert dashboard.state(out)["uses"] == stored
+
+
+def test_a_run_still_going_is_not_counted_and_sides_whose_agent_cannot_tell_have_no_lines():
+    start = {"event": "start", "sides": {"a": {"agent": "claude", "args": []}, "b": {"agent": "x", "args": []}}}
+    events = [start, {"event": "tail", "id": "a-0", "status": "running", "side": "a"},
+              {"event": "tail", "id": "a-1", "status": "running", "side": "a"},
+              {"event": "tail", "id": "a-0", "status": "passed", "uses": {"tools": {"Read": 2}, "skills": {"s": 1}}},
+              {"event": "tail", "id": "b-0", "status": "running", "side": "b"},
+              {"event": "tail", "id": "b-0", "status": "passed", "uses": None}]
+    sides = used.of_run(events)["sides"]
+    assert sides["a"] == {"label": "claude", "runs": 1, "skills": {"s": {"runs": 1, "calls": 1}},
+                          "tools": {"Read": {"runs": 1, "calls": 2}}}
+    assert sides["b"]["runs"] == 0
