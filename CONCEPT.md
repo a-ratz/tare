@@ -295,10 +295,52 @@ subscription login is marked, because its cost is notional.
 **Measured:** a calibrate run with one Haiku run, one Codex run with gpt-6.1-sol and a Sonnet
 judge read 186.4k tokens in and $0.093 in total, the Codex part estimated from LiteLLM's table.
 
+### Skills and tools
+
+For an evaluation with several skills, tare counts per run which skills the agent loaded and which
+tools it called. The counts come from the run's stream, not from its trail: every run keeps its
+stream (`stdout.jsonl`), and Calibrate keeps no session file. The stream shows each tool call with
+its arguments, and each call is counted once by its id, although some agents report a call when it
+starts and again when it is done (the Antigravity CLI's id is the step index within its
+conversation, since a subagent's steps count from 0 again). A call without an id counts each time
+it is reported. A tool's name is the name the stream gives it, `?` when there is none. Codex's
+stream names the kind of item instead of the tool (`command_execution` for a shell command,
+`file_change` for a patch), and an MCP call as server and tool. The counts are a by-product: a
+stream tare cannot read leaves the run without counts and never fails it.
+
+A skill counts as loaded when the agent invoked it (Claude Code's `Skill` tool, whose input names
+the skill) or read its `SKILL.md`. Codex has no skill tool and reads the file with a shell command,
+Pi and the Antigravity CLI read it with their read tools, and Claude Code may read one too. The
+skill's name is the folder that holds the `SKILL.md`. From a read tool's path the folder counts
+whatever it is called, unless the name holds a character of a pattern, an expansion or shell syntax
+(`*?[]{}$`, a backtick, `~()!`). tare does not parse a shell command; it looks for a `SKILL.md`
+whose folder is named the way skills are named (ASCII letters, digits, `_ . -`, not starting with a
+dot) and starts after a separator. So `$DIR/SKILL.md`, `$(pwd)/SKILL.md`, `skills/*/SKILL.md`, `~/SKILL.md` and
+`./SKILL.md` name no skill, `if=x/SKILL.md` or `HEAD:x/SKILL.md` name `x`, and a command names each
+skill once. A command counts whatever it does with the file (a `cat`, but also an `rm`), and a
+`SKILL.md` named in a comment, a heredoc, a quoted message (`git commit -m "Update x/SKILL.md"`) or
+an excluded path (`rg -g '!x/SKILL.md'`) counts too. A folder name with a space or a letter
+outside ASCII comes through only from a read tool: a shell command gives the last word of the one
+and nothing for the other. Two rounds of a shell parser built on shlex showed why: comments,
+heredocs and long quoted words each broke it in a new way, while skill names keep to the narrow
+form. A write to a
+`SKILL.md` through a write or edit tool is not a load, nor is a `SKILL.md.bak`. The count
+says nothing about whether the agent then followed the skill: it says loaded, not followed. The
+Calibrate report gives per side how many runs loaded each skill and how often per run, and the
+tools called per run; the dashboard shows the same while the runs go on, and the run directory
+keeps it in `uses.json` and in each run's `result.json`.
+
+**Measured** on macOS 27.0.1, each agent asked to "Use the greet skill." in a project whose skill
+writes a file: Claude Code 2.1.330 in a room called `Skill` with `greet`, Codex 0.166.0 in a room ran
+`cat .agents/skills/greet/SKILL.md`, Pi 1.6.0 read `.pi/skills/greet/SKILL.md` with `read`, and the
+Antigravity CLI 1.5.13 read `.agents/skills/greet/SKILL.md` with `read_file`. Each counted one load
+of `greet`. Pi and the Antigravity CLI ran outside a room: Pi aborts in a macOS room (#172), and the
+Antigravity CLI is not supported there. The streams are kept in `tests/streams/`.
+
 ### Run directory, dashboard and recipes
 
 Calibrate, Swap and Cliff write everything into a run directory: a journal (one JSON line per
-event), a `recipe.json`, a `usage.json` with the totals, and the live output of every agent. The dashboard reads only the run
+event), a `recipe.json`, a `usage.json` with the totals, a `uses.json` with the skills and tools of a Calibrate run, and the live output of every agent. The dashboard reads only the run
 directory, so `tare watch` shows a finished run the same way as a live one. Each run page opens with
 the answer: a sentence from fixed templates per verdict, worked out from the run directory the way
 Calibrate, Swap and Cliff decide, so a run recorded by an older tare reads like a new one. The recipe holds the

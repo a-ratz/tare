@@ -25,6 +25,7 @@ from . import trail as trails
 from .fake import FAKE_MODEL
 from .room import TareError
 from .usage import Usage
+from .uses import Uses
 
 PROMPT = "say ok"
 
@@ -106,6 +107,29 @@ def _json(path: Path) -> dict | None:
         return json.loads(path.read_text())
     except (OSError, ValueError):
         return None
+
+
+def _objects(stdout: str):
+    """The stream's JSON objects; other lines are skipped."""
+    return (e for e in events(stdout) if isinstance(e, dict))
+
+
+def _first(seen: set, key) -> bool:
+    """True the first time a call's id is seen. A call without an id (none, empty, or not a plain
+    value) counts every time."""
+    if key is None or key == "":
+        return True
+    try:
+        if key in seen:
+            return False
+        seen.add(key)
+    except TypeError:
+        pass
+    return True
+
+
+def _dict(value) -> dict:
+    return value if isinstance(value, dict) else {}
 
 
 def _one_run(u: Usage) -> Usage:
@@ -275,6 +299,23 @@ class Claude:
                           top.get("canonicalModel"))
         return _one_run(u)
 
+    def uses(self, stdout: str) -> Uses:
+        """From the tool_use blocks of the assistant events, each once by its id. A Skill call names
+        its skill in `skill`; a Read or Bash call may read a SKILL.md."""
+        u, seen = Uses(), set()
+        for e in _objects(stdout):
+            content = _dict(e.get("message")).get("content")
+            if e.get("type") != "assistant" or not isinstance(content, list):
+                continue
+            for block in content:
+                if not isinstance(block, dict) or block.get("type") != "tool_use" or not _first(seen, block.get("id")):
+                    continue
+                name, args = str(block.get("name") or "?"), _dict(block.get("input"))
+                u.call(name, path=str(args.get("file_path") or "") if name == "Read" else "",
+                       command=str(args.get("command") or "") if name == "Bash" else "",
+                       skill=str(args.get("skill") or "?") if name == "Skill" else None)
+        return u
+
     def activity(self, event: dict) -> str | None:
         """What one line of the live stream (stream-json) shows, for the dashboard."""
         if event.get("type") == "result":
@@ -432,6 +473,23 @@ class Codex:
                               n.get("cache_write_input_tokens", 0), n.get("output_tokens", 0),
                               n.get("reasoning_output_tokens", 0))
         return _one_run(u)
+
+    def uses(self, stdout: str) -> Uses:
+        """From the items of the stream, each once by its id. The stream names an item's kind, not
+        the tool behind it (`command_execution` for a shell command, `file_change` for a patch), and
+        an MCP call as server and tool. Codex reads a SKILL.md with a shell command."""
+        u, seen = Uses(), set()
+        for e in _objects(stdout):
+            item = _dict(e.get("item"))
+            kind = item.get("type")
+            if e.get("type") not in ("item.started", "item.completed") or kind in (None, "", "agent_message", "reasoning", "error"):
+                continue
+            if not _first(seen, item.get("id")):
+                continue
+            if kind == "mcp_tool_call":
+                kind = f"{item.get('server') or '?'}.{item.get('tool') or '?'}"
+            u.call(str(kind), command=str(item.get("command") or "") if kind == "command_execution" else "")
+        return u
 
     def activity(self, event: dict) -> str | None:
         """What one line of the live stream (--json) shows, for the dashboard."""
@@ -626,6 +684,18 @@ export default function (pi: any) {{
                           n.get("cacheWrite", 0), n.get("output", 0), n.get("reasoning", 0), cost, message.get("model"))
         return _one_run(u)
 
+    def uses(self, stdout: str) -> Uses:
+        """From the tool_execution_start events, each once by its call id. Pi reads a SKILL.md with
+        its read tool (or a shell command)."""
+        u, seen = Uses(), set()
+        for e in _objects(stdout):
+            if e.get("type") != "tool_execution_start" or not _first(seen, e.get("toolCallId")):
+                continue
+            name, args = str(e.get("toolName") or "?"), _dict(e.get("args"))
+            u.call(name, path=str(args.get("path") or "") if name == "read" else "",
+                   command=str(args.get("command") or "") if name == "bash" else "")
+        return u
+
     def activity(self, event: dict) -> str | None:
         """What one line of the live stream (--mode json) shows, for the dashboard."""
         kind = event.get("type")
@@ -774,6 +844,36 @@ class Antigravity:
                 u = u + Usage(n.get("input_tokens", 0), n.get("cache_read_tokens", 0), 0, n.get("output_tokens", 0),
                               n.get("thinking_tokens", 0))
         return _one_run(u)
+
+    # the tools that read files and the parameter that names what they read, and the shell tool
+    READS = {"read_file": "Path", "view_file": "AbsolutePath"}
+    SHELL = ("run_command", "CommandLine")
+
+    def uses(self, stdout: str) -> Uses:
+        """From the tool steps of the stream. A step is reported when it starts and again when it is
+        done, so it counts once by its conversation and index (a subagent's steps have their own
+        conversation and count from 0). Its skill load comes from the first report that names a
+        file. agy reads a SKILL.md with its read tool."""
+        u, seen, loaded = Uses(), set(), set()
+        for e in _objects(stdout):
+            update = _dict(e.get("step_update"))
+            if update.get("step_type") != "tool":
+                continue
+            index = update.get("step_index")
+            key = None if index in (None, "") else (update.get("conversation_id"), index)
+            try:
+                hash(key)
+            except TypeError:  # an id that is not a plain value is no id
+                key = None
+            name = str(update.get("tool_name") or "?")
+            if _first(seen, key):
+                u.tools[name] += 1
+            parameters = _dict(_dict(update.get("tool_info")).get("parameters"))
+            path = str(parameters.get(self.READS[name]) or "") if name in self.READS else ""
+            command = str(parameters.get(self.SHELL[1]) or "") if name == self.SHELL[0] else ""
+            if key not in loaded and u.load(path, command) and key is not None:
+                loaded.add(key)
+        return u
 
     def activity(self, event: dict) -> str | None:
         """What one line of the live stream (--output-format stream-json) shows, for the dashboard."""

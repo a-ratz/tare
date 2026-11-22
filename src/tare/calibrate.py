@@ -18,6 +18,7 @@ from pathlib import Path
 
 from . import capsule as caps
 from . import usage as usages
+from . import uses as used
 from .cliff import wilson
 from .journal import Journal
 
@@ -65,7 +66,7 @@ def calibrate(sides: list[Side], project: Path, prompt: str | None, check: str |
         tail = caps.run_tail(side.agent, side.real, out, start, side.prompt or prompt, side.args, check, i, env,
                              tail_dir=out / "calibrate" / name, keep=keep)
         journal("tail", id=name, status="passed" if tail.passed else "failed", detail=tail.detail,
-                usage=tail.usage, check_usage=tail.check_usage)
+                usage=tail.usage, check_usage=tail.check_usage, uses=tail.uses)
         return side, tail, time.monotonic() - began
 
     with ThreadPoolExecutor(max_workers=jobs) as pool:
@@ -91,7 +92,7 @@ def calibrate(sides: list[Side], project: Path, prompt: str | None, check: str |
         lo, hi = wilson(x, n)
         lines.append(f"  {s.key:<4}  {s.label():<{width}}{x:>2}/{n:<2} {x / n:.2f}  {lo:.2f}-{hi:.2f}"
                      + (f"   scores {' '.join(map(str, sorted(s.scores)))}" if s.scores else ""))
-    text = "\n".join(lines + usages.report(out)) + "\n"
+    text = "\n".join(lines + used.report(out) + usages.report(out)) + "\n"
     (out / "report.txt").write_text(text)
     journal("report", text=text)
     journal("phase", phase="done")

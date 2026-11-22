@@ -90,7 +90,7 @@ and open a live dashboard that leads with the answer:
   your login, which tare deletes after the run.
   [Running agents in rooms](https://github.com/a-ratz/tare/blob/main/docs/running-agents.md)
 - **Compares skills, plugins and models.** `tare calibrate` starts each side several times from
-  scratch and reports pass rates with their intervals.
+  scratch and reports pass rates with their intervals, and which skills and tools each side used.
   [Calibrate](https://github.com/a-ratz/tare/blob/main/docs/calibrate.md)
 - **Scores what no test can decide.** `tare judge` lets a second agent score a page by your
   rubric, without agent or model names, and `tare judge-noise` shows how far its scores vary.
