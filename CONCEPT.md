@@ -150,6 +150,15 @@ Pi 0.99.1): each agent answered in such a room with its real login. Afterwards t
 gone and the Keychain item unchanged, and nothing under the home directory was readable from
 inside (epic #85).
 
+A room's home goes when the room closes, and with it the agent's session. So before the room is
+removed, whatever ended the agent, tare copies the agent's latest session into
+`~/.local/state/tare/sessions/<agent>/<project>/`, where it stays until `tare cleanup`. `tare
+claude --continue` (also for Codex and Pi) places it into a fresh room the way the agent keeps its
+sessions and resumes it; the probe reads the room before. The login copy is still removed with the
+room: a session that outlives its login copy (#193) goes on in a new room with a fresh one.
+**Measured** on macOS 27.0.1 with Claude Code 2.1.330: a session continued in a second room
+answered a question about the first (epic #194).
+
 Claude Code may replace its login token when it renews it, which could log out your real
 session. This has not been tested, so tare refuses to start when the copy would need renewal
 within the next hour. **Measured:** the Antigravity CLI's Google login keeps its refresh token

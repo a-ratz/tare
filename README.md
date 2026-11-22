@@ -61,6 +61,7 @@ start.
 uv tool install tare-cli            # or: pipx install tare-cli
 tare probe claude                   # prove the room is clean
 tare claude -- -p "fix the tests"   # run Claude Code in it
+tare claude --continue              # resume the last session in a fresh room
 ```
 
 On Linux and WSL, tare also needs bubblewrap (`sudo apt install bubblewrap`). The
