@@ -19,6 +19,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import sessions
 from . import trail as trails
 from . import usage as usages
 from .room import Room, backend
@@ -205,14 +206,10 @@ def capsules(out: Path, agent) -> list[Capsule]:
 
 
 def session_id(out: Path) -> str:
-    for line in session_lines(out):
-        entry = json.loads(line)
-        # Claude Code: sessionId on every entry; Codex: the session_meta payload; Pi: the session header
-        sid = (entry.get("sessionId") or (entry.get("payload") or {}).get("id")
-               or (entry.get("id") if entry.get("type") == "session" else None))
-        if sid:
-            return sid
-    raise ValueError("no session id in the session file")
+    sid = sessions.session_id(session_lines(out))
+    if sid is None:
+        raise ValueError("no session id in the session file")
+    return sid
 
 
 def _run_in(room: Room, agent, real, command: list[str], env, timeout: float, log_dir: Path) -> str:

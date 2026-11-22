@@ -330,7 +330,8 @@ def test_only_processes_that_name_the_room_or_work_in_it_are_its_own(monkeypatch
     lsof = f"p201\nn{base}/tmp\np202\nn{base}\np203\nn/\npnotapid\nn{base}\np204\nn{base}-copy\np²\nn{base}\n"
     monkeypatch.setattr(room, "_listing", lambda argv: ps if argv[0].endswith("ps") else lsof)
     assert room._room_processes(base) == [101, 102, 107, 108, 109, 201, 202]
-    monkeypatch.setattr(room, "_listing", lambda argv: "")  # ps and lsof missing
+    monkeypatch.setattr(room, "_listing", lambda argv: None)  # ps and lsof missing
+    assert room._room_processes(base, sure=True) is None  # nothing known: cleanup must leave the room
     assert room._room_processes(base) == []
 
 

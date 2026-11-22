@@ -13,9 +13,11 @@
 """
 import argparse
 import json
+import os
 import shlex
 import os
 import threading
+import shutil
 import signal
 import stat
 import subprocess
@@ -23,7 +25,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import dashboard, recipe
+from . import dashboard, recipe, sessions
 from . import usage as usages
 from .agents import AGENTS
 from . import calibrate as calibration
@@ -32,7 +34,7 @@ from .journal import Journal
 from .swap import Side, swap
 from .probe import probe, render
 from .capsule import _feed, _join, _pump
-from .room import TareError, backend
+from .room import TareError, backend, leftover_rooms, remove_lock, remove_room
 
 
 def _exit_on(signum, _frame):
@@ -122,6 +124,8 @@ def main(argv: list[str] | None = None) -> int:
         return _prices(argv[1:])
     if argv[:1] in (["judge"], ["judge-noise"]):
         return _judge(argv[0], argv[1:])
+    if argv[:1] == ["cleanup"]:
+        return _cleanup(argv[1:])
     passthrough: list[str] = []
     if "--" in argv:
         at = argv.index("--")
@@ -139,6 +143,8 @@ def main(argv: list[str] | None = None) -> int:
         c.add_argument("--project", type=Path, default=Path.cwd())
         c.add_argument("--allow-dirty", action="store_true", help="start even if the reading is not tare: 0.00")
         c.add_argument("--yolo", action="store_true", help="skip the agent's permission prompts (for Codex also its own sandbox). The room stays.")
+        c.add_argument("--continue", dest="resume", action="store_true",
+                       help="resume the session tare kept when this project's last room closed")
     k = sub.add_parser("cliff", help="find where a failed run became lost (args after -- go to every agent run)")
     k.add_argument("agent", choices=sorted(AGENTS))
     k.add_argument("prompt", help="the task, as given to the agent")
@@ -199,6 +205,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("judge-noise", help="score the same pages repeatedly, to see how far the judge's scores vary")
     sub.add_parser("rerun", help="repeat a run from its recipe (tare rerun DIR)")
     sub.add_parser("prices", help="the price tables for costs that an agent does not report (tare prices update)")
+    sub.add_parser("cleanup", help="remove the rooms nothing uses any more and the sessions kept for --continue")
     args = ap.parse_args(argv)
     if args.command == "swap":
         names = [args.a, args.b]
@@ -220,6 +227,21 @@ def main(argv: list[str] | None = None) -> int:
     project = args.project.resolve()
 
     try:
+        resumed = None
+        if getattr(args, "resume", False):  # before the probe, which would otherwise run for nothing
+            if not hasattr(AGENTS[names[0]], "continue_args"):
+                raise TareError(f"{names[0]} cannot continue a session yet; start it without --continue")
+            found = sessions.newest_first(AGENTS[names[0]], project)
+            if not found:
+                raise TareError(f"no kept {names[0]} session for {project}; start it without --continue")
+            for kept in found:  # the latest that is whole; a damaged one is said and passed over
+                try:
+                    resumed = (kept, *sessions.read(kept))
+                    break
+                except (OSError, ValueError) as e:
+                    _note(f"tare: cannot continue from {kept}: {e}")
+            if resumed is None:
+                raise TareError(f"no kept {names[0]} session for {project} is whole; start it without --continue")
         reals = {name: AGENTS[name].discover() for name in dict.fromkeys(names)}
         journal = Journal(None)
         if args.command in ("cliff", "swap", "calibrate"):
@@ -278,10 +300,87 @@ def main(argv: list[str] | None = None) -> int:
         flags = agent.room_flags + (agent.yolo if args.yolo else [])
         rooms = backend()
         with rooms.open(agent, real, project) as room:
-            return _run_attached(rooms.argv(room, agent, real, [agent.name, *flags, *passthrough]))
+            resume = []
+            if resumed is not None:
+                path, sid, lines = resumed
+                placed = agent.place_session(room, sid, lines) or lines
+                resume = agent.continue_args(sid)
+                print(f"tare: continuing {agent.name}'s session {sid} ({path.name[:15]})", file=sys.stderr)
+            argv = rooms.argv(room, agent, real, [agent.name, *flags, *resume, *passthrough])
+            try:
+                return _run_attached(argv)
+            finally:  # whatever ended the agent, before the room and its session are removed
+                _keep(agent, room, project, unless=placed if resumed else None)
     except TareError as err:
         print(f"tare: {err}", file=sys.stderr)
         return 2
+
+
+def _keep(agent, room, project: Path, unless: list[str] | None = None):
+    """Keep the room's session; a failure to keep it is said, and never replaces the agent's own exit."""
+    try:
+        kept = sessions.keep(agent, room, project, unless)
+        if kept:
+            _note(f"tare: session kept in {kept.parent}; `tare {agent.name} --continue` resumes it")
+    except Exception as e:
+        _note(f"tare: could not keep the session: {type(e).__name__}: {e}")
+
+
+def _note(message: str):
+    """A line on stderr, which may be closed or gone (SIGHUP closed the terminal)."""
+    if sys.stderr is None:
+        return
+    try:
+        print(message, file=sys.stderr)
+    except (OSError, ValueError):
+        pass
+
+
+def _size(path: Path) -> int:
+    """Bytes under a path, links not followed; what vanished meanwhile counts nothing."""
+    total = 0
+    for directory, dirs, files in os.walk(path) if path.is_dir() else [(str(path.parent), [], [path.name])]:
+        for name in files:
+            try:
+                st = os.lstat(os.path.join(directory, name))
+            except OSError:
+                continue
+            total += st.st_size if stat.S_ISREG(st.st_mode) else 0
+    return total
+
+
+def _cleanup(argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(prog="tare cleanup", description="Remove what tare keeps after a room closes: rooms "
+                                 "that no running tare uses any more (a crash leaves them, with their login copy), and "
+                                 "the sessions kept for --continue.")
+    ap.add_argument("--dry-run", action="store_true", help="list what would be removed, remove nothing")
+    args = ap.parse_args(argv)
+    rooms, kept = leftover_rooms(), sessions.kept() + sessions.parts()
+    verb = "would remove" if args.dry_run else "removed"
+    left = []
+    for path in rooms:
+        size = _size(path)
+        if not args.dry_run:
+            if not remove_room(path):  # its lock stays, so the next cleanup finds it again
+                left.append(path)
+                print(f"could not remove  room  {path}", file=sys.stderr)
+                continue
+            remove_lock(path)
+        print(f"{verb}  room     {path}  {size // 1024} KB")
+    rooms = [p for p in rooms if p not in left]
+    for path in kept:
+        size = _size(path)
+        if not args.dry_run:
+            try:
+                path.unlink()
+            except FileNotFoundError:  # renamed or removed meanwhile
+                pass
+        print(f"{verb}  session  {path}  {size // 1024} KB")
+    if not args.dry_run:
+        sessions.remove_empty_folders()
+    print(f"tare cleanup: {len(rooms)} room{'s' if len(rooms) != 1 else ''} and {len(kept)} "
+          f"session{'s' if len(kept) != 1 else ''} " + ("would be removed (dry run)" if args.dry_run else "removed"))
+    return 1 if left else 0
 
 
 def _watch(argv: list[str]) -> int:

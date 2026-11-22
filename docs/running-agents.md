@@ -15,6 +15,8 @@ tare claude -- -p "fix the tests"  # arguments after -- go to claude
 tare claude --yolo                 # skip the agent's permission prompts
 tare claude --allow-dirty          # start even though the reading is not tare: 0.00
 tare claude --project ../other     # another project directory (default: the current one)
+tare claude --continue             # a fresh room that resumes this project's last session
+tare cleanup                       # remove leftover rooms and the kept sessions (--dry-run lists them)
 
 tare probe codex                   # the same for Codex, Pi and the Antigravity CLI
 tare codex -- exec -m MODEL "..."  # one-shot Codex run: arguments after -- go to codex
@@ -68,6 +70,50 @@ break out.
 
 None of your tools are in the room either. The agent installs what a task needs into the room's
 home, and the install is gone after the run ([Tools in a room](tools.md)).
+
+## Continuing a session
+
+A room's home, with the agent's session in it, is removed when the room closes. Before that, tare
+copies the agent's latest session out, whatever ended it: the agent exited or crashed, or the
+terminal closed. It says where:
+
+```text
+tare: session kept in ~/.local/state/tare/sessions/claude/<project>; `tare claude --continue` resumes it
+```
+
+`tare claude --continue` probes as always, opens a fresh room, puts the project's latest kept
+session into it where the agent keeps its sessions, and starts the agent resuming it: Claude Code
+with `--resume`, Codex with `resume`, Pi with `--session`. Your arguments after `--` follow. The
+continued room holds the earlier conversation because you asked for it; the probe reads the room
+before it is placed. The Antigravity CLI cannot continue a session yet; tare says so and starts
+nothing.
+
+Kept sessions stay until you remove them, in folders only you can read: a session holds the whole
+conversation. `tare cleanup` removes them, and the rooms that no running tare holds any more (a
+room tare could not remove, for example after a crash, holds a copy of your login). Each tare holds
+a lock on its room from the room's making until it is gone, and `tare cleanup` takes only rooms
+whose lock is free and that no running process names or works in. A room of tare 0.5.0 or older has
+no lock; `tare cleanup` takes it only when it holds what a tare room holds and nothing in it changed
+for a day. Any other folder named `tare-room-*` is left alone, and so is every room while the
+lookup of running processes fails. Half-written copies of a session that a killed tare left go too,
+once they are an hour old. `tare cleanup --dry-run` lists what it would remove. When the latest kept
+session is damaged (a crash cut it), `--continue` says so and takes the one before.
+
+**Measured** on macOS 27.0.1 with Claude Code 2.1.330 and Haiku: a first room was told a code word
+and closed; `tare claude --continue -- -p "What was the code word I gave you?"` in a second room
+answered with it. Codex and Pi are covered by tests only: where tare puts their session (with its
+working directory set to the new room, which they work in) and which arguments resume it, not a real
+resumed run. For Codex tare keeps the rollout written last, which after a session with subagents
+can be a subagent's.
+
+## When a room's login stops working
+
+A long session can outlive its room's copy of the login: the copy runs out, or a new login outside
+tare replaces it. Claude Code in the room then says it is logged out, and `/login` cannot help: a
+room cannot reach your Keychain, so the login cannot be saved there. On macOS a dialog says the
+keychain cannot be found; click **Cancel**, never **Reset To Defaults**, which would set up a new
+default keychain on your Mac. Then exit the agent; the session is kept, and `tare claude
+--continue` resumes it in a fresh room with a fresh copy of your login (#193).
 
 ## Your login
 

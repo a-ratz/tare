@@ -7,6 +7,7 @@ allowlist. On macOS it is Seatbelt, which cannot mount: the room is one director
 home and clones of the project and the CLI, at host paths. So every path the agent sees comes
 from the `Room` its backend built, never from a constant.
 """
+import fcntl
 import functools
 import json
 import os
@@ -106,6 +107,7 @@ class Bubblewrap:
         `work` is mounted, so the agent's changes land there directly."""
         _check_login(agent, real)
         home = Path(tempfile.mkdtemp(prefix="tare-room-"))
+        lock = _hold(home)
         try:
             room = Room(home, work, run)
             room.config(agent).mkdir(parents=True)
@@ -113,6 +115,7 @@ class Bubblewrap:
             yield room
         finally:
             _rmtree(home)
+            _release(lock, home)
 
     def argv(self, room: Room, agent, real, command: list[str], extra_env: dict[str, str] | None = None,
              extra_binds: list[str] | None = None) -> list[str]:
@@ -148,6 +151,7 @@ class Seatbelt:
     def open(self, agent, real, work: Path, run: Path | None = None):
         _check_login(agent, real)
         base = Path(tempfile.mkdtemp(prefix="tare-room-", dir=SEATBELT_ROOMS))
+        lock = _hold(base)
         clone, before = base / "work", None
         try:
             for source, inside in _mounts(agent.binds(real)[0]):
@@ -181,11 +185,13 @@ class Seatbelt:
             finally:
                 if copied:
                     _rmtree(base)
+                    _release(lock, base)
                 else:  # the run's changes are only in the clone: keep it, remove the rest, the login copy too (#187)
                     for part in base.iterdir() if base.is_dir() else []:
                         if part != clone:
                             _rmtree(part)
                     _say(f"tare: could not copy the run's changes back to {work}; they are in {clone}")
+                    _release(lock, base, kept=True)
             if interrupted is not None:
                 raise interrupted
 
@@ -283,14 +289,19 @@ def _rmtree(path: Path):
     root = str(path)
 
     def writable(function, failed, *_):
-        if function not in (os.rmdir, os.unlink, os.remove) or not str(failed).startswith(root):
+        failed = str(failed)
+        if not failed.startswith(root):
             return
         try:
-            parent = os.path.dirname(failed)
-            if parent.startswith(root):
-                os.chmod(parent, 0o700)
-            function(failed)
-        except OSError:
+            if function in (os.rmdir, os.unlink, os.remove):
+                parent = os.path.dirname(failed)
+                if parent.startswith(root):
+                    os.chmod(parent, 0o700)
+                function(failed)
+            elif os.path.isdir(failed) and not os.path.islink(failed):  # a folder it could not open or list
+                os.chmod(failed, 0o700)
+                _rmtree(Path(failed))
+        except (OSError, TypeError):
             pass
     if sys.version_info >= (3, 12):
         shutil.rmtree(path, onexc=writable)
@@ -313,28 +324,33 @@ def _number(text: str) -> bool:
     return text.isascii() and text.isdigit()  # isdigit alone takes digits int() does not
 
 
-def _listing(argv: list[str]) -> str:
-    """A listing from ps or lsof; empty when the program is missing, fails or stalls."""
+def _listing(argv: list[str]) -> str | None:
+    """A listing from ps or lsof; None when the program is missing, fails or stalls."""
     try:
-        return subprocess.run(argv, capture_output=True, timeout=5).stdout.decode(errors="replace")
+        done = subprocess.run(argv, capture_output=True, timeout=5)
     except (OSError, subprocess.SubprocessError):
-        return ""
+        return None
+    return done.stdout.decode(errors="replace") if done.returncode in (0, 1) else None  # lsof: 1 = nothing found
 
 
-def _room_processes(base: Path) -> list[int]:
+def _room_processes(base: Path, sure: bool = False) -> list[int] | None:
     """The user's processes that run from the room or in it: their command line names a path in the
     room (a program the agent put there, the sandbox itself), or their working directory is in it.
     A process that does neither, such as a daemon that moved to / and runs a program from outside
-    the room, is not found."""
+    the room, is not found. With `sure`, None when a lookup failed, since then nothing is known."""
     roots = {str(base), str(base.resolve()), f"/tmp/{base.name}"}  # /tmp is a link to /private/tmp
     pids = set()
-    for line in _listing(["/bin/ps", "-xww", "-o", "pid=,command="]).splitlines():
+    named = _listing(["/bin/ps", "-xww", "-o", "pid=,command="])
+    cwds = _listing(["/usr/sbin/lsof", "-b", "-w", "-a", "-u", str(os.getuid()), "-d", "cwd", "-Fpn"])
+    if sure and (named is None or (cwds is None and sys.platform == "darwin")):
+        return None
+    for line in (named or "").splitlines():
         pid, _, command = line.strip().partition(" ")
         if _number(pid) and any(re.search(rf"(?:(?<![^\s\"'=:<>(;&|])|(?<=file://)){re.escape(root)}(?=[/\s\"';:)<>&|]|$)",
                                           command) for root in roots):
             pids.add(int(pid))
     pid = None
-    for line in _listing(["/usr/sbin/lsof", "-b", "-w", "-a", "-u", str(os.getuid()), "-d", "cwd", "-Fpn"]).splitlines():
+    for line in (cwds or "").splitlines():
         if line.startswith("p"):
             pid = int(line[1:]) if _number(line[1:]) else None
         elif line.startswith("n") and pid and any(line[1:] == root or line[1:].startswith(root + "/") for root in roots):
@@ -363,7 +379,7 @@ def _alive(pids: list[int]) -> list[int]:
         existing.append(pid)
     if not existing:
         return []
-    states = _listing(["/bin/ps", "-o", "pid=,stat=", "-p", ",".join(map(str, existing))])
+    states = _listing(["/bin/ps", "-o", "pid=,stat=", "-p", ",".join(map(str, existing))]) or ""
     zombies = {int(f[0]) for f in (line.split() for line in states.splitlines()) if len(f) == 2 and _number(f[0])
                and f[1].startswith("Z")}
     return [pid for pid in existing if pid not in zombies]
@@ -464,6 +480,129 @@ def _copy_back(before: dict[str, tuple], clone: Path, work: Path):
             if os.path.lexists(source):  # the project's side is missing (the user removed a folder): not ours to hide
                 raise
             # gone from the clone since the state was taken
+
+
+# a room of tare 0.5.0 or older has no lock: in use while anything in it changed within this time
+LEGACY_IDLE = 86400  # seconds
+# what only a tare room holds: Seatbelt's home and agent clone, or bubblewrap's home with an agent's config
+ROOM_MARKS = (("home", "opt/agent"), (".claude-config",), (".codex",), (".pi",), (".gemini",), (".copilot",))
+
+
+def _hold(base: Path):
+    """A lock that the room's tare holds from the room's making until it is gone, beside the room
+    (out of the agent's reach). `tare cleanup` removes only a room whose lock is free."""
+    # locked before it has the lock's name, so cleanup never finds it unlocked: a new file of the
+    # user's alone, locked, then linked to the name, which must not be there yet
+    part, fd = Path(f"{base}.lock-{os.getpid()}"), None
+    try:
+        fd = os.open(part, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        try:
+            os.link(part, f"{base}.lock")
+        finally:
+            part.unlink(missing_ok=True)
+    except OSError as e:
+        if fd is not None:
+            os.close(fd)
+        shutil.rmtree(base, ignore_errors=True)
+        raise TareError(f"cannot lock the room {base}: {e}") from None
+    return os.fdopen(fd, "w")
+
+
+def _release(lock, base: Path, kept: bool = False):
+    """Let go of a room. Its lock file goes with the room; if the room could not be removed, the lock
+    file stays, free, so that `tare cleanup` finds it. A room kept on purpose (the clone of a failed
+    copy-back) loses its lock file, so cleanup never takes it."""
+    if kept or not os.path.lexists(base):
+        Path(f"{base}.lock").unlink(missing_ok=True)
+    lock.close()
+
+
+def remove_room(room_dir: Path) -> bool:
+    """Remove a left-over room, read-only folders too; True when it is gone."""
+    _rmtree(room_dir)
+    return not os.path.lexists(room_dir)
+
+
+def rooms_on_disk() -> list[Path]:
+    """The user's own room directories: bubblewrap's in the temporary directory, Seatbelt's in
+    /private/tmp. Never a link, so nothing a room's name points to elsewhere."""
+    places = {Path(tempfile.gettempdir()).resolve(), Path(SEATBELT_ROOMS).resolve()}
+    found = set()
+    for place in places:
+        for p in place.glob("tare-room-*") if place.is_dir() else []:
+            try:
+                st = p.lstat()
+            except OSError:
+                continue
+            if stat.S_ISDIR(st.st_mode) and st.st_uid == os.getuid():
+                found.add(p)
+    return sorted(found)
+
+
+def _newest_change(root: Path) -> float:
+    newest = 0.0
+    for directory, dirs, files in os.walk(root):
+        for name in [*dirs, *files]:
+            try:
+                newest = max(newest, os.lstat(os.path.join(directory, name)).st_mtime)
+            except OSError:
+                pass
+    try:
+        return max(newest, root.lstat().st_mtime)
+    except OSError:
+        return newest
+
+
+def _looks_like_a_room(room_dir: Path) -> bool:
+    return any(all((room_dir / part).is_dir() and not (room_dir / part).is_symlink() for part in mark)
+               for mark in ROOM_MARKS)
+
+
+def in_use(room_dir: Path) -> bool:
+    """Whether a tare, or anything else, may still use the room. In use: its lock is held, or a
+    process names it or works in it (the agent of a tare that was killed). A folder without a lock
+    counts as a room of tare 0.5.0 or older only when it looks like one, and as left over only when
+    nothing in it changed within LEGACY_IDLE; anything else is never taken."""
+    if _room_processes(room_dir, sure=True) != []:  # some, or the lookup failed: leave it
+        return True
+    lock = Path(f"{room_dir}.lock")
+    try:
+        st = lock.lstat()
+    except FileNotFoundError:
+        return not _looks_like_a_room(room_dir) or time.time() - _newest_change(room_dir) < LEGACY_IDLE
+    except OSError:
+        return True
+    if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid():  # not a lock tare made: leave the room
+        return True
+    try:
+        fd = os.open(lock, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        return True
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return False
+    except OSError:  # held by the room's tare
+        return True
+    finally:
+        os.close(fd)
+
+
+def remove_lock(room_dir: Path):
+    """The lock file of a removed room, if it is tare's: a regular file of the user's."""
+    lock = Path(f"{room_dir}.lock")
+    try:
+        st = lock.lstat()
+        if stat.S_ISREG(st.st_mode) and st.st_uid == os.getuid():
+            lock.unlink()
+    except OSError:
+        pass
+
+
+def leftover_rooms() -> list[Path]:
+    """Rooms no tare holds any more: a crash or a failed copy-back leaves them, with their login copy (#187)."""
+    return [p for p in rooms_on_disk() if not in_use(p)]
 
 
 def backend():
